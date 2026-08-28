@@ -15,6 +15,13 @@ public final class TranscriptWatcher {
         self.onActivity = onActivity
     }
 
+    deinit {
+        // FSEvents держит непроверяемый (Unmanaged.passUnretained) указатель
+        // на self в контексте потока; без остановки здесь коллбэк может
+        // сработать после освобождения self и разыменовать чужую память.
+        stop()
+    }
+
     public func start() {
         guard stream == nil else { return }
         var context = FSEventStreamContext(
