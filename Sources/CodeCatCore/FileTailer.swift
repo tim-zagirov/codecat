@@ -38,9 +38,14 @@ public final class FileTailer {
         }
 
         if size < known.offset {
-            // Файл усечён на месте (тот же инод, но стал короче) —
-            // сбрасываем смещение и начинаем заново.
-            return readAndAdvance(handle: handle, key: key, inode: inode, from: 0, partial: nil)
+            // Файл усечён на месте (тот же инод, но стал короче). Раз инод
+            // не изменился, оставшиеся байты — это обязательно префикс
+            // того, что мы уже прочитали и отдали раньше. Поэтому здесь
+            // НЕЛЬЗЯ читать с байта 0 (в отличие от пересоздания файла) —
+            // это заново отдало бы уже доставленные строки. Просто
+            // перепрыгиваем смещение на конец файла и молчим.
+            states[key] = FileState(inode: inode, offset: size, partial: nil)
+            return []
         }
 
         guard size > known.offset else { return [] }
