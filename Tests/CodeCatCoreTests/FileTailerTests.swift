@@ -86,4 +86,27 @@ final class FileTailerTests: XCTestCase {
 
         XCTAssertEqual(tailer.newLines(of: f), ["fresh one", "fresh two"])
     }
+
+    /// Regression: in-place truncation to a NONZERO size (same inode) must not
+    /// re-emit lines that were already delivered. Since the inode is unchanged,
+    /// the surviving bytes are necessarily a prefix of what was already read,
+    /// so re-reading from byte 0 would re-deliver already-seen lines.
+    func testInPlaceTruncationToNonzeroSizeReturnsNoDuplicates() throws {
+        let f = dir.appendingPathComponent("a.jsonl")
+        try "".write(to: f, atomically: true, encoding: .utf8)
+        let tailer = FileTailer()
+        XCTAssertEqual(tailer.newLines(of: f), []) // seed, offset == 0
+
+        let h = try FileHandle(forWritingTo: f)
+        try h.seekToEnd()
+        try h.write(contentsOf: "AAAA\nBBBB\nCCCC\n".data(using: .utf8)!)
+        XCTAssertEqual(tailer.newLines(of: f), ["AAAA", "BBBB", "CCCC"]) // offset now 15
+
+        // Truncate in place (same open handle/inode) to 10 bytes, leaving
+        // "AAAA\nBBBB\n" — a strict prefix of what was already delivered.
+        try h.truncate(atOffset: 10)
+        try h.close()
+
+        XCTAssertEqual(tailer.newLines(of: f), [])
+    }
 }
