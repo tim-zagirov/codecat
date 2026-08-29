@@ -14,12 +14,14 @@ public final class AwayLog: ObservableObject {
     public init() {}
 
     public func lock() {
+        guard !isAway else { return }
         isAway = true
         collecting = []
         lastSummary = []
     }
 
     public func unlock() {
+        guard isAway else { return }
         isAway = false
         lastSummary = collecting
         collecting = []
