@@ -62,28 +62,29 @@ struct CatView: View {
     // MARK: - Sleeping
 
     private var sleepingCat: some View {
-        EmptyView()
-            .phaseAnimator([false, true]) { _, breathePhase in
-                ZStack {
-                    Ellipse()
-                        .fill(bodyColor)
-                        .frame(width: 66, height: 44)
-                        .offset(y: 22)
-                        .scaleEffect(y: breathePhase ? 1.04 : 0.98, anchor: .bottom)
-                    Circle().fill(bodyColor).frame(width: 34, height: 34).offset(x: -18, y: 10)
-                    ear(x: -28, y: -6, flattened: false)
-                    ear(x: -10, y: -8, flattened: false)
-                    Path { p in
-                        p.move(to: CGPoint(x: 34, y: 40))
-                        p.addLine(to: CGPoint(x: 43, y: 40))
-                    }
-                    .stroke(dark, lineWidth: 2)
-                    Text("z z")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(dark.opacity(0.6))
-                        .offset(x: 8, y: breathePhase ? -18 : -14)
-                }
-            } animation: { _ in .easeInOut(duration: 2.4) }
+        ZStack {
+            Ellipse()
+                .fill(bodyColor)
+                .frame(width: 66, height: 44)
+                .offset(y: 22)
+                .phaseAnimator([false, true]) { content, breathePhase in
+                    content.scaleEffect(y: breathePhase ? 1.04 : 0.98, anchor: .bottom)
+                } animation: { _ in .easeInOut(duration: 2.4) }
+            Circle().fill(bodyColor).frame(width: 34, height: 34).offset(x: -18, y: 10)
+            ear(x: -28, y: -6, flattened: false)
+            ear(x: -10, y: -8, flattened: false)
+            Path { p in
+                p.move(to: CGPoint(x: 34, y: 40))
+                p.addLine(to: CGPoint(x: 43, y: 40))
+            }
+            .stroke(dark, lineWidth: 2)
+            Text("z z")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(dark.opacity(0.6))
+                .phaseAnimator([false, true]) { content, breathePhase in
+                    content.offset(x: 8, y: breathePhase ? -18 : -14)
+                } animation: { _ in .easeInOut(duration: 2.4) }
+        }
     }
 
     // MARK: - Sitting (working / waiting / done / problem)
@@ -91,13 +92,12 @@ struct CatView: View {
     private var sittingCat: some View {
         ZStack {
             tailView
-            EmptyView()
-                .phaseAnimator([false, true]) { _, breathePhase in
-                    Ellipse()
-                        .fill(bodyColor)
-                        .frame(width: 50, height: 52)
-                        .offset(y: 20)
-                        .scaleEffect(y: breathePhase ? 1.02 : 0.99, anchor: .bottom)
+            Ellipse()
+                .fill(bodyColor)
+                .frame(width: 50, height: 52)
+                .offset(y: 20)
+                .phaseAnimator([false, true]) { content, breathePhase in
+                    content.scaleEffect(y: breathePhase ? 1.02 : 0.99, anchor: .bottom)
                 } animation: { _ in .easeInOut(duration: 2.4) }
             Circle().fill(bodyColor).frame(width: 44, height: 44).offset(y: -14)
             ear(x: -15, y: -34, flattened: isProblem)
@@ -115,13 +115,12 @@ struct CatView: View {
     private var tailView: some View {
         Group {
             if isWorking {
-                EmptyView()
-                    .phaseAnimator([false, true]) { _, tailPhase in
-                        Capsule()
-                            .fill(bodyColor)
-                            .frame(width: 34, height: 9)
-                            .offset(x: 30, y: 34)
-                            .rotationEffect(.degrees(tailPhase ? 18 : -6), anchor: .leading)
+                Capsule()
+                    .fill(bodyColor)
+                    .frame(width: 34, height: 9)
+                    .offset(x: 30, y: 34)
+                    .phaseAnimator([false, true]) { content, tailPhase in
+                        content.rotationEffect(.degrees(tailPhase ? 18 : -6), anchor: .leading)
                     } animation: { _ in .easeInOut(duration: 1.8) }
             } else {
                 Capsule()
@@ -138,13 +137,12 @@ struct CatView: View {
     private var pawView: some View {
         Group {
             if isWaiting {
-                EmptyView()
-                    .phaseAnimator([false, true]) { _, pawPhase in
-                        Capsule()
-                            .fill(bodyColor)
-                            .frame(width: 9, height: 24)
-                            .offset(x: 30, y: -2)
-                            .rotationEffect(.degrees(pawPhase ? 28 : -12), anchor: .bottom)
+                Capsule()
+                    .fill(bodyColor)
+                    .frame(width: 9, height: 24)
+                    .offset(x: 30, y: -2)
+                    .phaseAnimator([false, true]) { content, pawPhase in
+                        content.rotationEffect(.degrees(pawPhase ? 28 : -12), anchor: .bottom)
                     } animation: { _ in .easeInOut(duration: 1.0) }
             }
         }
@@ -167,15 +165,16 @@ struct CatView: View {
             if isWorking {
                 // Open eyes that track back and forth while working. Its own
                 // phaseAnimator means the tracking starts the moment work begins.
-                EmptyView()
-                    .phaseAnimator([false, true]) { _, trackPhase in
-                        ZStack {
-                            Circle().fill(dark).frame(width: 5, height: 5)
-                                .offset(x: trackPhase ? -7 : -9, y: -16)
-                            Circle().fill(dark).frame(width: 5, height: 5)
-                                .offset(x: trackPhase ? 9 : 7, y: -16)
-                        }
-                    } animation: { _ in .easeInOut(duration: 1.8) }
+                ZStack {
+                    Circle().fill(dark).frame(width: 5, height: 5)
+                        .phaseAnimator([false, true]) { content, trackPhase in
+                            content.offset(x: trackPhase ? -7 : -9, y: -16)
+                        } animation: { _ in .easeInOut(duration: 1.8) }
+                    Circle().fill(dark).frame(width: 5, height: 5)
+                        .phaseAnimator([false, true]) { content, trackPhase in
+                            content.offset(x: trackPhase ? 9 : 7, y: -16)
+                        } animation: { _ in .easeInOut(duration: 1.8) }
+                }
             } else {
                 // Content arcs, static.
                 happyEye.offset(x: -8, y: -16)
@@ -206,10 +205,9 @@ struct CatView: View {
                 if isWaiting {
                     // Waiting stays the most attention-grabbing state: opaque red,
                     // plus a gentle pulse so it reads as needing input.
-                    EmptyView()
-                        .phaseAnimator([false, true]) { _, pulsePhase in
-                            badgeContent(fill: Color(red: 0.86, green: 0.15, blue: 0.15))
-                                .scaleEffect(pulsePhase ? 1.15 : 1.0)
+                    badgeContent(fill: Color(red: 0.86, green: 0.15, blue: 0.15))
+                        .phaseAnimator([false, true]) { content, pulsePhase in
+                            content.scaleEffect(pulsePhase ? 1.15 : 1.0)
                         } animation: { _ in .easeInOut(duration: 1.0) }
                 } else {
                     badgeContent(fill: Color(white: 0.32))
