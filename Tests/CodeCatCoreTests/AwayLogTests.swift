@@ -31,4 +31,43 @@ final class AwayLogTests: XCTestCase {
         log.unlock()
         XCTAssertFalse(log.isAway)
     }
+
+    func testDuplicateUnlockPreservesSummary() {
+        let log = AwayLog()
+        log.lock()
+        log.record("event while away", at: t0)
+        log.unlock()
+        XCTAssertEqual(log.lastSummary.count, 1)
+        XCTAssertEqual(log.lastSummary[0].text, "event while away")
+
+        // Second unlock should not overwrite the summary
+        log.unlock()
+        XCTAssertEqual(log.lastSummary.count, 1, "duplicate unlock should not wipe the summary")
+        XCTAssertEqual(log.lastSummary[0].text, "event while away")
+    }
+
+    func testDuplicateLockPreservesCollectedEvents() {
+        let log = AwayLog()
+        log.lock()
+        log.record("event 1", at: t0)
+
+        // Second lock should not discard the collected event
+        log.lock()
+        log.record("event 2", at: t0.addingTimeInterval(1))
+        log.unlock()
+
+        XCTAssertEqual(log.lastSummary.count, 2, "duplicate lock should not discard previously collected events")
+        XCTAssertEqual(log.lastSummary[0].text, "event 1")
+        XCTAssertEqual(log.lastSummary[1].text, "event 2")
+    }
+
+    func testUnlockWithoutLockDoesNotCrash() {
+        let log = AwayLog()
+        XCTAssertFalse(log.isAway)
+
+        // Calling unlock on a fresh log that was never locked should be a no-op
+        log.unlock()
+        XCTAssertFalse(log.isAway, "unlock on fresh log should not change isAway")
+        XCTAssertEqual(log.lastSummary.count, 0, "unlock on fresh log should not create a summary")
+    }
 }
