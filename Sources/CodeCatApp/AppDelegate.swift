@@ -5,6 +5,7 @@ import CodeCatCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
     private var statusItem: NSStatusItem!
+    private var overlay: OverlayController?
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -19,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
         updateStatusIcon()
+
+        overlay = OverlayController(appState: appState)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
