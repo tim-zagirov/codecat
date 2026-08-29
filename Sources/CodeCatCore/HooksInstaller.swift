@@ -23,7 +23,15 @@ public enum HooksInstaller {
     /// this twice with the same `hookCommand` does not duplicate the entry.
     public static func install(into json: Data?, hookCommand: String) throws -> Data {
         var root = try parse(json)
-        var hooks = root["hooks"] as? [String: Any] ?? [:]
+        var hooks: [String: Any]
+        if let existingHooks = root["hooks"] {
+            guard let asDict = existingHooks as? [String: Any] else {
+                throw HooksInstallerError.unexpectedHooksShape(event: "hooks")
+            }
+            hooks = asDict
+        } else {
+            hooks = [:]
+        }
         for event in events {
             var elements: [Any]
             if let existing = hooks[event] {
@@ -54,8 +62,11 @@ public enum HooksInstaller {
             return try serialize(root)
         }
         for (event, value) in hooks {
-            guard let groups = value as? [[String: Any]] else { continue }
-            let filtered: [[String: Any]] = groups.compactMap { group in
+            guard let elements = value as? [Any] else { continue }
+            let filtered: [Any] = elements.compactMap { element in
+                guard let group = element as? [String: Any] else {
+                    return element // preserve non-dictionary elements verbatim
+                }
                 var g = group
                 var inner = g["hooks"] as? [[String: Any]] ?? []
                 inner.removeAll { ($0["command"] as? String) == hookCommand }
