@@ -40,10 +40,43 @@ public final class FileTailer {
         if size < known.offset {
             // Файл усечён на месте (тот же инод, но стал короче). Раз инод
             // не изменился, оставшиеся байты — это обязательно префикс
-            // того, что мы уже прочитали и отдали раньше. Поэтому здесь
-            // НЕЛЬЗЯ читать с байта 0 (в отличие от пересоздания файла) —
-            // это заново отдало бы уже доставленные строки. Просто
-            // перепрыгиваем смещение на конец файла и молчим.
+            // того, что мы уже ЧИТАЛИ раньше. Но "читали" — это не то же
+            // самое, что "отдали вызывающему": offset считает и байты,
+            // осевшие в partial (хвост без "\n", который ещё ни разу не
+            // вернули из newLines). Если усечение попадает СТРОГО ВНУТРЬ
+            // этого ещё не отданного хвоста, часть partial'а на самом деле
+            // уже отсутствует физически быть не может — она вся ещё лежит
+            // в файле (просто не была отдана), и наивный сброс partial'а
+            // в nil потерял бы эти байты навсегда.
+            //
+            // Граница уже ОТДАННЫХ байт — offset минус длина буфера partial
+            // (в байтах UTF-8, т.к. offset — это счётчик байт, а не символов).
+            let partialByteCount = UInt64(known.partial?.utf8.count ?? 0)
+            let deliveredBoundary = known.offset - partialByteCount
+
+            if size > deliveredBoundary {
+                // Усечение пришлось строго внутри буферизованного partial:
+                // сохраняем уцелевший префикс partial'а (первые
+                // size - deliveredBoundary байт) вместо того, чтобы его
+                // выбросить.
+                let survivingByteCount = Int(size - deliveredBoundary)
+                if let partial = known.partial,
+                    let survivingPrefix = Self.utf8Prefix(of: partial, byteCount: survivingByteCount)
+                {
+                    states[key] = FileState(inode: inode, offset: size, partial: survivingPrefix)
+                    return []
+                }
+                // Обрезка пришлась на середину многобайтового символа —
+                // корректно разделить не можем. Откатываемся к полному
+                // сбросу, чтобы не вернуть невалидный текст.
+                states[key] = FileState(inode: inode, offset: size, partial: nil)
+                return []
+            }
+
+            // Усечение не задело буферизованный partial (он был отдан
+            // раньше и/или обрезка ушла ниже границы уже отданного) —
+            // прежнее поведение: просто перепрыгиваем смещение на конец
+            // файла и молчим.
             states[key] = FileState(inode: inode, offset: size, partial: nil)
             return []
         }
@@ -72,5 +105,15 @@ public final class FileTailer {
         var info = stat()
         guard fstat(handle.fileDescriptor, &info) == 0 else { return nil }
         return UInt64(info.st_ino)
+    }
+
+    /// Возвращает первые `byteCount` байт UTF-8 представления `string` как
+    /// строку, либо nil, если такая граница разрезала бы многобайтовый
+    /// символ пополам (в этом случае корректный префикс-строку получить
+    /// нельзя).
+    private static func utf8Prefix(of string: String, byteCount: Int) -> String? {
+        let bytes = Array(string.utf8)
+        guard byteCount >= 0, byteCount <= bytes.count else { return nil }
+        return String(bytes: bytes[0..<byteCount], encoding: .utf8)
     }
 }
