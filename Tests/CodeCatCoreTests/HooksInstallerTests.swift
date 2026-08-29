@@ -115,4 +115,68 @@ final class HooksInstallerTests: XCTestCase {
     func testEventsListIsExactlyTheSpecifiedFour() {
         XCTAssertEqual(HooksInstaller.events, ["SessionStart", "Stop", "Notification", "SessionEnd"])
     }
+
+    // MARK: - Malformed foreign content must survive install (review finding)
+
+    /// Reproduces the data-loss bug: a `Stop` array containing a non-dictionary
+    /// element used to fail the `as? [[String: Any]]` cast as a whole, so `?? []`
+    /// replaced the entire array with just CodeCat's group, silently destroying
+    /// the foreign string entry.
+    func testInstallIntoArrayWithNonDictionaryElementPreservesIt() throws {
+        let existing = """
+        {"hooks":{"Stop":["not-a-dict-entry"]}}
+        """.data(using: .utf8)!
+        let out = try HooksInstaller.install(into: existing, hookCommand: cmd)
+        let stop = (obj(out)["hooks"] as! [String: Any])["Stop"] as! [Any]
+        let strings = stop.compactMap { $0 as? String }
+        XCTAssertTrue(strings.contains("not-a-dict-entry"),
+                       "the original non-dictionary element must survive install")
+        let dicts = stop.compactMap { $0 as? [String: Any] }
+        let commands = dicts.flatMap { ($0["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String } }
+        XCTAssertTrue(commands.contains(cmd), "CodeCat's group must still be appended")
+    }
+
+    func testInstallIntoMixedArrayPreservesForeignGroupAndNonDictionaryElement() throws {
+        let existing = """
+        {"hooks":{"Stop":[
+            {"matcher":"*","hooks":[{"type":"command","command":"/other/tool"}]},
+            "not-a-dict-entry"
+        ]}}
+        """.data(using: .utf8)!
+        let out = try HooksInstaller.install(into: existing, hookCommand: cmd)
+        let stop = (obj(out)["hooks"] as! [String: Any])["Stop"] as! [Any]
+        XCTAssertTrue(stop.contains { ($0 as? String) == "not-a-dict-entry" },
+                      "the non-dictionary element must survive install")
+        let dicts = stop.compactMap { $0 as? [String: Any] }
+        let commands = dicts.flatMap { ($0["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String } }
+        XCTAssertTrue(commands.contains("/other/tool"), "the well-formed foreign group must survive install")
+        XCTAssertTrue(commands.contains(cmd), "CodeCat's group must be appended")
+    }
+
+    func testInstallIntoNonArrayEventValueThrowsAndDoesNotLoseData() throws {
+        let existing = """
+        {"hooks":{"Stop":"totally-unexpected"}}
+        """.data(using: .utf8)!
+        XCTAssertThrowsError(try HooksInstaller.install(into: existing, hookCommand: cmd)) { error in
+            guard case HooksInstallerError.unexpectedHooksShape(let event) = error else {
+                return XCTFail("expected unexpectedHooksShape, got \(error)")
+            }
+            XCTAssertEqual(event, "Stop")
+        }
+    }
+
+    func testInstallIntoMixedArrayIsIdempotent() throws {
+        let existing = """
+        {"hooks":{"Stop":["not-a-dict-entry"]}}
+        """.data(using: .utf8)!
+        let once = try HooksInstaller.install(into: existing, hookCommand: cmd)
+        let twice = try HooksInstaller.install(into: once, hookCommand: cmd)
+        let stop = (obj(twice)["hooks"] as! [String: Any])["Stop"] as! [Any]
+        XCTAssertEqual(stop.filter { ($0 as? String) == "not-a-dict-entry" }.count, 1,
+                       "the non-dictionary element must not be duplicated")
+        let dicts = stop.compactMap { $0 as? [String: Any] }
+        let commands = dicts.flatMap { ($0["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String } }
+        XCTAssertEqual(commands.filter { $0 == cmd }.count, 1,
+                       "CodeCat's group must not be duplicated on a second install")
+    }
 }
