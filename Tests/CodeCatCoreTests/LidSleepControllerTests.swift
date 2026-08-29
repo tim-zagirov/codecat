@@ -50,4 +50,26 @@ final class LidSleepControllerTests: XCTestCase {
         XCTAssertEqual(calls().count, 2)
         XCTAssertEqual(calls().last?.last, "0")
     }
+
+    func testFailedClearingDoesNotMarkCleared() {
+        var callCount = 0
+        let sut = LidSleepController(runner: { args in
+            let lastArg = args.last ?? ""
+            callCount += 1
+            // Succeed for "1" (enable), fail for "0" (disable)
+            return lastArg == "0" ? 1 : 0
+        })
+        sut.isEnabled = true
+        sut.update(shouldPreventSleep: true)
+        sut.update(shouldPreventSleep: false)
+        XCTAssertTrue(sut.lidSleepDisabled)
+    }
+
+    func testResetOnExitIsNoOpWhenNeverSet() {
+        let (sut, calls) = makeSUT()
+        sut.isEnabled = true
+        // Don't call update at all
+        sut.resetOnExit()
+        XCTAssertEqual(calls().count, 0)
+    }
 }
