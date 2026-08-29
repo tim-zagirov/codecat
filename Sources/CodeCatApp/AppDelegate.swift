@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import CodeCatCore
+import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
@@ -71,6 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(NSMenuItem(title: "Установить хуки Claude Code…",
                                     action: #selector(installHooks), keyEquivalent: ""))
         }
+        let loginItem = NSMenuItem(title: "Запускать при логине",
+                                   action: #selector(toggleLoginItem), keyEquivalent: "")
+        loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
+        menu.addItem(loginItem)
         menu.addItem(NSMenuItem(title: "Выйти", action: #selector(quit), keyEquivalent: "q"))
         for item in menu.items where item.action != nil { item.target = self }
         return menu
@@ -95,6 +100,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func installHooks() { appState.installHooksIfNeeded() }
+
+    @objc private func toggleLoginItem() {
+        // работает только из собранного .app-бандла; при swift run молча игнорируем ошибку
+        if SMAppService.mainApp.status == .enabled {
+            try? SMAppService.mainApp.unregister()
+        } else {
+            try? SMAppService.mainApp.register()
+        }
+        statusItem.menu = buildMenu()
+    }
 
     @objc private func quit() { NSApp.terminate(nil) }
 
