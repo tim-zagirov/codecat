@@ -3,6 +3,10 @@ import Foundation
 /// Errors thrown while parsing or rewriting `~/.claude/settings.json`.
 public enum HooksInstallerError: Error {
     case invalidJSON
+    /// The value stored at `hooks.<event>` was present but not an array, so it
+    /// could not be safely merged with CodeCat's hook group without risking
+    /// data loss. `event` names the offending key.
+    case unexpectedHooksShape(event: String)
 }
 
 /// Pure data transformation for merging/removing CodeCat's hook entries into the
@@ -21,11 +25,20 @@ public enum HooksInstaller {
         var root = try parse(json)
         var hooks = root["hooks"] as? [String: Any] ?? [:]
         for event in events {
-            var groups = hooks[event] as? [[String: Any]] ?? []
-            if !contains(groups: groups, command: hookCommand) {
-                groups.append(["hooks": [["type": "command", "command": hookCommand]]])
+            var elements: [Any]
+            if let existing = hooks[event] {
+                guard let asArray = existing as? [Any] else {
+                    throw HooksInstallerError.unexpectedHooksShape(event: event)
+                }
+                elements = asArray
+            } else {
+                elements = []
             }
-            hooks[event] = groups
+            let dictGroups = elements.compactMap { $0 as? [String: Any] }
+            if !contains(groups: dictGroups, command: hookCommand) {
+                elements.append(["hooks": [["type": "command", "command": hookCommand]]])
+            }
+            hooks[event] = elements
         }
         root["hooks"] = hooks
         return try serialize(root)
