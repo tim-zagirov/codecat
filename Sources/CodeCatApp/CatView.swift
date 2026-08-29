@@ -37,7 +37,7 @@ struct CatView: View {
     }
 
     private var bodyColor: Color {
-        if case .problem = status { return Color(white: 0.6) }
+        if case .problem = status { return Color(red: 0.55, green: 0.30, blue: 0.16) } // muted burnt umber, distinct from the resting orange but still warm
         return Color(red: 0.91, green: 0.63, blue: 0.30) // #E8A04C
     }
     private let dark = Color(red: 0.23, green: 0.16, blue: 0.09)
@@ -63,26 +63,44 @@ struct CatView: View {
 
     private var sleepingCat: some View {
         ZStack {
+            // Tail curled around the front of the body.
+            Capsule()
+                .fill(bodyColor)
+                .frame(width: 34, height: 11)
+                .rotationEffect(.degrees(58))
+                .offset(x: 20, y: 34)
+            // Curled body: wide and low, clearly larger than and separate from the head.
             Ellipse()
                 .fill(bodyColor)
-                .frame(width: 66, height: 44)
-                .offset(y: 22)
+                .frame(width: 60, height: 36)
+                .offset(x: 6, y: 26)
                 .phaseAnimator([false, true]) { content, breathePhase in
                     content.scaleEffect(y: breathePhase ? 1.04 : 0.98, anchor: .bottom)
                 } animation: { _ in .easeInOut(duration: 2.4) }
-            Circle().fill(bodyColor).frame(width: 34, height: 34).offset(x: -18, y: 10)
-            ear(x: -28, y: -6, flattened: false)
-            ear(x: -10, y: -8, flattened: false)
+            // Head rests low against the body but is offset well clear of it so
+            // the two shapes read as distinct forms rather than merging.
+            Circle()
+                .fill(bodyColor)
+                .frame(width: 30, height: 30)
+                .offset(x: -22, y: 8)
+            // Both ears sit on top of the head, offset relative to its position.
+            ear(x: -30, y: -8, flattened: false)
+            ear(x: -14, y: -10, flattened: false)
+            // Closed eye: a short curved line positioned on the head, like every
+            // other facial feature — never absolute canvas coordinates.
             Path { p in
-                p.move(to: CGPoint(x: 34, y: 40))
-                p.addLine(to: CGPoint(x: 43, y: 40))
+                p.move(to: CGPoint(x: -4, y: 0))
+                p.addQuadCurve(to: CGPoint(x: 4, y: 0), control: CGPoint(x: 0, y: 3))
             }
-            .stroke(dark, lineWidth: 2)
+            .stroke(dark, lineWidth: 1.6)
+            .frame(width: 8, height: 4)
+            .offset(x: -22, y: 10)
+            // Drifting "z z", floating up and away from the head.
             Text("z z")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(dark.opacity(0.6))
                 .phaseAnimator([false, true]) { content, breathePhase in
-                    content.offset(x: 8, y: breathePhase ? -18 : -14)
+                    content.offset(x: 2, y: breathePhase ? -24 : -20)
                 } animation: { _ in .easeInOut(duration: 2.4) }
         }
     }
@@ -156,7 +174,7 @@ struct CatView: View {
             // tip swings down while the base stays anchored to the head. Anchor
             // `.bottom` matches Triangle's own geometry: its base spans the bottom
             // edge (maxY) and its apex is at the top (minY).
-            .rotationEffect(.degrees(flattened ? (x < 0 ? -55 : 55) : 0), anchor: .bottom)
+            .rotationEffect(.degrees(flattened ? (x < 0 ? -30 : 30) : 0), anchor: .bottom)
             .offset(x: x, y: y)
     }
 
