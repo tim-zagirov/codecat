@@ -4,4 +4,4 @@ set -euo pipefail
 launchctl bootout system /Library/LaunchDaemons/com.codecat.sleepreset.plist 2>/dev/null || true
 rm -f /Library/LaunchDaemons/com.codecat.sleepreset.plist
 rm -f /etc/sudoers.d/codecat
-echo "CodeCat lid mode uninstalled"
+echo "Режим закрытой крышки CodeCat удалён"

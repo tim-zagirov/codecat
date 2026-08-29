@@ -13,13 +13,13 @@ SUDOERS_FILE=/etc/sudoers.d/codecat
 DAEMON_PLIST=/Library/LaunchDaemons/com.codecat.sleepreset.plist
 
 TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
 cat > "$TMP" <<EOF
 # CodeCat: разрешает переключать только disablesleep без пароля
 $TARGET_USER ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
 EOF
 visudo -cf "$TMP"
 install -m 0440 -o root -g wheel "$TMP" "$SUDOERS_FILE"
-rm -f "$TMP"
 
 cat > "$DAEMON_PLIST" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -37,4 +37,4 @@ EOF
 chown root:wheel "$DAEMON_PLIST"
 chmod 644 "$DAEMON_PLIST"
 launchctl bootstrap system "$DAEMON_PLIST" 2>/dev/null || true
-echo "CodeCat lid mode installed for $TARGET_USER"
+echo "Режим закрытой крышки CodeCat установлен для пользователя $TARGET_USER"
