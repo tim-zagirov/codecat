@@ -75,7 +75,13 @@ final class AppState: ObservableObject {
             self.store.apply(hook: event, now: Date())
             self.refresh()
         }
-        try? server.start()
+        do {
+            try server.start()
+        } catch {
+            let message = "Не удалось запустить socket server на \(CodeCatPaths.socketURL.path): \(error)"
+            FileHandle.standardError.write(message.data(using: .utf8) ?? Data())
+            FileHandle.standardError.write("\n".data(using: .utf8) ?? Data())
+        }
         socketServer = server
 
         let watcher = TranscriptWatcher(root: CodeCatPaths.projectsRoot) { [weak self] activity in
@@ -161,12 +167,26 @@ final class AppState: ObservableObject {
     func installHooksIfNeeded() {
         let existing = try? Data(contentsOf: CodeCatPaths.claudeSettings)
         guard let updated = try? HooksInstaller.install(
-            into: existing, hookCommand: hookBinaryPath()) else { return }
-        try? FileManager.default.createDirectory(
-            at: CodeCatPaths.claudeSettings.deletingLastPathComponent(),
-            withIntermediateDirectories: true)
-        try? updated.write(to: CodeCatPaths.claudeSettings)
-        hooksInstalled = true
+            into: existing, hookCommand: hookBinaryPath()) else {
+            let alert = NSAlert()
+            alert.messageText = "Не удалось установить хуки"
+            alert.informativeText = "Не удалось обновить файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте, что файл корректен."
+            alert.runModal()
+            return
+        }
+
+        do {
+            try FileManager.default.createDirectory(
+                at: CodeCatPaths.claudeSettings.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try updated.write(to: CodeCatPaths.claudeSettings)
+            hooksInstalled = true
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Не удалось установить хуки"
+            alert.informativeText = "Не удалось записать в \(CodeCatPaths.claudeSettings.path): \(error.localizedDescription)"
+            alert.runModal()
+        }
     }
 
     func shutdown() {

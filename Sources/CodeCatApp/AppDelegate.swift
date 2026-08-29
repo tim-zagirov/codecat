@@ -12,11 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.start()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.menu = buildMenu()
         appState.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                DispatchQueue.main.async { self?.updateStatusIcon() }
+                self?.updateStatusIcon()
             }
             .store(in: &cancellables)
         updateStatusIcon()
