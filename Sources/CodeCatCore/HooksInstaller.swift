@@ -33,17 +33,8 @@ public enum HooksInstaller {
             hooks = [:]
         }
         for event in events {
-            var elements: [Any]
-            if let existing = hooks[event] {
-                guard let asArray = existing as? [Any] else {
-                    throw HooksInstallerError.unexpectedHooksShape(event: event)
-                }
-                elements = asArray
-            } else {
-                elements = []
-            }
-            let dictGroups = elements.compactMap { $0 as? [String: Any] }
-            if !contains(groups: dictGroups, command: hookCommand) {
+            var elements = try hookArray(hooks[event], event: event)
+            if !containsCommand(hookCommand, in: elements) {
                 elements.append(["hooks": [["type": "command", "command": hookCommand]]])
             }
             hooks[event] = elements
@@ -67,11 +58,13 @@ public enum HooksInstaller {
                 guard let group = element as? [String: Any] else {
                     return element // preserve non-dictionary elements verbatim
                 }
+                guard let inner = group["hooks"] as? [Any] else {
+                    return group // no usable "hooks" array — preserve the group unchanged
+                }
+                let newInner = inner.filter { !isCommandEntry($0, command: hookCommand) }
+                guard !newInner.isEmpty else { return nil } // group held only our hook(s)
                 var g = group
-                var inner = g["hooks"] as? [[String: Any]] ?? []
-                inner.removeAll { ($0["command"] as? String) == hookCommand }
-                guard !inner.isEmpty else { return nil } // group held only our hook
-                g["hooks"] = inner
+                g["hooks"] = newInner
                 return g
             }
             if filtered.isEmpty {
@@ -94,14 +87,42 @@ public enum HooksInstaller {
         guard let root = try? parse(json),
               let hooks = root["hooks"] as? [String: Any] else { return false }
         return events.allSatisfy { event in
-            contains(groups: hooks[event] as? [[String: Any]] ?? [], command: hookCommand)
+            guard let elements = try? hookArray(hooks[event], event: event) else { return false }
+            return containsCommand(hookCommand, in: elements)
         }
     }
 
-    private static func contains(groups: [[String: Any]], command: String) -> Bool {
-        groups.contains { group in
-            (group["hooks"] as? [[String: Any]] ?? [])
-                .contains { ($0["command"] as? String) == command }
+    /// Reads the value stored at `hooks.<event>` as a JSON array, preserving
+    /// every element regardless of its type. A missing value reads as an empty
+    /// array (so a first-time install has something to append to). A present
+    /// value that is not an array at all cannot safely hold hook groups, so it
+    /// throws rather than being silently discarded via a `?? []` fallback.
+    private static func hookArray(_ raw: Any?, event: String) throws -> [Any] {
+        guard let raw else { return [] }
+        guard let array = raw as? [Any] else {
+            throw HooksInstallerError.unexpectedHooksShape(event: event)
+        }
+        return array
+    }
+
+    /// True when `element` is a dictionary (a group's inner command entry, or
+    /// a bare group using the same shape) whose "command" value equals
+    /// `command`. Non-dictionary elements never match — callers preserve them
+    /// verbatim rather than treating a failed cast as "no match found here".
+    private static func isCommandEntry(_ element: Any, command: String) -> Bool {
+        (element as? [String: Any])?["command"] as? String == command
+    }
+
+    /// True if any recognizable hook group among `elements` (an event's raw
+    /// hook array) carries a command entry equal to `command`. Elements that
+    /// are not dictionaries, and a group's "hooks" value when it is not an
+    /// array, are simply not matched — never treated as an all-or-nothing
+    /// cast failure that would misjudge the whole array.
+    private static func containsCommand(_ command: String, in elements: [Any]) -> Bool {
+        elements.contains { element in
+            guard let group = element as? [String: Any] else { return false }
+            let inner = (group["hooks"] as? [Any]) ?? []
+            return inner.contains { isCommandEntry($0, command: command) }
         }
     }
 

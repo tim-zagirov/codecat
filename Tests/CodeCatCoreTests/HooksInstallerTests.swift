@@ -254,4 +254,97 @@ final class HooksInstallerTests: XCTestCase {
         let commands = dicts.flatMap { ($0["hooks"] as? [[String: Any]] ?? []).compactMap { $0["command"] as? String } }
         XCTAssertFalse(commands.contains(cmd), "our command must be removed")
     }
+
+    // MARK: - Remaining defect instances (task-6): per-group inner "hooks" cast
+    // and isInstalled's per-event cast must not use a destructive `?? []`/`?? [:]`
+    // fallback either.
+
+    /// Instance A repro: a group's inner "hooks" array mixes a foreign command
+    /// entry with a non-dictionary element. Removing a command that appears
+    /// nowhere in the document must be a complete no-op — previously the
+    /// `as? [[String: Any]] ?? []` cast on the mixed inner array failed as a
+    /// whole, `inner` became `[]`, and the group (matcher, foreign command,
+    /// and all) was wiped out even though CodeCat's command was never there.
+    func testRemoveAbsentCommandFromMixedInnerArrayIsANoOp() throws {
+        let existing = """
+        {"hooks":{"Stop":[{"matcher":"*","hooks":[
+            {"type":"command","command":"/other/tool"},
+            "unexpected-string-entry"
+        ]}]}}
+        """.data(using: .utf8)!
+        let out = try HooksInstaller.remove(from: existing, hookCommand: cmd)
+        let root = obj(out)
+        let hooks = root["hooks"] as! [String: Any]
+        XCTAssertNotNil(hooks["Stop"], "the Stop event must survive untouched")
+        let stop = hooks["Stop"] as! [Any]
+        XCTAssertEqual(stop.count, 1)
+        let group = stop[0] as! [String: Any]
+        XCTAssertEqual(group["matcher"] as? String, "*")
+        let inner = group["hooks"] as! [Any]
+        XCTAssertEqual(inner.count, 2)
+        let innerDicts = inner.compactMap { $0 as? [String: Any] }
+        XCTAssertTrue(innerDicts.contains { ($0["command"] as? String) == "/other/tool" },
+                      "the foreign command entry must survive")
+        XCTAssertTrue(inner.contains { ($0 as? String) == "unexpected-string-entry" },
+                      "the non-dictionary inner element must survive")
+    }
+
+    /// Instance A, second half: removing CodeCat's command from a group whose
+    /// inner array holds CodeCat's entry plus a non-dictionary element must
+    /// delete only our entry, keeping the non-dictionary element and the group.
+    func testRemoveOurCommandFromMixedInnerArrayPreservesNonDictionaryElement() throws {
+        let existing = """
+        {"hooks":{"Stop":[{"hooks":[
+            {"type":"command","command":"\(cmd)"},
+            "unexpected-string-entry"
+        ]}]}}
+        """.data(using: .utf8)!
+        let out = try HooksInstaller.remove(from: existing, hookCommand: cmd)
+        let root = obj(out)
+        let hooks = root["hooks"] as! [String: Any]
+        XCTAssertNotNil(hooks["Stop"], "the group must survive since the non-dictionary element remains")
+        let stop = hooks["Stop"] as! [Any]
+        XCTAssertEqual(stop.count, 1)
+        let group = stop[0] as! [String: Any]
+        let inner = group["hooks"] as! [Any]
+        XCTAssertEqual(inner.count, 1)
+        XCTAssertTrue(inner.contains { ($0 as? String) == "unexpected-string-entry" },
+                      "the non-dictionary inner element must survive")
+        let innerDicts = inner.compactMap { $0 as? [String: Any] }
+        XCTAssertFalse(innerDicts.contains { ($0["command"] as? String) == cmd },
+                       "our command entry must be gone")
+    }
+
+    /// A group can be a dictionary with no "hooks" key at all (e.g. authored by
+    /// hand, or by some other tool). It must survive removal untouched, while a
+    /// separate group that does hold our command is still cleaned up.
+    func testRemoveWithMatcherOnlyGroupAlongsideOurGroup() throws {
+        let existing = """
+        {"hooks":{"Stop":[
+            {"matcher":"*"},
+            {"hooks":[{"type":"command","command":"\(cmd)"}]}
+        ]}}
+        """.data(using: .utf8)!
+        let out = try HooksInstaller.remove(from: existing, hookCommand: cmd)
+        let root = obj(out)
+        let hooks = root["hooks"] as! [String: Any]
+        let stop = hooks["Stop"] as! [Any]
+        XCTAssertEqual(stop.count, 1, "only the matcher-only group should remain")
+        let group = stop[0] as! [String: Any]
+        XCTAssertEqual(group["matcher"] as? String, "*")
+        XCTAssertNil(group["hooks"])
+    }
+
+    /// Instance B repro: `install` deliberately preserves non-dictionary
+    /// elements mixed into an event's array, so that shape is a legitimate
+    /// output of `install`. `isInstalled` must recognize the command inside it
+    /// rather than failing the whole-array cast and reporting `false`.
+    func testIsInstalledTrueAfterInstallingIntoEventArrayWithForeignJunk() throws {
+        let existing = """
+        {"hooks":{"Stop":["foreign-junk"]}}
+        """.data(using: .utf8)!
+        let installed = try HooksInstaller.install(into: existing, hookCommand: cmd)
+        XCTAssertTrue(HooksInstaller.isInstalled(in: installed, hookCommand: cmd),
+                      "isInstalled must find our command even when the event array has foreign junk")
+    }
 }
