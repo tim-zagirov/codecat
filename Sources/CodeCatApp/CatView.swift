@@ -98,7 +98,7 @@ struct CatView: View {
             // Drifting "z z", floating up and away from the head.
             Text("z z")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(dark.opacity(0.6))
+                .foregroundColor(bodyColor)
                 .phaseAnimator([false, true]) { content, breathePhase in
                     content.offset(x: 2, y: breathePhase ? -24 : -20)
                 } animation: { _ in .easeInOut(duration: 2.4) }
