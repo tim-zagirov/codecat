@@ -114,9 +114,11 @@ final class AppState: ObservableObject {
 
     func refresh() {
         let agg = store.aggregate
-        let working: Bool
-        if case .working = agg { working = true } else { working = false }
-        powerManager.update(anyWorking: working, now: Date())
+        // Power policy must read `store.anyWorking` (per-session), never `aggregate`
+        // (a display-priority value where waiting outranks working) — otherwise one
+        // session waiting on the user would wrongly cancel sleep-prevention for other
+        // sessions that are still actively working.
+        powerManager.update(anyWorking: store.anyWorking, now: Date())
         lidController.update(shouldPreventSleep: powerManager.isHolding)
         notifyTransition(to: agg)
         lastAggregate = agg
