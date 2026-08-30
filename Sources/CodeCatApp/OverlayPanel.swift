@@ -121,11 +121,23 @@ final class OverlayController: NSObject, NSWindowDelegate {
     /// to dismiss", the standard behavior for a popover-style panel.
     @objc private func detailsDidResignKey(_ notification: Notification) {
         guard let panel = notification.object as? NSPanel, panel === detailsPanel else { return }
-        panel.orderOut(nil)
+        hideDetails()
     }
 
+    /// Orders the details panel out AND releases it, rather than just hiding it for
+    /// reuse. The panel hosts up to eight simultaneous skin previews, each running
+    /// its own `TimelineView(.periodic)` loop and `phaseAnimator` animation — capped
+    /// at 4 fps precisely because the spec's battery budget assumes that view tree
+    /// only exists while the panel is open. Keeping the `OverlayPanel` instance
+    /// around between openings (as `toggleDetails()` used to do via `detailsPanel ??
+    /// makeDetailsPanel()`) keeps its `NSHostingView<DetailsPanelView>` — and every
+    /// preview inside it — alive and animating for the rest of the app's run, which
+    /// defeats that budget. Dropping the reference here lets ARC deallocate the
+    /// panel and its content, so `toggleDetails()` builds a genuinely fresh one next
+    /// time. Do not change this back to a bare `orderOut(nil)` for reuse.
     private func hideDetails() {
         detailsPanel?.orderOut(nil)
+        detailsPanel = nil
     }
 
     private func toggleDetails() {
@@ -133,7 +145,10 @@ final class OverlayController: NSObject, NSWindowDelegate {
             hideDetails()
             return
         }
-        let panel = detailsPanel ?? makeDetailsPanel()
+        // `hideDetails()` always clears `detailsPanel`, so by the time control
+        // reaches here (the "not currently visible" branch) there is never a stale
+        // instance to reuse — every open builds a fresh panel.
+        let panel = makeDetailsPanel()
         detailsPanel = panel
         resizeDetailsToFitContent()
         position(panel, relativeTo: catPanel)

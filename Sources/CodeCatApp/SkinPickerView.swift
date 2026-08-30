@@ -110,7 +110,9 @@ struct SkinPickerView: View {
     private func licenseText(_ license: SkinLicense) -> String {
         switch license {
         case .cc0: return "CC0 1.0 — общественное достояние"
-        case .ccBy4(let attribution): return "CC BY 4.0 — \(attribution)"
+        // The stored attribution already names the licence (e.g. "Maze.Bit.Boutique
+        // (mxmaze), CC BY 4.0"), so don't prepend "CC BY 4.0 —" again here.
+        case .ccBy4(let attribution): return attribution
         case .authorTerms(let summary): return summary
         case .builtIn: return "Нарисован для CodeCat"
         }
