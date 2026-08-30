@@ -34,6 +34,28 @@ final class SpriteSheetStore {
     private var loaded: [String: LoadedSkin] = [:]   // keyed by skin id
     private var failed: Set<String> = []             // skin ids already known to be broken
 
+    /// Directory that holds `Skins/`, resolved once.
+    ///
+    /// `Bundle.main` is tried FIRST, and `Bundle.module` only as a fallback — never
+    /// the other way around. The generated `resource_bundle_accessor.swift` calls
+    /// `fatalError` when it cannot locate its resource bundle, and in the installed
+    /// .app there deliberately is no such bundle any more (its assets now live in
+    /// Contents/Resources, signed as part of the app). Checking `Bundle.main` first,
+    /// and using it whenever `Contents/Resources/Skins` exists, means `Bundle.module`
+    /// is never even touched in that case, so its fatal path stays unreachable. The
+    /// fallback is what makes `swift run` and any future test host work, since
+    /// neither has a `Contents/Resources` to find.
+    private static let skinsRoot: URL? = {
+        if let mainSkins = Bundle.main.resourceURL?.appendingPathComponent("Skins") {
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: mainSkins.path, isDirectory: &isDirectory),
+               isDirectory.boolValue {
+                return mainSkins
+            }
+        }
+        return Bundle.module.resourceURL?.appendingPathComponent("Skins")
+    }()
+
     /// Reads, measures and caches a skin. Returns nil if any declared sheet is
     /// missing or unreadable, or if the skin turns out to be fully transparent.
     func load(_ skin: MascotSkin) -> LoadedSkin? {
@@ -84,14 +106,12 @@ final class SpriteSheetStore {
         let key = "\(directory)/\(name)"
         if let cached = sheets[key] { return cached }
         // `.copy("Skins")` keeps the directory tree, so the sheet sits at
-        // Skins/<directory>/<name> inside the resource bundle. `Bundle.module`'s
-        // `url(forResource:withExtension:)` treats the whole "Skins/<key>" string as
-        // a single resource *name* rather than a subdirectory path and fails to find
-        // it, so the lookup below goes through the bundle's resource directory URL
-        // and appends the path components directly — confirmed by inspecting
-        // `.build/arm64-apple-macosx/debug/CodeCat_CodeCatApp.bundle/Skins/...`.
-        guard let resourceURL = Bundle.module.resourceURL else { return nil }
-        let url = resourceURL.appendingPathComponent("Skins").appendingPathComponent(key)
+        // <skinsRoot>/<directory>/<name>. `Bundle`'s `url(forResource:withExtension:)`
+        // treats a whole "Skins/<key>" string as a single resource *name* rather than
+        // a subdirectory path and fails to find it, so the lookup goes through the
+        // resolved skins root URL and appends the path components directly.
+        guard let skinsRoot = Self.skinsRoot else { return nil }
+        let url = skinsRoot.appendingPathComponent(key)
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         sheets[key] = image
