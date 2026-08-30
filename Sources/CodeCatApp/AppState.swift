@@ -104,6 +104,10 @@ final class AppState: ObservableObject {
                 self.store.applyIdleHeuristic(now: now)
             }
             self.powerManager.tick(now: now)
+            // Reconciles against the real `SleepDisabled` flag on this slower cadence only —
+            // `refresh()` below still drives the cheap, cache-only `update(shouldPreventSleep:)`
+            // path for the frequent hook-driven case.
+            self.lidController.reconcile(shouldPreventSleep: self.powerManager.isHolding)
             self.refresh()
         }
 
