@@ -97,7 +97,12 @@ final class SystemJumpExecutor: JumpExecuting {
                                  completion: @escaping (JumpOutcome) -> Void) {
         outstandingJumps += 1
         var settled = false
-        var awaitingConsent = false
+        // Starts true, meaning "not yet known to have been asked". Until TCC answers,
+        // nothing has been sent to the terminal, so a watchdog firing in that window
+        // must not report that the terminal failed to answer — that is a claim about
+        // an app nobody talked to. Only the granted branch, which is the one state
+        // that knows the send actually went out, clears it.
+        var awaitingConsent = true
         var watchdog: DispatchWorkItem?
 
         // Marks the underlying work finished — not the same moment as reporting to the
@@ -163,6 +168,7 @@ final class SystemJumpExecutor: JumpExecuting {
                     arm(JumpExecutionPolicy.consentTimeout)
                     self.send(source, settle: settle, finishWork: finishWork)
                 case .granted:
+                    awaitingConsent = false
                     self.send(source, settle: settle, finishWork: finishWork)
                 }
             }
