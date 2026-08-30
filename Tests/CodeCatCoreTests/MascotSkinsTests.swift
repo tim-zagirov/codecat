@@ -34,3 +34,98 @@ final class MascotSkinsTests: XCTestCase {
         XCTAssertNil(skin.animation(for: .working))
     }
 }
+
+extension MascotSkinsTests {
+
+    /// These ids are persisted in `UserDefaults`. Renaming one silently resets the
+    /// user's choice back to the drawn cat, which is why the list is frozen here.
+    func testSkinIDsAreExactlyThisFrozenList() {
+        XCTAssertEqual(MascotSkins.all.map(\.id), [
+            "drawn",
+            "luizmelo-cat-1", "luizmelo-cat-2", "luizmelo-cat-3",
+            "luizmelo-cat-4", "luizmelo-cat-5", "luizmelo-cat-6",
+            "elthen-cat", "mxmaze-kitty",
+        ])
+    }
+
+    func testEveryStateResolvesForEverySpriteSkin() {
+        for skin in MascotSkins.all where skin.isSpriteBased {
+            for key in AggregateStatusKey.allCases {
+                XCTAssertNotNil(skin.animation(for: key),
+                                "\(skin.id) не знает состояния \(key.rawValue)")
+            }
+        }
+    }
+
+    /// The drawn cat is drawn by `CatView`, not from sheets, so it declares no
+    /// animations and no directory at all.
+    func testDrawnSkinHasNoSpriteData() {
+        XCTAssertEqual(MascotSkins.drawn.id, "drawn")
+        XCTAssertNil(MascotSkins.drawn.directory)
+        XCTAssertTrue(MascotSkins.drawn.animations.isEmpty)
+        XCTAssertFalse(MascotSkins.drawn.isSpriteBased)
+    }
+
+    func testNoAnimationIsEmptyOrHasNonPositiveFPS() {
+        for skin in MascotSkins.all {
+            for (key, animation) in skin.animations {
+                XCTAssertFalse(animation.frames.isEmpty, "\(skin.id)/\(key.rawValue)")
+                XCTAssertGreaterThan(animation.framesPerSecond, 0, "\(skin.id)/\(key.rawValue)")
+                // The mascot sits on screen all day; anything faster is battery spent
+                // on redrawing a transparent panel.
+                XCTAssertLessThanOrEqual(animation.framesPerSecond, 8, "\(skin.id)/\(key.rawValue)")
+                XCTAssertGreaterThanOrEqual(animation.framesPerSecond, 0.6, "\(skin.id)/\(key.rawValue)")
+            }
+        }
+    }
+
+    func testEverySkinNamesAnAuthorAndASource() {
+        for skin in MascotSkins.all {
+            XCTAssertFalse(skin.name.isEmpty, skin.id)
+            XCTAssertFalse(skin.author.isEmpty, skin.id)
+            XCTAssertTrue(skin.sourceURL.hasPrefix("https://"), skin.id)
+        }
+    }
+
+    /// mxmaze ships under CC BY 4.0, where attribution is an obligation rather than
+    /// a courtesy — the credited name has to actually be there.
+    func testAttributionIsSpelledOutWhereTheLicenceDemandsIt() {
+        let demanding = MascotSkins.all.filter { $0.license.requiresAttribution }
+        XCTAssertEqual(demanding.map(\.id), ["mxmaze-kitty"])
+        for skin in demanding {
+            guard case .ccBy4(let attribution) = skin.license else {
+                return XCTFail("\(skin.id): ожидалась лицензия CC BY 4.0")
+            }
+            XCTAssertFalse(attribution.isEmpty, skin.id)
+        }
+    }
+
+    func testUnknownIDFallsBackToTheDrawnCat() {
+        XCTAssertEqual(MascotSkins.skin(withID: "мусор-из-настроек").id, "drawn")
+        XCTAssertEqual(MascotSkins.skin(withID: "").id, "drawn")
+        XCTAssertEqual(MascotSkins.skin(withID: "elthen-cat").id, "elthen-cat")
+    }
+
+    /// `Cat-3` is the one LuizMelo cat with no `Itch` sheet, so its "problem" state
+    /// falls back to `Licking 2` — the substitution most likely to be lost in a
+    /// later refactor, so it is asserted directly.
+    func testCat3UsesLickingBecauseItHasNoItchSheet() {
+        let cat3 = MascotSkins.skin(withID: "luizmelo-cat-3")
+        XCTAssertEqual(cat3.animation(for: .problem)?.frames.first?.sheet, "Cat-3-Licking 2.png")
+        let cat1 = MascotSkins.skin(withID: "luizmelo-cat-1")
+        XCTAssertEqual(cat1.animation(for: .problem)?.frames.first?.sheet, "Cat-1-Itch.png")
+    }
+
+    /// mxmaze's bottom row is drawn with the eyes closed. "Done" must not come from
+    /// it, or finishing would read as falling asleep.
+    func testMxmazeDoneDoesNotUseAClosedEyeFrame() {
+        let mx = MascotSkins.skin(withID: "mxmaze-kitty")
+        let closedEyeIndices = [6, 7, 8]  // row 2 of the 3x3 sheet
+        let done = try? XCTUnwrap(mx.animation(for: .done))
+        for frame in done?.frames ?? [] {
+            XCTAssertFalse(closedEyeIndices.contains(frame.index),
+                           "«закончил» не должен брать кадр с закрытыми глазами")
+        }
+        XCTAssertEqual(mx.animation(for: .sleeping)?.frames.map(\.index), [7, 8])
+    }
+}
