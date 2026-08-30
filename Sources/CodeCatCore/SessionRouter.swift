@@ -53,3 +53,58 @@ public enum SessionRouter {
         return errno == EPERM
     }
 }
+
+/// What actually happened when a route was executed.
+public enum JumpOutcome: Equatable, Sendable {
+    case switchedToTab
+    case switchedToApplication
+    /// The user declined the one-time automation permission for the terminal.
+    case automationDenied
+    /// The tab is gone — it was closed since the session started.
+    case tabNotFound
+    case hostGone
+    case failed(String)
+}
+
+/// Executing a route is the app layer's job (AppKit + AppleScript); the protocol is
+/// what keeps `AppState`'s handling of outcomes testable, the same way `runner` does
+/// for `LidSleepController`.
+public protocol JumpExecuting {
+    /// Never blocks the caller: the completion is invoked on the main queue.
+    func perform(_ route: JumpRoute, completion: @escaping (JumpOutcome) -> Void)
+}
+
+/// User-facing Russian text for jump outcomes. Kept next to the outcomes so the
+/// "no silent refusals" rule can be enforced by a test over every case.
+public enum JumpMessages {
+
+    /// The alert to show, or nil when the outcome needs none — a jump that worked
+    /// already put the user where they wanted to be.
+    public static func alert(for outcome: JumpOutcome) -> (title: String, body: String)? {
+        switch outcome {
+        case .switchedToTab, .switchedToApplication:
+            return nil
+        case .automationDenied:
+            return ("Нет разрешения на автоматизацию",
+                    "Чтобы попадать сразу во вкладку терминала, нужно разрешение на автоматизацию — его можно выдать в Системных настройках, «Конфиденциальность и безопасность» → «Автоматизация». Пока вывел приложение вперёд.")
+        case .tabNotFound:
+            return ("Вкладку найти не удалось",
+                    "Похоже, вкладку с этой сессией уже закрыли. Вывел приложение вперёд.")
+        case .hostGone:
+            return ("Сессия закрыта",
+                    "Приложение, в котором работала эта сессия, больше не запущено.")
+        case .failed(let detail):
+            return ("Не удалось перейти к сессии", "Ошибка: \(detail)")
+        }
+    }
+
+    /// The small caption under a row that cannot be clicked.
+    public static func rowHint(for reason: UnavailableReason) -> String {
+        switch reason {
+        case .noHostRecorded:
+            return "переход недоступен — сессия запущена до CodeCat"
+        case .hostGone:
+            return "переход недоступен — приложение сессии закрыто"
+        }
+    }
+}
