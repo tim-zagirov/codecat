@@ -49,19 +49,19 @@ public final class SessionStore: ObservableObject {
     public func apply(hook event: HookEvent, now: Date) {
         switch event.hookEventName {
         case "SessionStart":
-            upsert(id: event.sessionId, cwd: event.cwd, now: now) { s in
+            upsert(event: event, now: now) { s in
                 s.status = .working
                 s.activityDescription = "начинает работу"
             }
         case "Notification":
             let text = (event.message ?? "").lowercased()
             let reason: WaitReason = text.contains("permission") ? .permission : .question
-            upsert(id: event.sessionId, cwd: event.cwd, now: now) { s in
+            upsert(event: event, now: now) { s in
                 s.status = .waitingForYou(reason)
                 s.activityDescription = "ждёт тебя"
             }
         case "Stop":
-            upsert(id: event.sessionId, cwd: event.cwd, now: now) { s in
+            upsert(event: event, now: now) { s in
                 s.status = .done
                 s.activityDescription = "закончил"
             }
@@ -158,17 +158,24 @@ public final class SessionStore: ObservableObject {
         }
     }
 
-    private func upsert(id: String, cwd: String?, now: Date,
+    private func upsert(event: HookEvent, now: Date,
                         _ mutate: (inout Session) -> Void) {
-        var s = sessions[id] ?? Session(
-            id: id,
-            projectPath: cwd ?? "",
+        var s = sessions[event.sessionId] ?? Session(
+            id: event.sessionId,
+            projectPath: event.cwd ?? "",
             status: .working,
             activityDescription: "",
             startedAt: now,
             lastActivity: now)
-        if let cwd, !cwd.isEmpty { s.projectPath = cwd }
+        if let cwd = event.cwd, !cwd.isEmpty { s.projectPath = cwd }
         s.lastActivity = now
+        // Only ever fill the route in, never clear it: a `Notification` from an older
+        // hook binary, or any event that lost its enrichment, must not disable the
+        // jump for a session whose route is already known.
+        if let pid = event.hostPID { s.hostPID = pid }
+        if let path = event.hostBundlePath, !path.isEmpty { s.hostBundlePath = path }
+        if let id = event.hostBundleID, !id.isEmpty { s.hostBundleID = id }
+        if let tty = event.tty, !tty.isEmpty { s.tty = tty }
         mutate(&s)
         switch s.status {
         case .done, .crashed:
@@ -176,6 +183,6 @@ public final class SessionStore: ObservableObject {
         case .working, .waitingForYou:
             s.finishedAt = nil
         }
-        sessions[id] = s
+        sessions[event.sessionId] = s
     }
 }
