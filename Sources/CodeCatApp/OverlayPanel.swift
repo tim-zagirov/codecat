@@ -42,8 +42,13 @@ class OverlayPanel: NSPanel {
 /// Owns the cat panel and the details panel, and is the sole place that knows how
 /// they relate to each other (position, visibility, click-to-open).
 final class OverlayController: NSObject, NSWindowDelegate {
-    private static let positionKey = "mascotPosition"
-    private static let catSize = NSSize(width: 96, height: 96)
+    /// `[x, y, canvas]`. The canvas the position was saved for is stored with it so
+    /// changing the panel size migrates old positions instead of shifting the cat.
+    private static let positionKey = "mascotPosition.v2"
+    /// The bare `[x, y]` pair written by builds before the panel grew.
+    private static let legacyPositionKey = "mascotPosition"
+    private static let catSize = NSSize(width: MascotLayout.canvasSize,
+                                        height: MascotLayout.canvasSize)
 
     private let appState: AppState
     private var catPanel: OverlayPanel!
@@ -54,7 +59,7 @@ final class OverlayController: NSObject, NSWindowDelegate {
         self.appState = appState
         super.init()
 
-        let origin = Self.validated(Self.savedOrigin(), size: Self.catSize) ?? Self.defaultOrigin(size: Self.catSize)
+        let origin = Self.validated(Self.savedOrigin()) ?? Self.defaultOrigin()
         let panel = OverlayPanel(contentRect: NSRect(origin: origin, size: Self.catSize), allowsKey: false)
         panel.delegate = self
 
@@ -105,8 +110,8 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     func windowDidMove(_ notification: Notification) {
         guard let panel = notification.object as? NSPanel, panel === catPanel else { return }
-        let o = panel.frame.origin
-        UserDefaults.standard.set([Double(o.x), Double(o.y)], forKey: Self.positionKey)
+        UserDefaults.standard.set(MascotLayout.storedValue(for: panel.frame.origin),
+                                  forKey: Self.positionKey)
     }
 
     // MARK: - Details panel dismissal
@@ -137,7 +142,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     private func makeDetailsPanel() -> OverlayPanel {
         let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 290, height: 200), allowsKey: true)
-        panel.contentView = NSHostingView(rootView: DetailsPanelView(appState: appState))
+        panel.contentView = NSHostingView(rootView: DetailsPanelView(
+            appState: appState,
+            onJump: { [weak self] in self?.hideDetails() }))
         return panel
     }
 
@@ -154,7 +161,11 @@ final class OverlayController: NSObject, NSWindowDelegate {
     }
 
     private func position(_ panel: NSPanel, relativeTo catPanel: NSPanel) {
-        let catFrame = catPanel.frame
+        // The cat panel is larger than the cat: `MascotLayout.margin` of it is
+        // transparent slack that keeps animations from being clipped. Lay the
+        // details panel out against the drawing, not against that invisible edge,
+        // so the gap between them is the gap the user actually sees.
+        let catFrame = catPanel.frame.insetBy(dx: MascotLayout.margin, dy: MascotLayout.margin)
         let screen = NSScreen.screens.first { $0.frame.intersects(catFrame) } ?? NSScreen.main
         var origin = NSPoint(x: catFrame.minX - panel.frame.width - 12, y: catFrame.minY)
 
@@ -173,25 +184,25 @@ final class OverlayController: NSObject, NSWindowDelegate {
     // MARK: - Position persistence
 
     private static func savedOrigin() -> NSPoint? {
-        guard let arr = UserDefaults.standard.array(forKey: positionKey) as? [Double],
-              arr.count == 2 else { return nil }
-        return NSPoint(x: arr[0], y: arr[1])
+        let defaults = UserDefaults.standard
+        return MascotLayout.storedOrigin(
+            current: defaults.array(forKey: positionKey) as? [Double],
+            legacy: defaults.array(forKey: legacyPositionKey) as? [Double])
     }
 
     /// Guards against a saved position from a display that is no longer connected:
     /// if the remembered rect doesn't intersect any currently attached screen, fall
     /// back to the default corner instead of stranding the cat off-screen.
-    private static func validated(_ origin: NSPoint?, size: NSSize) -> NSPoint? {
+    private static func validated(_ origin: NSPoint?) -> NSPoint? {
         guard let origin else { return nil }
-        let rect = NSRect(origin: origin, size: size)
-        let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(rect) }
+        let onScreen = MascotLayout.isOnScreen(origin: origin,
+                                               screens: NSScreen.screens.map(\.visibleFrame))
         return onScreen ? origin : nil
     }
 
-    private static func defaultOrigin(size: NSSize) -> NSPoint {
+    private static func defaultOrigin() -> NSPoint {
         guard let screen = NSScreen.main else { return NSPoint(x: 100, y: 100) }
-        let f = screen.visibleFrame
-        return NSPoint(x: f.maxX - size.width - 24, y: f.minY + 24)
+        return MascotLayout.defaultOrigin(visibleFrame: screen.visibleFrame, inset: 24)
     }
 }
 

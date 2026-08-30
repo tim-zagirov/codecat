@@ -13,6 +13,7 @@ final class AppState: ObservableObject {
     let awayLog = AwayLog()
     let powerManager: PowerManager
     let lidController: LidSleepController
+    let jumpExecutor: JumpExecuting
 
     private var socketServer: HookSocketServer?
     private var watcher: TranscriptWatcher?
@@ -54,6 +55,7 @@ final class AppState: ObservableObject {
         soundsEnabled = defaults.bool(forKey: "sounds")
         showMascot = defaults.bool(forKey: "showMascot")
 
+        jumpExecutor = SystemJumpExecutor()
         powerManager = PowerManager(
             assertion: IOKitSleepAssertion(),
             batteryLevel: { Battery.currentLevelIfOnBattery() })
@@ -345,5 +347,68 @@ final class AppState: ObservableObject {
         socketServer?.stop()
         watcher?.stop()
         timer?.invalidate()
+    }
+
+    // MARK: - Jumping to a session
+
+    /// Where a click on this session's row would send the user. Cheap enough to call
+    /// during a view body: one `kill(pid, 0)` per visible row.
+    func route(for session: Session) -> JumpRoute {
+        SessionRouter.route(for: session, isHostRunning: SessionRouter.isProcessRunning)
+    }
+
+    /// Executes the jump and reports the outcome. Successful jumps say nothing — the
+    /// user is already looking at the destination; everything else gets an alert, so
+    /// there are no silent refusals.
+    func jump(to session: Session) {
+        let route = route(for: session)
+        if case .unavailable(let reason) = route {
+            // The route was computed fresh just now, at click time, so this can
+            // legitimately differ from what the row showed a moment ago (e.g. the
+            // host quit in between). `.hostGone` is a real, reportable failure —
+            // staying silent here would be a dead click on a row that looked
+            // clickable. `.noHostRecorded` is correctly silent: `route(for:)` never
+            // makes such a row clickable in the first place (see
+            // `DetailsPanelView.hasRoute`), so this branch is unreachable for it
+            // today, but honoring it explicitly keeps that guarantee visible here
+            // too rather than relying only on the view layer.
+            guard reason == .hostGone, let message = JumpMessages.alert(for: .hostGone) else { return }
+            presentJumpAlert(message)
+            return
+        }
+        jumpExecutor.perform(route) { [weak self] outcome in
+            guard let message = JumpMessages.alert(for: outcome) else { return }
+            self?.presentJumpAlert(message)
+        }
+    }
+
+    /// Brings CodeCat to the front immediately before presenting a jump-failure
+    /// alert, then shows it. Required because CodeCat runs as an accessory app
+    /// (`.accessory` activation policy, set in `AppDelegate`) and is never the
+    /// active application when a jump fires — and on most paths that reach this
+    /// method, `SystemJumpExecutor` has just tried to activate the *target* app
+    /// (recoverable failures fall back to bringing it forward before reporting;
+    /// `.hostGone` does not, and a refused activation tried and failed). Without
+    /// activating CodeCat first, `NSAlert.runModal()` would present a window that
+    /// never comes to the front: the user sees the target app appear and nothing
+    /// else, i.e. a silent failure. `automationDenied` is the very first terminal
+    /// jump every user will make, so this path matters from the start.
+    ///
+    /// Only ever called from a jump-failure path — never on a successful jump,
+    /// which stays silent and must not steal focus back from the app the user was
+    /// just sent to.
+    /// Activation alone is not enough to guarantee that: `NSApp.activate()` and the
+    /// executor's activation of the target app are both asynchronous *requests* to
+    /// the window server, issued in that order, and either can be declined or land
+    /// second. So the alert's own window is raised explicitly as well — that part
+    /// depends on no ordering and cannot be refused.
+    private func presentJumpAlert(_ message: (title: String, body: String)) {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = message.title
+        alert.informativeText = message.body
+        alert.window.level = .modalPanel
+        alert.window.orderFrontRegardless()
+        alert.runModal()
     }
 }
