@@ -128,7 +128,7 @@ public enum SkinLicense: Equatable, Sendable {
 
 ## Ресурсы и сборка
 
-Файлы кладутся в `Sources/CodeCatApp/Skins/<набор>/` — SwiftPM требует, чтобы ресурсы лежали внутри каталога таргета, а нынешний `Resources/` лежит в корне и копируется вручную Makefile'ом. В `Package.swift` таргет `CodeCatApp` получает `resources: [.copy("Skins")]`, доступ — через `Bundle.module`.
+Файлы уже скачаны и лежат в репозитории: `Resources/Skins/` (там же `CREDITS.md` и `fetch-assets.sh`, воспроизводящий скачивание). Первая задача реализации — перенести их в `Sources/CodeCatApp/Skins/<набор>/`: SwiftPM требует, чтобы ресурсы лежали внутри каталога таргета, а нынешний `Resources/` лежит в корне и копируется вручную Makefile'ом. В `Package.swift` таргет `CodeCatApp` получает `resources: [.copy("Skins")]`, доступ — через `Bundle.module`.
 
 **`make app` должен дополнительно копировать `.build/release/CodeCat_CodeCatApp.bundle` в `Contents/Resources/`.** Без этого облики будут работать под `swift run` и молча ломаться в установленном приложении — ровно тот класс дефекта, который в этом проекте уже дважды ловился только запуском собранного бандла.
 
