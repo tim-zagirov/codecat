@@ -108,3 +108,51 @@ final class SessionRouterTests: XCTestCase {
         XCTAssertFalse(SessionRouter.isProcessRunning(-1))
     }
 }
+
+extension SessionRouterTests {
+
+    /// A successful jump speaks for itself — the user is already looking at the
+    /// destination, an alert would be noise.
+    func testSuccessfulOutcomesProduceNoAlert() {
+        XCTAssertNil(JumpMessages.alert(for: .switchedToTab))
+        XCTAssertNil(JumpMessages.alert(for: .switchedToApplication))
+    }
+
+    /// Every failure is reported: the spec forbids silent refusals.
+    func testEveryFailingOutcomeHasARussianMessage() {
+        let outcomes: [JumpOutcome] = [
+            .automationDenied, .tabNotFound, .hostGone, .failed("boom"),
+        ]
+        for outcome in outcomes {
+            guard let alert = JumpMessages.alert(for: outcome) else {
+                return XCTFail("no message for \(outcome)")
+            }
+            XCTAssertFalse(alert.title.isEmpty)
+            XCTAssertFalse(alert.body.isEmpty)
+            XCTAssertTrue(alert.body.range(of: "\\p{Cyrillic}", options: .regularExpression) != nil,
+                          "message for \(outcome) is not in Russian: \(alert.body)")
+        }
+    }
+
+    /// Denied automation is not the end of the road: the executor still brings the
+    /// app forward, and the message must say what happened and what to do.
+    func testAutomationDeniedMentionsThePermissionAndTheFallback() {
+        let alert = JumpMessages.alert(for: .automationDenied)
+        XCTAssertTrue(alert!.body.contains("разрешение"))
+        XCTAssertTrue(alert!.body.contains("вперёд"))
+    }
+
+    func testTabNotFoundMentionsTheClosedTab() {
+        XCTAssertTrue(JumpMessages.alert(for: .tabNotFound)!.body.contains("вкладк"))
+    }
+
+    func testFailedCarriesTheUnderlyingDetail() {
+        XCTAssertTrue(JumpMessages.alert(for: .failed("osascript error -1743"))!
+            .body.contains("osascript error -1743"))
+    }
+
+    func testRowHintsExplainWhyAJumpIsUnavailable() {
+        XCTAssertTrue(JumpMessages.rowHint(for: .noHostRecorded).contains("до CodeCat"))
+        XCTAssertFalse(JumpMessages.rowHint(for: .hostGone).isEmpty)
+    }
+}
