@@ -231,6 +231,22 @@ extension SessionRouterTests {
         XCTAssertTrue(didNot.contains("не удалось"))
     }
 
+    /// A `.failed` outcome still owes the user a destination, so its detail has to
+    /// say what the fallback actually did — the same honesty the two recoverable
+    /// outcomes already carry. Without this, "терминал не ответил" leaves a user
+    /// whose fallback was refused with nothing to do next.
+    func testFailureDetailSaysWhetherTheAppCameForward() {
+        let fellBack = JumpMessages.failureDetail(JumpMessages.terminalTimedOutDetail, fellBack: true)
+        let didNot = JumpMessages.failureDetail(JumpMessages.terminalTimedOutDetail, fellBack: false)
+        XCTAssertNotEqual(fellBack, didNot)
+        for detail in [fellBack, didNot] {
+            XCTAssertTrue(detail.hasPrefix(JumpMessages.terminalTimedOutDetail))
+        }
+        XCTAssertTrue(fellBack.localizedCaseInsensitiveContains("вывел приложение вперёд"))
+        XCTAssertTrue(didNot.localizedCaseInsensitiveContains("не удалось"))
+        XCTAssertFalse(didNot.localizedCaseInsensitiveContains("Вывел приложение вперёд"))
+    }
+
     func testRowHintsExplainWhyAJumpIsUnavailable() {
         XCTAssertTrue(JumpMessages.rowHint(for: .noHostRecorded).contains("до CodeCat"))
         XCTAssertFalse(JumpMessages.rowHint(for: .hostGone).isEmpty)
