@@ -18,6 +18,14 @@ public struct Session: Identifiable, Equatable, Sendable {
     public var activityDescription: String
     public var startedAt: Date
     public var lastActivity: Date
+    /// When this session most recently entered a terminal state (`.done` or `.crashed`).
+    /// `nil` while the session is active. `expireFinished` measures its TTL from this,
+    /// not from `lastActivity` — the two answer different questions: `lastActivity` is
+    /// "when did this session last do something", `finishedAt` is "when did it finish".
+    /// Conflating them let a session that went quiet long before it was reconciled to
+    /// `.crashed` (the long-staleness path) look already-expired the instant it crashed,
+    /// so it was deleted before ever being shown as a problem.
+    public var finishedAt: Date? = nil
 
     public var projectName: String {
         (projectPath as NSString).lastPathComponent
