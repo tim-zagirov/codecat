@@ -19,7 +19,26 @@ final class HookPayloadTests: XCTestCase {
         XCTAssertEqual(result["host_pid"] as? Int, 4242)
         XCTAssertEqual(result["host_bundle_path"] as? String, "/Applications/Claude.app")
         XCTAssertEqual(result["host_bundle_id"] as? String, "com.anthropic.claudefordesktop")
-        XCTAssertEqual(result["tty"] as? String, "/dev/ttys001")
+        XCTAssertEqual(result["host_tty"] as? String, "/dev/ttys001")
+    }
+
+    /// Every field CodeCat adds is namespaced `host_*`: an un-namespaced `tty` key
+    /// would collide with anything Claude Code might ship under that name, and a
+    /// non-string value in the payload would break decoding of *every* event.
+    func testTheTtyKeyIsNamespacedAndDoesNotTouchAPlainTtyField() {
+        let input = #"{"session_id":"abc","tty":{"not":"a string"}}"#.data(using: .utf8)!
+        let result = object(HookPayload.enriched(input, with: fields))
+        XCTAssertEqual(result["host_tty"] as? String, "/dev/ttys001")
+        XCTAssertNotNil(result["tty"] as? [String: Any])
+    }
+
+    /// A payload that already carries a foreign `tty` of a type `HookEvent` cannot
+    /// decode must still decode as a `HookEvent` after enrichment.
+    func testEnrichedPayloadWithAForeignTtyFieldStillDecodes() throws {
+        let input = #"{"hook_event_name":"Stop","session_id":"abc","tty":17}"#.data(using: .utf8)!
+        let event = try JSONDecoder().decode(HookEvent.self, from: HookPayload.enriched(input, with: fields))
+        XCTAssertEqual(event.sessionId, "abc")
+        XCTAssertEqual(event.tty, "/dev/ttys001")
     }
 
     func testEnrichmentKeepsEveryOriginalField() {
@@ -37,7 +56,7 @@ final class HookPayloadTests: XCTestCase {
         let empty = HookPayload.RouteFields(hostPID: nil, hostBundlePath: nil, hostBundleID: nil, tty: nil)
         let result = object(HookPayload.enriched(input, with: empty))
         XCTAssertNil(result["host_pid"])
-        XCTAssertNil(result["tty"])
+        XCTAssertNil(result["host_tty"])
         XCTAssertEqual(result["session_id"] as? String, "abc")
     }
 
