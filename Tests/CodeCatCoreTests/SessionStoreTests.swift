@@ -320,7 +320,7 @@ extension SessionStoreTests {
         let json = #"""
         {"hook_event_name":"SessionStart","session_id":"abc","cwd":"/tmp/p",
          "host_pid":4242,"host_bundle_path":"/Applications/Claude.app",
-         "host_bundle_id":"com.anthropic.claudefordesktop","tty":"/dev/ttys001"}
+         "host_bundle_id":"com.anthropic.claudefordesktop","host_tty":"/dev/ttys001"}
         """#.data(using: .utf8)!
         let event = try JSONDecoder().decode(HookEvent.self, from: json)
         XCTAssertEqual(event.hostPID, 4242)
@@ -374,6 +374,24 @@ extension SessionStoreTests {
                     now: start.addingTimeInterval(1))
         XCTAssertEqual(store.sessions["s1"]?.hostPID, 4242)
         XCTAssertEqual(store.sessions["s1"]?.hostBundlePath, "/Applications/Claude.app")
+    }
+
+    /// Empty strings are what a partial read produces (an unreadable Info.plist, a
+    /// process with no controlling terminal reported as ""). They carry no route and
+    /// must not clear one that is already known — the absent case is covered above,
+    /// this is the empty-string one.
+    func testEventWithEmptyRouteStringsDoesNotEraseAKnownRoute() {
+        let store = SessionStore()
+        let start = Date()
+        store.apply(hook: routedEvent("SessionStart"), now: start)
+        store.apply(hook: HookEvent(hookEventName: "Notification", sessionId: "s1",
+                                    cwd: "/tmp/project", message: "permission",
+                                    hostPID: nil, hostBundlePath: "", hostBundleID: "", tty: ""),
+                    now: start.addingTimeInterval(1))
+        XCTAssertEqual(store.sessions["s1"]?.hostPID, 4242)
+        XCTAssertEqual(store.sessions["s1"]?.hostBundlePath, "/Applications/Claude.app")
+        XCTAssertEqual(store.sessions["s1"]?.hostBundleID, "com.anthropic.claudefordesktop")
+        XCTAssertEqual(store.sessions["s1"]?.tty, "/dev/ttys001")
     }
 
     /// A session that only ever appeared through the transcript watcher has no route.

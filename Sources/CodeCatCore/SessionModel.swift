@@ -76,7 +76,8 @@ public struct HookEvent: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case hookEventName = "hook_event_name"
         case sessionId = "session_id"
-        case cwd, message, tty
+        case cwd, message
+        case tty = "host_tty"
         case hostPID = "host_pid"
         case hostBundlePath = "host_bundle_path"
         case hostBundleID = "host_bundle_id"

@@ -60,9 +60,16 @@ public enum ProcessTree {
     /// `maxDepth` and the visited set are hook-safety guards: this runs inside
     /// `codecat-hook`, which Claude Code waits on, so a corrupt or cyclic parent
     /// chain must terminate rather than spin.
+    ///
+    /// `excludingBundlePath` is how the hook keeps itself out of the answer: the
+    /// installed hook lives at `/Applications/CodeCat.app/Contents/MacOS/codecat-hook`,
+    /// so its own executable resolves to a bundle. Recording CodeCat as the host of
+    /// somebody else's session points the jump at a process that exits microseconds
+    /// later — and at a pid that is then free to be recycled.
     public static func host(startingAt pid: pid_t,
                             provider: ProcessTreeProviding,
-                            maxDepth: Int = 24) -> HostApplication? {
+                            maxDepth: Int = 24,
+                            excludingBundlePath: String? = nil) -> HostApplication? {
         var found: HostApplication?
         var visited: Set<pid_t> = []
         var current = pid
@@ -70,7 +77,8 @@ public enum ProcessTree {
             guard !visited.contains(current), let snapshot = provider.snapshot(for: current) else { break }
             visited.insert(current)
             if let path = snapshot.executablePath,
-               let bundle = outermostBundlePath(forExecutablePath: path) {
+               let bundle = outermostBundlePath(forExecutablePath: path),
+               bundle != excludingBundlePath {
                 found = HostApplication(pid: snapshot.pid, bundlePath: bundle)
             }
             guard snapshot.ppid > 1 else { break }
