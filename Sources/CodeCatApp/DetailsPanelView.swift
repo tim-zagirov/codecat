@@ -13,16 +13,26 @@ struct DetailsPanelView: View {
     var onJump: () -> Void = {}
 
     /// The id of the clickable row currently under the pointer, or nil. This is the
-    /// single source of truth for both the hover highlight and the pointing-hand
-    /// cursor (see the `onChange` below) — there is deliberately no per-row
-    /// `NSCursor.push()/pop()`. A push/pop pair relies on every push eventually being
-    /// matched by a pop, but a row can vanish out from under the pointer (its session
-    /// ends and `ForEach` drops it) without AppKit ever delivering the matching
-    /// mouse-exited event, which would leave the pointing-hand cursor stuck over the
-    /// whole screen until the app restarts. `NSCursor.set()` has no such failure mode:
-    /// it always replaces whatever cursor is current, so even a missed transition
-    /// only leaves the cursor wrong until the next one, never stuck via a corrupted
-    /// stack.
+    /// single source of truth for the hover highlight, and also drives the cursor on
+    /// every transition into/out of a row (see the `onChange` below) — there is
+    /// deliberately no per-row `NSCursor.push()/pop()`. A push/pop pair relies on
+    /// every push eventually being matched by a pop, but a row can vanish out from
+    /// under the pointer (its session ends and `ForEach` drops it) without AppKit
+    /// ever delivering the matching mouse-exited event, which would leave the
+    /// pointing-hand cursor stuck over the whole screen until the app restarts.
+    /// `NSCursor.set()` has no such failure mode: it always replaces whatever cursor
+    /// is current, so even a missed transition only leaves the cursor wrong until the
+    /// next one, never stuck via a corrupted stack.
+    ///
+    /// `set()` alone is not enough while the pointer keeps moving inside a row,
+    /// though: AppKit re-applies its own idea of the cursor (cursor rects /
+    /// `cursorUpdate:`, falling back to the arrow) on every mouse-moved event, and
+    /// that overrides a `set()` call made on a previous event. So each row also
+    /// re-asserts `NSCursor.pointingHand.set()` on every `onContinuousHover(.active)`
+    /// callback — i.e. on every mouse-moved event while inside a clickable row, not
+    /// just on entry. See `sessionRow` for the three places `hovered` is cleared
+    /// (pointer leaves the row, the row disappears, the panel closes on a click),
+    /// each of which lets the arrow win back via the `onChange` below.
     @State private var hovered: String?
 
     var body: some View {
@@ -93,8 +103,12 @@ struct DetailsPanelView: View {
             if case .unavailable(let reason) = route { return reason }
             return nil
         }()
+        // Whether this row is actually clickable. `hovered` is only ever set to
+        // this row's id from the interactive branch below, so it can equal
+        // `session.id` here only when `hasRoute` was true at the time it was set.
+        let hasRoute = unavailableReason == nil
 
-        HStack(alignment: .top, spacing: 8) {
+        let content = HStack(alignment: .top, spacing: 8) {
             Circle().fill(color(for: session.status))
                 .frame(width: 8, height: 8)
                 .padding(.top, 5)
@@ -116,35 +130,55 @@ struct DetailsPanelView: View {
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 4)
-        .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(hovered == session.id && unavailableReason == nil
-                      ? Color.primary.opacity(0.08) : Color.clear))
-        .onHover { inside in
-            guard unavailableReason == nil else { return }
-            // Order-independent under fast pointer movement between two adjacent
-            // rows: whichever row's `true` arrives last wins the highlight, and a
-            // stale `false` (arriving after the pointer already entered the next
-            // row) is a no-op because `hovered` no longer equals this row's id.
-            hovered = inside ? session.id : (hovered == session.id ? nil : hovered)
-        }
+                .fill(hovered == session.id ? Color.primary.opacity(0.08) : Color.clear))
         .onDisappear {
             // This row is leaving the hierarchy (its session ended and `ForEach`
             // dropped it) — possibly while still under the pointer, in which case no
-            // `onHover(false)` is coming. Clear `hovered` explicitly so the cursor
-            // (driven by the `onChange` on `body`) doesn't stay pinned to a row that
-            // no longer exists.
+            // further hover callback is coming. Clear `hovered` explicitly so the
+            // cursor (driven by the `onChange` on `body`) doesn't stay pinned to a
+            // row that no longer exists.
             if hovered == session.id { hovered = nil }
         }
-        .onTapGesture {
-            guard unavailableReason == nil else { return }
-            // Clear the hover state before the panel closes: `onJump()` hides the
-            // panel immediately, so no `onHover(false)` will follow this click even
-            // though the pointer is still physically over the row.
-            hovered = nil
-            appState.jump(to: session)
-            onJump()
+
+        // Only a row with an actual route gets the tap target and hover/cursor
+        // wiring — an unavailable row states its non-interactivity in the view
+        // tree instead of installing a tap gesture that a guard then swallows.
+        if hasRoute {
+            content
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active:
+                        if hovered != session.id { hovered = session.id }
+                        // Reasserted on every mouse-moved event inside the row, not
+                        // just on entry: AppKit re-applies its own cursor (cursor
+                        // rects / cursorUpdate:, arrow as the fallback) on each such
+                        // event, which would otherwise overwrite a `set()` call made
+                        // on a prior event within a few pixels of pointer movement.
+                        NSCursor.pointingHand.set()
+                    case .ended:
+                        // Pointer left the row (including leaving the panel/window
+                        // entirely from inside it). No further `.active` callbacks
+                        // will arrive here to keep re-asserting the pointing hand,
+                        // so clearing `hovered` lets the `onChange` on `body` put the
+                        // arrow back.
+                        if hovered == session.id { hovered = nil }
+                    }
+                }
+                .onTapGesture {
+                    // Clear the hover state before the panel closes: `onJump()`
+                    // hides the panel immediately, so no further hover callback will
+                    // follow this click even though the pointer is still physically
+                    // over the row — without this the cursor would stay a pointing
+                    // hand after the panel (and its window) is gone.
+                    hovered = nil
+                    appState.jump(to: session)
+                    onJump()
+                }
+        } else {
+            content
         }
     }
 
