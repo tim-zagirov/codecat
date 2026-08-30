@@ -362,13 +362,45 @@ final class AppState: ObservableObject {
     /// there are no silent refusals.
     func jump(to session: Session) {
         let route = route(for: session)
-        if case .unavailable = route { return }
-        jumpExecutor.perform(route) { outcome in
-            guard let message = JumpMessages.alert(for: outcome) else { return }
-            let alert = NSAlert()
-            alert.messageText = message.title
-            alert.informativeText = message.body
-            alert.runModal()
+        if case .unavailable(let reason) = route {
+            // The route was computed fresh just now, at click time, so this can
+            // legitimately differ from what the row showed a moment ago (e.g. the
+            // host quit in between). `.hostGone` is a real, reportable failure —
+            // staying silent here would be a dead click on a row that looked
+            // clickable. `.noHostRecorded` is correctly silent: `route(for:)` never
+            // makes such a row clickable in the first place (see
+            // `DetailsPanelView.hasRoute`), so this branch is unreachable for it
+            // today, but honoring it explicitly keeps that guarantee visible here
+            // too rather than relying only on the view layer.
+            guard reason == .hostGone, let message = JumpMessages.alert(for: .hostGone) else { return }
+            presentJumpAlert(message)
+            return
         }
+        jumpExecutor.perform(route) { [weak self] outcome in
+            guard let message = JumpMessages.alert(for: outcome) else { return }
+            self?.presentJumpAlert(message)
+        }
+    }
+
+    /// Brings CodeCat to the front immediately before presenting a jump-failure
+    /// alert, then shows it. Required because CodeCat runs as an accessory app
+    /// (`.accessory` activation policy, set in `AppDelegate`) and is never the
+    /// active application when a jump fires — and on every path that reaches this
+    /// method, `SystemJumpExecutor` has just activated the *target* app (recoverable
+    /// failures fall back to bringing that app forward before reporting). Without
+    /// activating CodeCat first, `NSAlert.runModal()` would present a window that
+    /// never comes to the front: the user sees the target app appear and nothing
+    /// else, i.e. a silent failure. `automationDenied` is the very first terminal
+    /// jump every user will make, so this path matters from the start.
+    ///
+    /// Only ever called from a jump-failure path — never on a successful jump,
+    /// which stays silent and must not steal focus back from the app the user was
+    /// just sent to.
+    private func presentJumpAlert(_ message: (title: String, body: String)) {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = message.title
+        alert.informativeText = message.body
+        alert.runModal()
     }
 }
