@@ -70,7 +70,9 @@ public enum JumpOutcome: Equatable, Sendable {
 /// what keeps `AppState`'s handling of outcomes testable, the same way `runner` does
 /// for `LidSleepController`.
 public protocol JumpExecuting {
-    /// Never blocks the caller: the completion is invoked on the main queue.
+    /// Implementations must not block the caller, and must invoke `completion` on
+    /// the main queue — this protocol cannot enforce either, so callers rely on the
+    /// contract, not on anything checkable here.
     func perform(_ route: JumpRoute, completion: @escaping (JumpOutcome) -> Void)
 }
 
