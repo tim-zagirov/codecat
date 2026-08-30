@@ -85,6 +85,7 @@ public final class SessionStore: ObservableObject {
         s.status = .working
         s.activityDescription = activity.description
         s.lastActivity = activity.timestamp
+        s.finishedAt = nil
         if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
         sessions[activity.sessionId] = s
     }
@@ -115,14 +116,24 @@ public final class SessionStore: ObservableObject {
             if active && now.timeIntervalSince(s.lastActivity) >= threshold {
                 s.status = .crashed
                 s.activityDescription = "сессия оборвалась"
+                s.finishedAt = now
                 sessions[id] = s
             }
         }
     }
 
+    /// Removes sessions that have sat in a terminal state (`.done`/`.crashed`) for
+    /// longer than `ttl`, measured from `finishedAt` — when the session *finished* —
+    /// not from `lastActivity` — when it last did something. A session reconciled to
+    /// `.crashed` long after it went quiet (the long-staleness path in `reconcile`)
+    /// must still get the full `ttl` window of visibility from the moment it was marked
+    /// crashed, otherwise it can be deleted in the same tick it first appears as a
+    /// problem. Falls back to `lastActivity` only for the (currently unreachable)
+    /// case of a terminal session with no `finishedAt`.
     public func expireFinished(now: Date, ttl: TimeInterval = 600) {
         for (id, s) in sessions where s.status == .done || s.status == .crashed {
-            if now.timeIntervalSince(s.lastActivity) > ttl {
+            let finishedReference = s.finishedAt ?? s.lastActivity
+            if now.timeIntervalSince(finishedReference) > ttl {
                 sessions.removeValue(forKey: id)
             }
         }
@@ -159,6 +170,12 @@ public final class SessionStore: ObservableObject {
         if let cwd, !cwd.isEmpty { s.projectPath = cwd }
         s.lastActivity = now
         mutate(&s)
+        switch s.status {
+        case .done, .crashed:
+            if s.finishedAt == nil { s.finishedAt = now }
+        case .working, .waitingForYou:
+            s.finishedAt = nil
+        }
         sessions[id] = s
     }
 }

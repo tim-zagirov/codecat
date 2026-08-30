@@ -219,4 +219,91 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.ordered[0].status, .working,
                        "30 минут не должно быть достаточно для default long-stale timeout")
     }
+
+    // MARK: - reconcile + expireFinished interaction (regression)
+
+    func testLongStaleCrashViaReconcileSurvivesSameTickExpireFinished() {
+        // The regression this pins: the app's maintenance timer calls reconcile() then
+        // expireFinished() back-to-back with the same `now` every tick. Before the fix,
+        // reconcile() flipped a long-stale session to .crashed without touching
+        // lastActivity, and expireFinished() measured its TTL from that same stale
+        // lastActivity — so a session that had been quiet for longer than `ttl` (but
+        // less than `longStaleAfter`) was deleted in the very same tick it was first
+        // marked crashed, before the UI ever got to show it as a problem.
+        //
+        // Here the session goes quiet at t0, another `claude` process stays alive the
+        // whole time (claudeProcessCount: 1) so only the long-stale path can catch it,
+        // and by the time longStaleAfter elapses, way more than ttl (600s) has already
+        // passed since lastActivity — exactly the scenario that used to vanish silently.
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        let crashTime = t0.addingTimeInterval(4 * 60 * 60) // longStaleAfter default
+        store.reconcile(claudeProcessCount: 1, now: crashTime)
+        store.expireFinished(now: crashTime)
+        XCTAssertEqual(store.ordered.count, 1, "should still be visible right after crashing")
+        XCTAssertEqual(store.ordered[0].status, .crashed)
+        XCTAssertEqual(store.aggregate, .problem)
+    }
+
+    func testLongStaleCrashedSessionExpiresTtlAfterItCrashedNotAfterLastActivity() {
+        // Mirror of the above: the crashed session must eventually go away, but the
+        // clock for that should start at finishedAt (when reconcile marked it crashed),
+        // not at lastActivity (which by then is old news).
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        let crashTime = t0.addingTimeInterval(4 * 60 * 60)
+        store.reconcile(claudeProcessCount: 1, now: crashTime)
+        // Just under ttl since it crashed: still present, even though it's been quiet
+        // (by lastActivity) for far longer than ttl.
+        store.expireFinished(now: crashTime.addingTimeInterval(599))
+        XCTAssertEqual(store.ordered.count, 1, "not yet expired — under 600s since it crashed")
+        // Just over ttl since it crashed: now it goes.
+        store.expireFinished(now: crashTime.addingTimeInterval(601))
+        XCTAssertTrue(store.ordered.isEmpty, "expired — over 600s since it crashed")
+    }
+
+    func testFastPathCrashedSessionSurvivesSameTickExpireFinishedThenExpiresOnSchedule() {
+        // Pins the pre-existing fast path (no claude processes, staleAfter=120 < ttl=600)
+        // stays correct under the fix: a session should still be visible as crashed for
+        // the full ttl window after crashing, not just for a few seconds.
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        let crashTime = t0.addingTimeInterval(120) // staleAfter default, no processes
+        store.reconcile(claudeProcessCount: 0, now: crashTime)
+        store.expireFinished(now: crashTime)
+        XCTAssertEqual(store.ordered.count, 1, "crashed session must survive the same tick")
+        XCTAssertEqual(store.ordered[0].status, .crashed)
+
+        // Still present partway through the ttl window measured from when it crashed.
+        store.expireFinished(now: crashTime.addingTimeInterval(300))
+        XCTAssertEqual(store.ordered.count, 1)
+
+        // Gone once ttl has elapsed since it crashed.
+        store.expireFinished(now: crashTime.addingTimeInterval(601))
+        XCTAssertTrue(store.ordered.isEmpty)
+    }
+
+    func testDoneSessionExpiryIsMeasuredFromWhenItFinished() {
+        // A session that goes quiet for a long while (heartbeats keep lastActivity
+        // moving, or it simply sat there before Stop arrived) and only then finishes
+        // must still get the full ttl window from the Stop, not have its clock
+        // back-dated to some earlier lastActivity.
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        let activity = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
+                                          description: "работает",
+                                          timestamp: t0.addingTimeInterval(3 * 60 * 60))
+        store.apply(activity: activity)
+        let doneTime = t0.addingTimeInterval(3 * 60 * 60 + 10)
+        store.apply(hook: hook("Stop"), now: doneTime)
+        XCTAssertEqual(store.ordered[0].status, .done)
+
+        // 599s after it finished (not from lastActivity, which is 10s earlier): still there.
+        store.expireFinished(now: doneTime.addingTimeInterval(599))
+        XCTAssertEqual(store.ordered.count, 1)
+
+        // 601s after it finished: expired.
+        store.expireFinished(now: doneTime.addingTimeInterval(601))
+        XCTAssertTrue(store.ordered.isEmpty)
+    }
 }
