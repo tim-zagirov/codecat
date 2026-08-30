@@ -92,8 +92,7 @@ final class SpriteSheetStore {
         // `.build/arm64-apple-macosx/debug/CodeCat_CodeCatApp.bundle/Skins/...`.
         guard let resourceURL = Bundle.module.resourceURL else { return nil }
         let url = resourceURL.appendingPathComponent("Skins").appendingPathComponent(key)
-        guard FileManager.default.fileExists(atPath: url.path),
-              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         sheets[key] = image
         return image
@@ -142,9 +141,10 @@ final class SpriteSheetStore {
             }
         }
         guard maxX >= minX, maxY >= minY else { return nil }
-        // `CGContext` draws bottom-up while `cropping(to:)` addresses the image
-        // top-down, so the vertical span is flipped back here.
-        return CGRect(x: CGFloat(minX), y: CGFloat(height - 1 - maxY),
+        // A `CGBitmapContext`'s buffer is stored top-down — the same addressing
+        // `cropping(to:)` uses — so the scan's row indices are already in the
+        // right space and need no conversion.
+        return CGRect(x: CGFloat(minX), y: CGFloat(minY),
                       width: CGFloat(maxX - minX + 1), height: CGFloat(maxY - minY + 1))
     }
 }
