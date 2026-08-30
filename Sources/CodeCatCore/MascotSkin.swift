@@ -35,7 +35,10 @@ public struct SpriteAnimation: Equatable, Sendable {
 /// rest are shown out of courtesy.
 public enum SkinLicense: Equatable, Sendable {
     case cc0
-    case ccBy4(attributionTo: String)
+    /// The credited name lives in `MascotSkin.author`, which is what the UI
+    /// actually shows and what the tests actually guard — this case carries no
+    /// payload of its own to avoid a second, unread copy of that name.
+    case ccBy4
     /// Elthen publishes no formal licence — the terms are the author's own words.
     case authorTerms(summary: String)
     /// The hand-drawn cat: ours, no third-party terms involved.
