@@ -6,7 +6,10 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "CodeCatCore"),
-        .executableTarget(name: "CodeCatApp", dependencies: ["CodeCatCore"]),
+        .executableTarget(
+            name: "CodeCatApp",
+            dependencies: ["CodeCatCore"],
+            resources: [.copy("Skins")]),
         .executableTarget(name: "codecat-hook", dependencies: ["CodeCatCore"]),
         .testTarget(name: "CodeCatCoreTests", dependencies: ["CodeCatCore"]),
     ]
