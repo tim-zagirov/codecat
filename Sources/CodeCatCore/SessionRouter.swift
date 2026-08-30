@@ -9,6 +9,18 @@ public enum JumpRoute: Equatable, Sendable {
     /// picking a window would be guesswork (see the design spec).
     case application(pid: pid_t, bundlePath: String)
     case unavailable(reason: UnavailableReason)
+
+    /// The bundle this route was computed for, or nil when there is nothing to jump
+    /// to. The executor must re-check it before activating: a pid outlives the
+    /// process that owned it, and macOS recycles pids, so `NSRunningApplication(
+    /// processIdentifier:)` can resolve to an entirely unrelated program.
+    public var bundlePath: String? {
+        switch self {
+        case .terminalTab(_, let bundlePath, _, _): return bundlePath
+        case .application(_, let bundlePath): return bundlePath
+        case .unavailable: return nil
+        }
+    }
 }
 
 public enum UnavailableReason: Equatable, Sendable {
@@ -59,9 +71,12 @@ public enum JumpOutcome: Equatable, Sendable {
     case switchedToTab
     case switchedToApplication
     /// The user declined the one-time automation permission for the terminal.
-    case automationDenied
-    /// The tab is gone — it was closed since the session started.
-    case tabNotFound
+    /// `fellBack` records whether the executor's fallback — bringing the terminal
+    /// app forward — actually worked, so the message never claims a switch that did
+    /// not happen.
+    case automationDenied(fellBack: Bool)
+    /// The tab is gone — it was closed since the session started. `fellBack` as above.
+    case tabNotFound(fellBack: Bool)
     case hostGone
     case failed(String)
 }
@@ -86,18 +101,55 @@ public enum JumpMessages {
         switch outcome {
         case .switchedToTab, .switchedToApplication:
             return nil
-        case .automationDenied:
+        case .automationDenied(let fellBack):
+            let permission = "Чтобы попадать сразу во вкладку терминала, нужно разрешение на автоматизацию — его можно выдать в Системных настройках, «Конфиденциальность и безопасность» → «Автоматизация»."
             return ("Нет разрешения на автоматизацию",
-                    "Чтобы попадать сразу во вкладку терминала, нужно разрешение на автоматизацию — его можно выдать в Системных настройках, «Конфиденциальность и безопасность» → «Автоматизация». Пока вывел приложение вперёд.")
-        case .tabNotFound:
+                    fellBack
+                        ? permission + " Пока вывел приложение вперёд."
+                        : permission + " Вывести приложение вперёд тоже не удалось — переключитесь на него сами.")
+        case .tabNotFound(let fellBack):
             return ("Вкладку найти не удалось",
-                    "Похоже, вкладку с этой сессией уже закрыли. Вывел приложение вперёд.")
+                    fellBack
+                        ? "Похоже, вкладку с этой сессией уже закрыли. Вывел приложение вперёд."
+                        : "Похоже, вкладку с этой сессией уже закрыли. Вывести приложение вперёд не удалось — переключитесь на него сами.")
         case .hostGone:
             return ("Сессия закрыта",
                     "Приложение, в котором работала эта сессия, больше не запущено.")
         case .failed(let detail):
             return ("Не удалось перейти к сессии", "Ошибка: \(detail)")
         }
+    }
+
+    // MARK: - Details carried inside `.failed`
+    //
+    // Every user-facing string lives here, including the ones the app layer's
+    // executor produces, so the "no silent refusals" test can see all of them.
+
+    /// The app exists but macOS refused to bring it forward.
+    public static let activationRefusedDetail = "не удалось вывести приложение вперёд"
+
+    /// The tab-selection script could not even be compiled.
+    public static let scriptBuildFailedDetail = "не удалось собрать AppleScript"
+
+    /// The terminal never answered the Apple event within the executor's timeout.
+    public static let terminalTimedOutDetail = "терминал не ответил"
+
+    /// A previous tab-selection script is still stuck, so this jump could not even be
+    /// attempted. Says whether the app was brought forward instead, so the message
+    /// never claims a switch that did not happen.
+    public static func terminalStillBusyDetail(fellBack: Bool) -> String {
+        let head = "Предыдущий переход в терминал ещё не завершился."
+        return fellBack
+            ? head + " Вывел приложение вперёд."
+            : head + " Вывести приложение вперёд тоже не удалось — переключитесь на него сами."
+    }
+
+    /// The script ran but returned something neither marker matches.
+    public static let unexpectedTerminalReplyDetail = "неожиданный ответ терминала"
+
+    /// An AppleScript error that is none of the classified ones.
+    public static func appleScriptFailureDetail(_ message: String) -> String {
+        "AppleScript: \(message)"
     }
 
     /// The small caption under a row that cannot be clicked.

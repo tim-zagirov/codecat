@@ -29,7 +29,10 @@ public enum HookPayload {
         if let pid = fields.hostPID { object["host_pid"] = Int(pid) }
         if let path = fields.hostBundlePath { object["host_bundle_path"] = path }
         if let id = fields.hostBundleID { object["host_bundle_id"] = id }
-        if let tty = fields.tty { object["tty"] = tty }
+        // Namespaced like the other three: an un-namespaced `tty` would clobber any
+        // field Claude Code ships under that name, and a non-string value left in
+        // place would fail `HookEvent` decoding — losing *every* event, not just this one.
+        if let tty = fields.tty { object["host_tty"] = tty }
 
         guard let encoded = try? JSONSerialization.data(withJSONObject: object) else { return data }
         return encoded

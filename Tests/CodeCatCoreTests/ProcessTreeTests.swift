@@ -101,6 +101,49 @@ final class ProcessTreeTests: XCTestCase {
         XCTAssertNil(ProcessTree.host(startingAt: 2, provider: tree, maxDepth: 5))
     }
 
+    // MARK: - Never attributing a session to CodeCat itself
+
+    /// The installed hook is `/Applications/CodeCat.app/Contents/MacOS/codecat-hook`,
+    /// so its own executable resolves to a bundle. Under tmux/screen/ssh with a
+    /// natively installed `claude` there is no `.app` above it, and without an
+    /// exclusion the session would be recorded as living in CodeCat itself, pointing
+    /// at a pid that exits microseconds later.
+    func testTheExcludedBundleIsNeverChosenAsTheHost() {
+        let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
+            node(800, 700, "/Applications/CodeCat.app/Contents/MacOS/codecat-hook"),
+            node(700, 600, "/opt/homebrew/bin/claude", tty: "/dev/ttys001"),
+            node(600, 500, "/opt/homebrew/bin/tmux", tty: "/dev/ttys001"),
+            node(500, 1, "/bin/zsh"),
+            node(1, 0, "/sbin/launchd"),
+        ]))
+        XCTAssertNil(ProcessTree.host(startingAt: 800, provider: tree,
+                                      excludingBundlePath: "/Applications/CodeCat.app"))
+    }
+
+    /// The exclusion must not shadow a real host that happens to sit above the hook.
+    func testExcludingCodeCatStillFindsARealHostAboveIt() {
+        let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
+            node(800, 700, "/Applications/CodeCat.app/Contents/MacOS/codecat-hook"),
+            node(700, 600, "/opt/homebrew/bin/claude", tty: "/dev/ttys001"),
+            node(600, 500, "/bin/zsh", tty: "/dev/ttys001"),
+            node(500, 1, "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"),
+            node(1, 0, "/sbin/launchd"),
+        ]))
+        XCTAssertEqual(ProcessTree.host(startingAt: 800, provider: tree,
+                                        excludingBundlePath: "/Applications/CodeCat.app"),
+                       HostApplication(pid: 500, bundlePath: "/System/Applications/Utilities/Terminal.app"))
+    }
+
+    /// No exclusion given (the default) keeps the previous behaviour.
+    func testNoExclusionKeepsEveryBundleCandidate() {
+        let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
+            node(800, 1, "/Applications/CodeCat.app/Contents/MacOS/codecat-hook"),
+            node(1, 0, "/sbin/launchd"),
+        ]))
+        XCTAssertEqual(ProcessTree.host(startingAt: 800, provider: tree),
+                       HostApplication(pid: 800, bundlePath: "/Applications/CodeCat.app"))
+    }
+
     // MARK: - TTY
 
     func testTtyIsTakenFromTheStartingProcess() {

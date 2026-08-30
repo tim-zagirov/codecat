@@ -396,11 +396,18 @@ final class AppState: ObservableObject {
     /// Only ever called from a jump-failure path — never on a successful jump,
     /// which stays silent and must not steal focus back from the app the user was
     /// just sent to.
+    /// Activation alone is not enough to guarantee that: `NSApp.activate()` and the
+    /// executor's activation of the target app are both asynchronous *requests* to
+    /// the window server, issued in that order, and either can be declined or land
+    /// second. So the alert's own window is raised explicitly as well — that part
+    /// depends on no ordering and cannot be refused.
     private func presentJumpAlert(_ message: (title: String, body: String)) {
         NSApp.activate()
         let alert = NSAlert()
         alert.messageText = message.title
         alert.informativeText = message.body
+        alert.window.level = .modalPanel
+        alert.window.orderFrontRegardless()
         alert.runModal()
     }
 }
