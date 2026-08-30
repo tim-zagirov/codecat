@@ -307,3 +307,82 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(store.ordered.isEmpty)
     }
 }
+
+extension SessionStoreTests {
+
+    private func routedEvent(_ name: String, id: String = "s1") -> HookEvent {
+        HookEvent(hookEventName: name, sessionId: id, cwd: "/tmp/project", message: nil,
+                  hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                  hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001")
+    }
+
+    func testHookEventDecodesTheRouteFields() throws {
+        let json = #"""
+        {"hook_event_name":"SessionStart","session_id":"abc","cwd":"/tmp/p",
+         "host_pid":4242,"host_bundle_path":"/Applications/Claude.app",
+         "host_bundle_id":"com.anthropic.claudefordesktop","tty":"/dev/ttys001"}
+        """#.data(using: .utf8)!
+        let event = try JSONDecoder().decode(HookEvent.self, from: json)
+        XCTAssertEqual(event.hostPID, 4242)
+        XCTAssertEqual(event.hostBundlePath, "/Applications/Claude.app")
+        XCTAssertEqual(event.hostBundleID, "com.anthropic.claudefordesktop")
+        XCTAssertEqual(event.tty, "/dev/ttys001")
+    }
+
+    /// Events from an older hook binary have none of the new fields; decoding must
+    /// still succeed rather than dropping the event.
+    func testHookEventDecodesWithoutTheRouteFields() throws {
+        let json = #"{"hook_event_name":"Stop","session_id":"abc","cwd":"/tmp/p"}"#.data(using: .utf8)!
+        let event = try JSONDecoder().decode(HookEvent.self, from: json)
+        XCTAssertNil(event.hostPID)
+        XCTAssertNil(event.hostBundlePath)
+        XCTAssertNil(event.hostBundleID)
+        XCTAssertNil(event.tty)
+    }
+
+    func testStoreCarriesTheRouteFromTheEventToTheSession() {
+        let store = SessionStore()
+        store.apply(hook: routedEvent("SessionStart"), now: Date())
+        let session = store.sessions["s1"]
+        XCTAssertEqual(session?.hostPID, 4242)
+        XCTAssertEqual(session?.hostBundlePath, "/Applications/Claude.app")
+        XCTAssertEqual(session?.hostBundleID, "com.anthropic.claudefordesktop")
+        XCTAssertEqual(session?.tty, "/dev/ttys001")
+    }
+
+    /// A transcript update must not wipe the route: the watcher knows nothing about
+    /// the host, and losing the route would silently disable the jump mid-session.
+    func testTranscriptActivityKeepsAnAlreadyKnownRoute() {
+        let store = SessionStore()
+        let start = Date()
+        store.apply(hook: routedEvent("SessionStart"), now: start)
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/tmp/project",
+            description: "правит файл", timestamp: start.addingTimeInterval(5)))
+        XCTAssertEqual(store.sessions["s1"]?.hostPID, 4242)
+        XCTAssertEqual(store.sessions["s1"]?.tty, "/dev/ttys001")
+    }
+
+    /// An event that carries no route (older hook) must not erase a route already
+    /// recorded for that session.
+    func testEventWithoutRouteDoesNotEraseAKnownRoute() {
+        let store = SessionStore()
+        let start = Date()
+        store.apply(hook: routedEvent("SessionStart"), now: start)
+        store.apply(hook: HookEvent(hookEventName: "Notification", sessionId: "s1",
+                                    cwd: "/tmp/project", message: "permission"),
+                    now: start.addingTimeInterval(1))
+        XCTAssertEqual(store.sessions["s1"]?.hostPID, 4242)
+        XCTAssertEqual(store.sessions["s1"]?.hostBundlePath, "/Applications/Claude.app")
+    }
+
+    /// A session that only ever appeared through the transcript watcher has no route.
+    func testTranscriptOnlySessionHasNoRoute() {
+        let store = SessionStore()
+        store.apply(activity: TranscriptActivity(
+            sessionId: "only-transcript", projectPath: "/tmp/p",
+            description: "работает", timestamp: Date()))
+        XCTAssertNil(store.sessions["only-transcript"]?.hostPID)
+        XCTAssertNil(store.sessions["only-transcript"]?.tty)
+    }
+}
