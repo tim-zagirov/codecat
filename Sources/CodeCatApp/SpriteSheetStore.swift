@@ -31,8 +31,7 @@ struct LoadedSkin {
 /// bodies, and the `.task` in `MascotView`, which runs on a `@MainActor` view), so
 /// there is no live data race. The annotation documents that invariant rather than
 /// changing behaviour — without it, `swift build -Xswiftc -strict-concurrency=complete`
-/// flags `shared` as a non-concurrency-safe static property, the one warning in the
-/// whole package.
+/// flags `shared` as a non-concurrency-safe static property.
 @MainActor
 final class SpriteSheetStore {
 
