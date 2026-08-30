@@ -86,4 +86,25 @@ final class JumpExecutionPolicyTests: XCTestCase {
         XCTAssertTrue(consent.localizedCaseInsensitiveContains("разрешени"))
         XCTAssertFalse(consent.localizedCaseInsensitiveContains("терминал не ответил"))
     }
+
+    /// The string the user actually reads on a consent-path timeout is a composition of
+    /// two pieces, and the composition is where a lie can hide: the timeout may have
+    /// expired with the panel still up (the terminal was never asked) or long after the
+    /// user answered it (the terminal wedged). Neither half may assert which happened.
+    func testTheComposedConsentTimeoutMessageAssertsNothingItCannotKnow() {
+        for fellBack in [true, false] {
+            let body = JumpMessages.alert(for: .failed(JumpMessages.failureDetail(
+                JumpMessages.timedOutDetail(awaitingConsent: true), fellBack: fellBack)))!.body
+            // Hedged about the dialog, never stated as fact.
+            XCTAssertTrue(body.localizedCaseInsensitiveContains("возможно"))
+            XCTAssertFalse(body.localizedCaseInsensitiveContains("всё ещё ждёт"))
+            // And still says what to do next.
+            XCTAssertTrue(body.localizedCaseInsensitiveContains("ответьте"))
+        }
+        let fellBack = JumpMessages.alert(for: .failed(JumpMessages.failureDetail(
+            JumpMessages.timedOutDetail(awaitingConsent: true), fellBack: true)))!.body
+        let refused = JumpMessages.alert(for: .failed(JumpMessages.failureDetail(
+            JumpMessages.timedOutDetail(awaitingConsent: true), fellBack: false)))!.body
+        XCTAssertNotEqual(fellBack, refused)
+    }
 }

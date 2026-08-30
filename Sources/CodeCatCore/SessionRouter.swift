@@ -131,14 +131,15 @@ public enum JumpMessages {
     /// The tab-selection script could not even be compiled.
     public static let scriptBuildFailedDetail = "не удалось собрать AppleScript"
 
-    /// A deadline expired. Which deadline matters: one that runs out while the
-    /// system consent panel is still up must not claim the terminal failed to
-    /// answer, because the terminal was never asked — the send was waiting on a
-    /// human. Saying so is the difference between a false alarm on the feature's
-    /// first use and telling the user exactly what to do next.
+    /// A deadline expired. Which deadline matters: one set because the automation
+    /// permission had not been decided yet may have run out with the consent panel
+    /// still on screen — in which case the terminal was never asked at all. But it
+    /// may equally have run out after the user answered the panel and the terminal
+    /// itself wedged. Neither wording may assert which happened: the hedge is what
+    /// makes both true, and it still tells the user the one thing worth trying.
     public static func timedOutDetail(awaitingConsent: Bool) -> String {
         awaitingConsent
-            ? "macOS всё ещё ждёт вашего ответа в диалоге разрешения на автоматизацию — ответьте на него и нажмите строку сессии снова"
+            ? "терминал пока не ответил — возможно, ещё открыт диалог разрешения на автоматизацию: ответьте на него и нажмите строку сессии снова"
             : "терминал не ответил"
     }
 
