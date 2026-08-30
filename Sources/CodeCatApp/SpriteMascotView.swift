@@ -20,7 +20,9 @@ struct SpriteMascotView: View {
     var body: some View {
         ZStack {
             if let animation, !animation.frames.isEmpty {
-                let fps = min(max(animation.framesPerSecond, 0.1), maxFPS)
+                // Clamp floor matches the documented invariant (0.6-8 fps) that the
+                // registry tests enforce on every shipped animation.
+                let fps = min(max(animation.framesPerSecond, 0.6), maxFPS)
                 TimelineView(.periodic(from: .now, by: 1 / fps)) { context in
                     frameImage(at: frameIndex(for: context.date, fps: fps, count: animation.frames.count),
                                in: animation)
