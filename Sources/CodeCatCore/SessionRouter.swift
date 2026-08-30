@@ -152,6 +152,16 @@ public enum JumpMessages {
         "AppleScript: \(message)"
     }
 
+    /// Appends what the fallback actually did to a `.failed` detail. `.failed` owes
+    /// the user a destination just as much as the two recoverable outcomes do, and
+    /// a detail like "терминал не ответил" on its own leaves a user whose fallback
+    /// was refused with nothing to do next.
+    public static func failureDetail(_ detail: String, fellBack: Bool) -> String {
+        fellBack
+            ? detail + ". Вывел приложение вперёд."
+            : detail + ". Вывести приложение вперёд тоже не удалось — переключитесь на него сами."
+    }
+
     /// The small caption under a row that cannot be clicked.
     public static func rowHint(for reason: UnavailableReason) -> String {
         switch reason {

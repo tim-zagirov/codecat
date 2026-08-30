@@ -385,9 +385,10 @@ final class AppState: ObservableObject {
     /// Brings CodeCat to the front immediately before presenting a jump-failure
     /// alert, then shows it. Required because CodeCat runs as an accessory app
     /// (`.accessory` activation policy, set in `AppDelegate`) and is never the
-    /// active application when a jump fires — and on every path that reaches this
-    /// method, `SystemJumpExecutor` has just activated the *target* app (recoverable
-    /// failures fall back to bringing that app forward before reporting). Without
+    /// active application when a jump fires — and on most paths that reach this
+    /// method, `SystemJumpExecutor` has just tried to activate the *target* app
+    /// (recoverable failures fall back to bringing it forward before reporting;
+    /// `.hostGone` does not, and a refused activation tried and failed). Without
     /// activating CodeCat first, `NSAlert.runModal()` would present a window that
     /// never comes to the front: the user sees the target app appear and nothing
     /// else, i.e. a silent failure. `automationDenied` is the very first terminal

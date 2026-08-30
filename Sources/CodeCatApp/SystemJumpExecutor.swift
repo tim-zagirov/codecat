@@ -21,9 +21,23 @@ final class SystemJumpExecutor: JumpExecuting {
     /// outcome the design spec forbids outright.
     private static let scriptTimeout: DispatchTimeInterval = .seconds(8)
 
+    /// The deadline used when the automation permission has not been decided yet, so
+    /// sending the event puts up the system's consent panel and blocks until the user
+    /// answers it. The eight-second clock must not run against a human reading a
+    /// dialog: it would fire while the panel is still up and report that the terminal
+    /// never answered, moments before the jump actually succeeds — a false alert on
+    /// the feature's very first use. This deadline exists only so a genuinely wedged
+    /// terminal still cannot hang the queue forever.
+    private static let consentTimeout: DispatchTimeInterval = .seconds(120)
+
     /// True from the moment a script is dispatched until it actually returns, which
-    /// may be long after its timeout fired. Main queue only.
+    /// may be long after its deadline fired. Main queue only.
     private var scriptInFlight = false
+
+    /// When the in-flight script's deadline passes. A jump arriving while a healthy
+    /// script is still running is simply queued behind it; only one that arrives
+    /// after the deadline has passed is reported as blocked. Main queue only.
+    private var scriptDeadline: Date?
 
     // MARK: - JumpExecuting
 
@@ -54,16 +68,37 @@ final class SystemJumpExecutor: JumpExecuting {
                 complete(activationOutcome(pid: pid, bundlePath: bundlePath), completion)
                 return
             }
-            guard !scriptInFlight else {
-                // An earlier script has passed its timeout and still has not returned,
+            if scriptInFlight, let deadline = scriptDeadline, Date() >= deadline {
+                // An earlier script has passed its deadline and still has not returned,
                 // so the serial queue is blocked. Queuing this jump behind it would be
                 // a silent refusal — the user would click and never hear anything.
-                // Say so, and still give them a destination.
+                // Say so, and still give them a destination. (A script that is merely
+                // still running, well inside its deadline, is not blocked: this jump
+                // queues behind it and runs in a moment.)
                 let fellBack = activate(pid: pid, bundlePath: bundlePath) == .success
                 complete(.failed(JumpMessages.terminalStillBusyDetail(fellBack: fellBack)), completion)
                 return
             }
-            runScript(source, pid: pid, bundlePath: bundlePath, completion: completion)
+
+            // Ask TCC what it will do *before* sending anything: an outright refusal is
+            // reported immediately instead of after a round trip, and — the reason this
+            // matters most — a not-yet-decided permission tells us the send will block
+            // on the consent panel, so it gets the long deadline rather than the short
+            // one meant for a wedged terminal.
+            let permission = automationPermission(forBundleID: bundleID)
+            switch permission {
+            case OSStatus(errAEEventNotPermitted):
+                let fellBack = activate(pid: pid, bundlePath: bundlePath) == .success
+                complete(.automationDenied(fellBack: fellBack), completion)
+            case OSStatus(procNotFound):
+                complete(.hostGone, completion)
+            default:
+                let timeout = permission == OSStatus(errAEEventWouldRequireUserConsent)
+                    ? Self.consentTimeout
+                    : Self.scriptTimeout
+                runScript(source, pid: pid, bundlePath: bundlePath,
+                          timeout: timeout, completion: completion)
+            }
         }
     }
 
@@ -78,8 +113,10 @@ final class SystemJumpExecutor: JumpExecuting {
     /// retain is temporary rather than a cycle, and a weak capture would let the
     /// completion be dropped entirely if the executor deallocated mid-flight.
     private func runScript(_ source: String, pid: pid_t, bundlePath: String,
+                           timeout: DispatchTimeInterval,
                            completion: @escaping (JumpOutcome) -> Void) {
         scriptInFlight = true
+        scriptDeadline = Date() + Self.seconds(timeout)
         var settled = false
 
         let settle: (ScriptResult) -> Void = { result in
@@ -103,11 +140,23 @@ final class SystemJumpExecutor: JumpExecuting {
             let result = self.runTabScript(source)
             DispatchQueue.main.async {
                 self.scriptInFlight = false
+                self.scriptDeadline = nil
                 settle(result)
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.scriptTimeout) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             settle(.timedOut)
+        }
+    }
+
+    private static func seconds(_ interval: DispatchTimeInterval) -> TimeInterval {
+        switch interval {
+        case .seconds(let s): return TimeInterval(s)
+        case .milliseconds(let ms): return TimeInterval(ms) / 1_000
+        case .microseconds(let us): return TimeInterval(us) / 1_000_000
+        case .nanoseconds(let ns): return TimeInterval(ns) / 1_000_000_000
+        case .never: return .greatestFiniteMagnitude
+        @unknown default: return .greatestFiniteMagnitude
         }
     }
 
@@ -128,8 +177,11 @@ final class SystemJumpExecutor: JumpExecuting {
             case .tabNotFound: return .tabNotFound(fellBack: fellBack)
             case .automationDenied: return .automationDenied(fellBack: fellBack)
             case .hostGone: return .hostGone
-            case .timedOut: return .failed(JumpMessages.terminalTimedOutDetail)
-            case .failed(let detail): return .failed(detail)
+            case .timedOut:
+                return .failed(JumpMessages.failureDetail(JumpMessages.terminalTimedOutDetail,
+                                                          fellBack: fellBack))
+            case .failed(let detail):
+                return .failed(JumpMessages.failureDetail(detail, fellBack: fellBack))
             }
         }
     }
@@ -197,10 +249,31 @@ final class SystemJumpExecutor: JumpExecuting {
     private func activate(pid: pid_t, bundlePath: String) -> ActivationResult {
         guard let app = NSRunningApplication(processIdentifier: pid),
               app.activationPolicy != .prohibited,
-              let running = app.bundleURL?.resolvingSymlinksInPath().standardized,
-              running == URL(fileURLWithPath: bundlePath).resolvingSymlinksInPath().standardized
+              let running = app.bundleURL
+        else { return .noSuchApp }
+        // Compare paths, not URLs: `URL` equality includes the trailing directory
+        // slash, which `bundleURL` carries and `resolvingSymlinksInPath()` drops
+        // whenever it actually rewrites the path — so two spellings of the same
+        // bundle would compare unequal and tell the user a live session is closed.
+        guard Self.canonicalPath(running) == Self.canonicalPath(URL(fileURLWithPath: bundlePath))
         else { return .noSuchApp }
         return app.activate(options: [.activateAllWindows]) ? .success : .refused
+    }
+
+    private static func canonicalPath(_ url: URL) -> String {
+        url.resolvingSymlinksInPath().standardizedFileURL.path
+    }
+
+    /// What TCC would do with an Apple event to this bundle, asked without sending
+    /// one and without prompting: `noErr` when already allowed,
+    /// `errAEEventNotPermitted` when refused, `errAEEventWouldRequireUserConsent`
+    /// when the user has not been asked yet, `procNotFound` when nothing is running
+    /// under that identifier.
+    private func automationPermission(forBundleID bundleID: String) -> OSStatus {
+        guard let descriptor = NSAppleEventDescriptor(bundleIdentifier: bundleID).aeDesc?.pointee
+        else { return noErr }
+        var target = descriptor
+        return AEDeterminePermissionToAutomateTarget(&target, typeWildCard, typeWildCard, false)
     }
 
     /// Maps an activation attempt to the outcome reported to the user. A pid that no
