@@ -1,0 +1,110 @@
+import XCTest
+@testable import CodeCatCore
+
+final class SessionRouterTests: XCTestCase {
+
+    private func session(hostPID: pid_t? = 4242,
+                         bundlePath: String? = "/Applications/Claude.app",
+                         bundleID: String? = "com.anthropic.claudefordesktop",
+                         tty: String? = nil) -> Session {
+        var s = Session(id: "s1", projectPath: "/tmp/p", status: .working,
+                        activityDescription: "", startedAt: Date(), lastActivity: Date())
+        s.hostPID = hostPID
+        s.hostBundlePath = bundlePath
+        s.hostBundleID = bundleID
+        s.tty = tty
+        return s
+    }
+
+    private let running: (pid_t) -> Bool = { _ in true }
+    private let gone: (pid_t) -> Bool = { _ in false }
+
+    /// Most precise route: a recognised terminal plus a tty means the exact tab.
+    func testTerminalWithATtyRoutesToTheTab() {
+        let s = session(bundlePath: "/System/Applications/Utilities/Terminal.app",
+                        bundleID: "com.apple.Terminal", tty: "/dev/ttys001")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .terminalTab(bundleID: "com.apple.Terminal",
+                                    bundlePath: "/System/Applications/Utilities/Terminal.app",
+                                    pid: 4242, tty: "/dev/ttys001"))
+    }
+
+    func testITermIsRecognisedAsATerminal() {
+        let s = session(bundlePath: "/Applications/iTerm.app",
+                        bundleID: "com.googlecode.iterm2", tty: "/dev/ttys002")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .terminalTab(bundleID: "com.googlecode.iterm2",
+                                    bundlePath: "/Applications/iTerm.app",
+                                    pid: 4242, tty: "/dev/ttys002"))
+    }
+
+    /// A terminal without a tty cannot be aimed at a tab — bring the app forward.
+    func testTerminalWithoutATtyFallsBackToTheApplication() {
+        let s = session(bundlePath: "/System/Applications/Utilities/Terminal.app",
+                        bundleID: "com.apple.Terminal", tty: nil)
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .application(pid: 4242, bundlePath: "/System/Applications/Utilities/Terminal.app"))
+    }
+
+    /// A tty in an app that is not a supported terminal is not actionable: there is
+    /// no scripting interface to select a tab with.
+    func testTtyInAnUnsupportedHostFallsBackToTheApplication() {
+        let s = session(tty: "/dev/ttys001")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .application(pid: 4242, bundlePath: "/Applications/Claude.app"))
+    }
+
+    func testDesktopAppRoutesToTheApplication() {
+        XCTAssertEqual(SessionRouter.route(for: session(), isHostRunning: running),
+                       .application(pid: 4242, bundlePath: "/Applications/Claude.app"))
+    }
+
+    /// A session the transcript watcher found on its own carries no route at all.
+    func testSessionWithoutAHostIsUnavailable() {
+        let s = session(hostPID: nil, bundlePath: nil, bundleID: nil)
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .unavailable(reason: .noHostRecorded))
+    }
+
+    func testSessionWithABundleButNoPidIsUnavailable() {
+        let s = session(hostPID: nil)
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .unavailable(reason: .noHostRecorded))
+    }
+
+    func testSessionWithAPidButNoBundleIsUnavailable() {
+        let s = session(bundlePath: nil, bundleID: nil)
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .unavailable(reason: .noHostRecorded))
+    }
+
+    /// The owning app quit: the row must say so instead of offering a dead click.
+    func testHostThatIsNoLongerRunningIsUnavailable() {
+        XCTAssertEqual(SessionRouter.route(for: session(), isHostRunning: gone),
+                       .unavailable(reason: .hostGone))
+    }
+
+    func testTerminalHostThatIsGoneIsUnavailableRatherThanATab() {
+        let s = session(bundlePath: "/System/Applications/Utilities/Terminal.app",
+                        bundleID: "com.apple.Terminal", tty: "/dev/ttys001")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: gone),
+                       .unavailable(reason: .hostGone))
+    }
+
+    func testAnEmptyTtyStringIsTreatedAsNoTty() {
+        let s = session(bundlePath: "/System/Applications/Utilities/Terminal.app",
+                        bundleID: "com.apple.Terminal", tty: "")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .application(pid: 4242, bundlePath: "/System/Applications/Utilities/Terminal.app"))
+    }
+
+    // MARK: - Liveness of a real process
+
+    func testThisProcessIsSeenAsRunning() {
+        XCTAssertTrue(SessionRouter.isProcessRunning(getpid()))
+    }
+
+    func testAnImpossiblePidIsNotSeenAsRunning() {
+        XCTAssertFalse(SessionRouter.isProcessRunning(-1))
+    }
+}
