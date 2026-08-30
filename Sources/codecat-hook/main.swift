@@ -23,7 +23,10 @@ if !input.isEmpty {
         // Чтение Info.plist бандла — одно обращение к маленькому файлу; опознание
         // терминала идёт по идентификатору, а не по имени файла бандла.
         hostBundleID: host.flatMap { Bundle(path: $0.bundlePath)?.bundleIdentifier },
-        tty: ProcessTree.tty(startingAt: parent, provider: tree))
+        // А вот tty ищем от себя: контролирующий терминал наследуется, у хука он
+        // тот же, что у родителя, и старт от getpid() переживает случай, когда хук
+        // осиротел (getppid() == 1) — иначе сессия молча потеряла бы вкладку.
+        tty: ProcessTree.tty(startingAt: getpid(), provider: tree))
     HookSocketClient.send(HookPayload.enriched(input, with: fields), to: CodeCatPaths.socketURL)
 }
 exit(0)
