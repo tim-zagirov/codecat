@@ -13,9 +13,32 @@ public enum HooksInstallerError: Error {
 /// Claude Code `settings.json` document. Operates entirely on `Data` in and `Data`
 /// out — it never touches the filesystem, so callers are free to unit test it
 /// without risking the user's real settings file.
+/// Result of trying to read `~/.claude/settings.json` off disk, distinguishing "no file
+/// yet" (safe to treat as an empty document) from "a file is there but couldn't be read"
+/// (never safe to treat as empty — see `HooksInstaller.readSettings`).
+public enum SettingsReadResult: Equatable {
+    case notFound
+    case data(Data)
+    case unreadable
+}
+
 public enum HooksInstaller {
     /// The hook events CodeCat subscribes to.
     public static let events = ["SessionStart", "Stop", "Notification", "SessionEnd"]
+
+    /// Reads the settings file at `url`, distinguishing "does not exist" from "exists but
+    /// could not be read". This distinction matters because `install(into:hookCommand:)`
+    /// treats `nil`/empty input as `{}` — correct for a first-time install, but
+    /// catastrophic if applied to a transient read failure on a file that actually holds
+    /// the user's real settings (permission allowlist, MCP config, model settings, other
+    /// hooks): the resulting write would silently replace all of it with a document
+    /// containing only CodeCat's own hooks. Callers must abort instead of installing when
+    /// this returns `.unreadable`.
+    public static func readSettings(at url: URL) -> SettingsReadResult {
+        guard FileManager.default.fileExists(atPath: url.path) else { return .notFound }
+        guard let data = try? Data(contentsOf: url) else { return .unreadable }
+        return .data(data)
+    }
 
     /// Returns a new settings document with a CodeCat hook entry (`hookCommand`)
     /// merged into every event in `events`, preserving all unrelated keys, events,
