@@ -38,9 +38,8 @@ final class SpriteScaleTests: XCTestCase {
     /// A wide, short sprite is capped by width, not by height — this is exactly the
     /// LuizMelo case, where the height rule alone would have asked for 135pt of width.
     func testWideSpriteIsCappedByWidth() {
-        // 27x14 at the height rule alone would be floor(64/14) = 4... and 27*5 = 135,
-        // so the width cap is what rejects 5.
-        XCTAssertEqual(64 / 14, 4)
+        // The height rule alone would give floor(64/8) = 8, but the width cap rejects it.
+        // The width rule gives 120/30 = 4, which wins.
         XCTAssertEqual(SpriteScale.factor(boundsWidth: 30, boundsHeight: 8), 4)  // 120/30 = 4 wins over 64/8 = 8
     }
 
