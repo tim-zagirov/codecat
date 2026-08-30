@@ -92,11 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleMascot() { appState.showMascot.toggle() }
 
     @objc private func toggleLidMode() {
-        if !appState.lidModeEnabled && !LidSleepController.isHelperInstalled {
-            installLidHelper()
-            guard LidSleepController.isHelperInstalled else { return }
-        }
-        appState.lidModeEnabled.toggle()
+        appState.requestLidModeChange(to: !appState.lidModeEnabled)
     }
 
     @objc private func installHooks() { appState.installHooksIfNeeded() }
@@ -112,32 +108,4 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
-
-    private func installLidHelper() {
-        guard let scriptURL = locateScript("install-lid-mode.sh") else {
-            let alert = NSAlert()
-            alert.messageText = "Скрипт установки не найден"
-            alert.informativeText = "Запусти вручную: sudo bash scripts/install-lid-mode.sh"
-            alert.runModal()
-            return
-        }
-        let osa = """
-        do shell script "bash \(scriptURL.path)" with administrator privileges
-        """
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        task.arguments = ["-e", osa]
-        try? task.run()
-        task.waitUntilExit()
-    }
-
-    private func locateScript(_ name: String) -> URL? {
-        let exeDir = URL(fileURLWithPath: CommandLine.arguments[0])
-            .resolvingSymlinksInPath().deletingLastPathComponent()
-        let candidates = [
-            exeDir.appendingPathComponent("../Resources/\(name)"),  // внутри .app
-            exeDir.appendingPathComponent("../../../scripts/\(name)"), // swift run из корня
-        ]
-        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
-    }
 }
