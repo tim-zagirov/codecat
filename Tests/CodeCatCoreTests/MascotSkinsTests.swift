@@ -18,7 +18,7 @@ final class MascotSkinsTests: XCTestCase {
     }
 
     func testOnlyCCBYRequiresAttribution() {
-        XCTAssertTrue(SkinLicense.ccBy4(attributionTo: "кто-то").requiresAttribution)
+        XCTAssertTrue(SkinLicense.ccBy4.requiresAttribution)
         XCTAssertFalse(SkinLicense.cc0.requiresAttribution)
         XCTAssertFalse(SkinLicense.authorTerms(summary: "условия автора").requiresAttribution)
         XCTAssertFalse(SkinLicense.builtIn.requiresAttribution)
@@ -97,15 +97,14 @@ extension MascotSkinsTests {
     }
 
     /// mxmaze ships under CC BY 4.0, where attribution is an obligation rather than
-    /// a courtesy — the credited name has to actually be there.
+    /// a courtesy — the credited name has to actually be there. `author` is what
+    /// the credits row in `SkinPickerView` actually prints, so that is what this
+    /// test guards, not an unread payload on the licence case.
     func testAttributionIsSpelledOutWhereTheLicenceDemandsIt() {
         let demanding = MascotSkins.all.filter { $0.license.requiresAttribution }
         XCTAssertEqual(demanding.map(\.id), ["mxmaze-kitty"])
         for skin in demanding {
-            guard case .ccBy4(let attribution) = skin.license else {
-                return XCTFail("\(skin.id): ожидалась лицензия CC BY 4.0")
-            }
-            XCTAssertFalse(attribution.isEmpty, skin.id)
+            XCTAssertFalse(skin.author.isEmpty, skin.id)
         }
     }
 

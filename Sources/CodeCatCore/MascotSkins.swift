@@ -118,7 +118,7 @@ public enum MascotSkins {
         id: "mxmaze-kitty",
         name: "Плюшевый",
         author: "Maze.Bit.Boutique (mxmaze)",
-        license: .ccBy4(attributionTo: "Maze.Bit.Boutique (mxmaze), CC BY 4.0"),
+        license: .ccBy4,
         sourceURL: "https://mxmaze.itch.io/16-bit-kitty-free",
         directory: "mxmaze",
         frameSize: 16,
