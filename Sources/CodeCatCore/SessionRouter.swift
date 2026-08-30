@@ -131,8 +131,16 @@ public enum JumpMessages {
     /// The tab-selection script could not even be compiled.
     public static let scriptBuildFailedDetail = "не удалось собрать AppleScript"
 
-    /// The terminal never answered the Apple event within the executor's timeout.
-    public static let terminalTimedOutDetail = "терминал не ответил"
+    /// A deadline expired. Which deadline matters: one that runs out while the
+    /// system consent panel is still up must not claim the terminal failed to
+    /// answer, because the terminal was never asked — the send was waiting on a
+    /// human. Saying so is the difference between a false alarm on the feature's
+    /// first use and telling the user exactly what to do next.
+    public static func timedOutDetail(awaitingConsent: Bool) -> String {
+        awaitingConsent
+            ? "macOS всё ещё ждёт вашего ответа в диалоге разрешения на автоматизацию — ответьте на него и нажмите строку сессии снова"
+            : "терминал не ответил"
+    }
 
     /// A previous tab-selection script is still stuck, so this jump could not even be
     /// attempted. Says whether the app was brought forward instead, so the message

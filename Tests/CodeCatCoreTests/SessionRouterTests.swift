@@ -204,11 +204,11 @@ extension SessionRouterTests {
     /// Finding 4: a terminal that never answers must still produce a message, and it
     /// has to be a Russian one describing what actually happened.
     func testTimedOutTerminalHasItsOwnRussianDetail() {
-        XCTAssertFalse(JumpMessages.terminalTimedOutDetail.isEmpty)
-        XCTAssertTrue(JumpMessages.terminalTimedOutDetail
+        XCTAssertFalse(JumpMessages.timedOutDetail(awaitingConsent: false).isEmpty)
+        XCTAssertTrue(JumpMessages.timedOutDetail(awaitingConsent: false)
             .range(of: "\\p{Cyrillic}", options: .regularExpression) != nil)
-        XCTAssertTrue(JumpMessages.alert(for: .failed(JumpMessages.terminalTimedOutDetail))!
-            .body.contains(JumpMessages.terminalTimedOutDetail))
+        XCTAssertTrue(JumpMessages.alert(for: .failed(JumpMessages.timedOutDetail(awaitingConsent: false)))!
+            .body.contains(JumpMessages.timedOutDetail(awaitingConsent: false)))
     }
 
     func testFailedCarriesTheUnderlyingDetail() {
@@ -236,11 +236,11 @@ extension SessionRouterTests {
     /// outcomes already carry. Without this, "терминал не ответил" leaves a user
     /// whose fallback was refused with nothing to do next.
     func testFailureDetailSaysWhetherTheAppCameForward() {
-        let fellBack = JumpMessages.failureDetail(JumpMessages.terminalTimedOutDetail, fellBack: true)
-        let didNot = JumpMessages.failureDetail(JumpMessages.terminalTimedOutDetail, fellBack: false)
+        let fellBack = JumpMessages.failureDetail(JumpMessages.timedOutDetail(awaitingConsent: false), fellBack: true)
+        let didNot = JumpMessages.failureDetail(JumpMessages.timedOutDetail(awaitingConsent: false), fellBack: false)
         XCTAssertNotEqual(fellBack, didNot)
         for detail in [fellBack, didNot] {
-            XCTAssertTrue(detail.hasPrefix(JumpMessages.terminalTimedOutDetail))
+            XCTAssertTrue(detail.hasPrefix(JumpMessages.timedOutDetail(awaitingConsent: false)))
         }
         XCTAssertTrue(fellBack.localizedCaseInsensitiveContains("вывел приложение вперёд"))
         XCTAssertTrue(didNot.localizedCaseInsensitiveContains("не удалось"))

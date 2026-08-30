@@ -13,31 +13,19 @@ final class SystemJumpExecutor: JumpExecuting {
     /// Serial on purpose: only one `NSAppleScript` runs at a time.
     private let queue = DispatchQueue(label: "com.codecat.jump")
 
-    /// How long a terminal gets to answer before the user is told that it did not.
-    /// Selecting a tab is a local Apple event that normally returns in milliseconds;
-    /// past a few seconds the terminal is wedged (a stuck ssh, a beachballing tab),
-    /// not slow. Eight seconds is long enough not to libel a loaded machine, short
-    /// enough that the user is not left staring at nothing — which is the one
-    /// outcome the design spec forbids outright.
-    private static let scriptTimeout: DispatchTimeInterval = .seconds(8)
+    /// Off-main queue for the permission query alone. Deliberately not `queue`: that
+    /// one can be owned by a wedged script, and the query must never wait behind it.
+    private let permissionQueue = DispatchQueue(label: "com.codecat.jump.permission")
 
-    /// The deadline used when the automation permission has not been decided yet, so
-    /// sending the event puts up the system's consent panel and blocks until the user
-    /// answers it. The eight-second clock must not run against a human reading a
-    /// dialog: it would fire while the panel is still up and report that the terminal
-    /// never answered, moments before the jump actually succeeds — a false alert on
-    /// the feature's very first use. This deadline exists only so a genuinely wedged
-    /// terminal still cannot hang the queue forever.
-    private static let consentTimeout: DispatchTimeInterval = .seconds(120)
+    /// How many dispatched scripts have not returned yet. Main queue only.
+    private var outstandingScripts = 0
 
-    /// True from the moment a script is dispatched until it actually returns, which
-    /// may be long after its deadline fired. Main queue only.
-    private var scriptInFlight = false
-
-    /// When the in-flight script's deadline passes. A jump arriving while a healthy
-    /// script is still running is simply queued behind it; only one that arrives
-    /// after the deadline has passed is reported as blocked. Main queue only.
-    private var scriptDeadline: Date?
+    /// The latest deadline among the outstanding scripts, on the monotonic clock —
+    /// not `Date`, which jumps forward across system sleep and would declare a
+    /// healthy script overdue after the lid was closed (this app's other feature
+    /// keeps the Mac awake with the lid shut, so that is not hypothetical).
+    /// Main queue only.
+    private var scriptDeadline: DispatchTime?
 
     // MARK: - JumpExecuting
 
@@ -68,7 +56,9 @@ final class SystemJumpExecutor: JumpExecuting {
                 complete(activationOutcome(pid: pid, bundlePath: bundlePath), completion)
                 return
             }
-            if scriptInFlight, let deadline = scriptDeadline, Date() >= deadline {
+            let deadlinePassed = scriptDeadline.map { DispatchTime.now() >= $0 } ?? false
+            if JumpExecutionPolicy.isBlocked(outstanding: outstandingScripts,
+                                             deadlinePassed: deadlinePassed) {
                 // An earlier script has passed its deadline and still has not returned,
                 // so the serial queue is blocked. Queuing this jump behind it would be
                 // a silent refusal — the user would click and never hear anything.
@@ -85,20 +75,37 @@ final class SystemJumpExecutor: JumpExecuting {
             // matters most — a not-yet-decided permission tells us the send will block
             // on the consent panel, so it gets the long deadline rather than the short
             // one meant for a wedged terminal.
-            let permission = automationPermission(forBundleID: bundleID)
-            switch permission {
-            case OSStatus(errAEEventNotPermitted):
-                let fellBack = activate(pid: pid, bundlePath: bundlePath) == .success
-                complete(.automationDenied(fellBack: fellBack), completion)
-            case OSStatus(procNotFound):
-                complete(.hostGone, completion)
-            default:
-                let timeout = permission == OSStatus(errAEEventWouldRequireUserConsent)
-                    ? Self.consentTimeout
-                    : Self.scriptTimeout
-                runScript(source, pid: pid, bundlePath: bundlePath,
-                          timeout: timeout, completion: completion)
+            //
+            // Off the main thread, as `AEDeterminePermissionToAutomateTarget`'s own
+            // documentation demands: it talks to `tccd` and "may take arbitrarily long
+            // to return". With a consent panel already up for this target it can stall
+            // outright, which on the main thread would freeze the whole UI.
+            permissionQueue.async {
+                let permission = JumpExecutionPolicy.permission(
+                    forStatus: Self.automationPermissionStatus(forBundleID: bundleID))
+                DispatchQueue.main.async {
+                    self.afterPermission(permission, source: source, pid: pid,
+                                         bundlePath: bundlePath, completion: completion)
+                }
             }
+        }
+    }
+
+    /// Acts on TCC's answer, back on the main queue.
+    private func afterPermission(_ permission: JumpExecutionPolicy.Permission,
+                                 source: String, pid: pid_t, bundlePath: String,
+                                 completion: @escaping (JumpOutcome) -> Void) {
+        switch permission {
+        case .denied:
+            let fellBack = activate(pid: pid, bundlePath: bundlePath) == .success
+            complete(.automationDenied(fellBack: fellBack), completion)
+        case .hostGone:
+            complete(.hostGone, completion)
+        case .granted, .awaitingConsent:
+            runScript(source, pid: pid, bundlePath: bundlePath,
+                      timeout: JumpExecutionPolicy.timeout(for: permission),
+                      awaitingConsent: permission == .awaitingConsent,
+                      completion: completion)
         }
     }
 
@@ -113,10 +120,13 @@ final class SystemJumpExecutor: JumpExecuting {
     /// retain is temporary rather than a cycle, and a weak capture would let the
     /// completion be dropped entirely if the executor deallocated mid-flight.
     private func runScript(_ source: String, pid: pid_t, bundlePath: String,
-                           timeout: DispatchTimeInterval,
+                           timeout: TimeInterval, awaitingConsent: Bool,
                            completion: @escaping (JumpOutcome) -> Void) {
-        scriptInFlight = true
-        scriptDeadline = Date() + Self.seconds(timeout)
+        outstandingScripts += 1
+        // Keep the furthest deadline: with more than one script outstanding, the queue
+        // is only genuinely wedged once the last of them is overdue.
+        let deadline = DispatchTime.now() + timeout
+        scriptDeadline = scriptDeadline.map { max($0, deadline) } ?? deadline
         var settled = false
 
         let settle: (ScriptResult) -> Void = { result in
@@ -130,6 +140,12 @@ final class SystemJumpExecutor: JumpExecuting {
             switch result {
             case .switchedToTab, .hostGone:
                 fellBack = false
+            case .timedOut(let awaitingConsent) where awaitingConsent:
+                // The consent panel is still up and the terminal was never asked.
+                // Dragging the terminal over that dialog would make it harder to
+                // answer — and answering it is the only thing that makes the feature
+                // work at all.
+                fellBack = false
             case .automationDenied, .tabNotFound, .failed, .timedOut:
                 fellBack = self.activate(pid: pid, bundlePath: bundlePath) == .success
             }
@@ -139,24 +155,13 @@ final class SystemJumpExecutor: JumpExecuting {
         queue.async {
             let result = self.runTabScript(source)
             DispatchQueue.main.async {
-                self.scriptInFlight = false
-                self.scriptDeadline = nil
+                self.outstandingScripts -= 1
+                if self.outstandingScripts == 0 { self.scriptDeadline = nil }
                 settle(result)
             }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-            settle(.timedOut)
-        }
-    }
-
-    private static func seconds(_ interval: DispatchTimeInterval) -> TimeInterval {
-        switch interval {
-        case .seconds(let s): return TimeInterval(s)
-        case .milliseconds(let ms): return TimeInterval(ms) / 1_000
-        case .microseconds(let us): return TimeInterval(us) / 1_000_000
-        case .nanoseconds(let ns): return TimeInterval(ns) / 1_000_000_000
-        case .never: return .greatestFiniteMagnitude
-        @unknown default: return .greatestFiniteMagnitude
+        DispatchQueue.main.asyncAfter(deadline: deadline) {
+            settle(.timedOut(awaitingConsent: awaitingConsent))
         }
     }
 
@@ -168,7 +173,7 @@ final class SystemJumpExecutor: JumpExecuting {
         case tabNotFound
         case automationDenied
         case hostGone
-        case timedOut
+        case timedOut(awaitingConsent: Bool)
         case failed(String)
 
         func outcome(fellBack: Bool) -> JumpOutcome {
@@ -177,9 +182,10 @@ final class SystemJumpExecutor: JumpExecuting {
             case .tabNotFound: return .tabNotFound(fellBack: fellBack)
             case .automationDenied: return .automationDenied(fellBack: fellBack)
             case .hostGone: return .hostGone
-            case .timedOut:
-                return .failed(JumpMessages.failureDetail(JumpMessages.terminalTimedOutDetail,
-                                                          fellBack: fellBack))
+            case .timedOut(let awaitingConsent):
+                return .failed(JumpMessages.failureDetail(
+                    JumpMessages.timedOutDetail(awaitingConsent: awaitingConsent),
+                    fellBack: fellBack))
             case .failed(let detail):
                 return .failed(JumpMessages.failureDetail(detail, fellBack: fellBack))
             }
@@ -189,9 +195,11 @@ final class SystemJumpExecutor: JumpExecuting {
     /// Runs the tab-selection script and classifies the result.
     ///
     /// A refused automation permission surfaces as AppleScript error -1743
-    /// (`errAEEventNotPermitted`) or -1744 (`errAEEventWouldRequireUserConsent`);
-    /// -600 (`procNotFound`) or -609 (`connectionInvalid`) means the target app went
-    /// away between routing and execution.
+    /// (`errAEEventNotPermitted`), -1742 (`errAETargetAddressNotPermitted`) or -1744
+    /// (`errAEEventWouldRequireUserConsent`) — all three need the actionable
+    /// permission message rather than a raw AppleScript error; -600 (`procNotFound`)
+    /// or -609 (`connectionInvalid`) means the target app went away between routing
+    /// and execution.
     private func runTabScript(_ source: String) -> ScriptResult {
         var error: NSDictionary?
         guard let script = NSAppleScript(source: source) else {
@@ -201,7 +209,7 @@ final class SystemJumpExecutor: JumpExecuting {
         if let error {
             let code = (error[NSAppleScript.errorNumber] as? Int) ?? 0
             switch code {
-            case -1743, -1744:
+            case -1743, -1744, -1742:
                 return .automationDenied
             case -600, -609:
                 return .hostGone
@@ -269,11 +277,19 @@ final class SystemJumpExecutor: JumpExecuting {
     /// `errAEEventNotPermitted` when refused, `errAEEventWouldRequireUserConsent`
     /// when the user has not been asked yet, `procNotFound` when nothing is running
     /// under that identifier.
-    private func automationPermission(forBundleID bundleID: String) -> OSStatus {
-        guard let descriptor = NSAppleEventDescriptor(bundleIdentifier: bundleID).aeDesc?.pointee
-        else { return noErr }
-        var target = descriptor
-        return AEDeterminePermissionToAutomateTarget(&target, typeWildCard, typeWildCard, false)
+    ///
+    /// A descriptor that cannot be built yields -1744 rather than `noErr`: claiming
+    /// "already allowed" would put the short deadline on a send that may still be
+    /// waiting for a human.
+    ///
+    /// Must not be called on the main thread — see the call site.
+    private static func automationPermissionStatus(forBundleID bundleID: String) -> OSStatus {
+        let descriptor = NSAppleEventDescriptor(bundleIdentifier: bundleID)
+        guard let aeDesc = descriptor.aeDesc else { return -1744 }
+        return withExtendedLifetime(descriptor) {
+            var target = aeDesc.pointee
+            return AEDeterminePermissionToAutomateTarget(&target, typeWildCard, typeWildCard, false)
+        }
     }
 
     /// Maps an activation attempt to the outcome reported to the user. A pid that no
