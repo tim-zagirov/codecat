@@ -71,7 +71,9 @@ public struct MascotSkin: Equatable, Sendable, Identifiable {
     public let name: String
     public let author: String
     public let license: SkinLicense
-    public let sourceURL: String
+    /// The itch.io page the sprites came from; nil for the drawn cat, which has no
+    /// upstream source to link to (it was drawn for CodeCat, not downloaded).
+    public let sourceURL: String?
     /// Directory holding the sheets inside the app's resources; nil for the drawn cat.
     public let directory: String?
     /// 50 for LuizMelo, 32 for Elthen, 16 for mxmaze.
@@ -79,7 +81,7 @@ public struct MascotSkin: Equatable, Sendable, Identifiable {
     public let animations: [AggregateStatusKey: SpriteAnimation]
 
     public init(id: String, name: String, author: String, license: SkinLicense,
-                sourceURL: String, directory: String?, frameSize: Int,
+                sourceURL: String?, directory: String?, frameSize: Int,
                 animations: [AggregateStatusKey: SpriteAnimation]) {
         self.id = id
         self.name = name

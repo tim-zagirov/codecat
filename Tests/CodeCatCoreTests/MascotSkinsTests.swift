@@ -62,6 +62,7 @@ extension MascotSkinsTests {
     func testDrawnSkinHasNoSpriteData() {
         XCTAssertEqual(MascotSkins.drawn.id, "drawn")
         XCTAssertNil(MascotSkins.drawn.directory)
+        XCTAssertNil(MascotSkins.drawn.sourceURL)
         XCTAssertTrue(MascotSkins.drawn.animations.isEmpty)
         XCTAssertFalse(MascotSkins.drawn.isSpriteBased)
     }
@@ -83,7 +84,15 @@ extension MascotSkinsTests {
         for skin in MascotSkins.all {
             XCTAssertFalse(skin.name.isEmpty, skin.id)
             XCTAssertFalse(skin.author.isEmpty, skin.id)
-            XCTAssertTrue(skin.sourceURL.hasPrefix("https://"), skin.id)
+            if skin.isSpriteBased {
+                XCTAssertTrue(skin.sourceURL?.hasPrefix("https://") ?? false, skin.id)
+            } else {
+                // The drawn cat has no upstream source to link to — asserting nil
+                // here (rather than skipping the skin) keeps this test honest: a
+                // fake placeholder URL on a non-sprite skin used to pass this same
+                // assertion vacuously.
+                XCTAssertNil(skin.sourceURL, skin.id)
+            }
         }
     }
 

@@ -23,10 +23,8 @@ struct MascotView: View {
             // view in place instead of recreating it — `.onAppear` would silently
             // never fire again. Keying `.task` on `skin.id` instead ties the check to
             // the skin itself, so it re-runs on every skin change regardless of which
-            // branch renders. It also runs outside body evaluation, which matters
-            // because `onLoadFailure` ultimately mutates `@Published` state
-            // (`AppState.skinID`) and must not do that mid-render. Do not "simplify"
-            // this back into `.onAppear` — that reintroduces the silent-failure bug.
+            // branch renders. Do not "simplify" this back into `.onAppear` — that
+            // reintroduces the silent-failure bug.
             .task(id: skin.id) {
                 if skin.isSpriteBased && SpriteSheetStore.shared.load(skin) == nil {
                     onLoadFailure(skin)

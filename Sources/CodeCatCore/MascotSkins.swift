@@ -12,7 +12,7 @@ public enum MascotSkins {
         name: "Нарисованный",
         author: "CodeCat",
         license: .builtIn,
-        sourceURL: "https://github.com/",
+        sourceURL: nil,
         directory: nil,
         frameSize: 0,
         animations: [:])
