@@ -310,9 +310,11 @@ final class AppState: ObservableObject {
         } catch {
             return (-1, "Не удалось запустить osascript: \(error.localizedDescription)")
         }
-        task.waitUntilExit()
+        // Drain both pipes BEFORE waiting for exit. Waiting first deadlocks if the
+        // child fills a 64 KB pipe buffer: it blocks writing while we block waiting.
         let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
         let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
         var combined = String(data: outData, encoding: .utf8) ?? ""
         let errString = String(data: errData, encoding: .utf8) ?? ""
         if !errString.isEmpty {
