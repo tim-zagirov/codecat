@@ -26,6 +26,14 @@ struct LoadedSkin {
 ///
 /// Every failure path returns nil rather than throwing: the caller's answer is
 /// always the same — fall back to the drawn cat and say so once.
+///
+/// `@MainActor`: every caller today already runs on the main actor (SwiftUI view
+/// bodies, and the `.task` in `MascotView`, which runs on a `@MainActor` view), so
+/// there is no live data race. The annotation documents that invariant rather than
+/// changing behaviour — without it, `swift build -Xswiftc -strict-concurrency=complete`
+/// flags `shared` as a non-concurrency-safe static property, the one warning in the
+/// whole package.
+@MainActor
 final class SpriteSheetStore {
 
     static let shared = SpriteSheetStore()
@@ -36,25 +44,45 @@ final class SpriteSheetStore {
 
     /// Directory that holds `Skins/`, resolved once.
     ///
-    /// `Bundle.main` is tried FIRST, and `Bundle.module` only as a fallback — never
-    /// the other way around. The generated `resource_bundle_accessor.swift` calls
-    /// `fatalError` when it cannot locate its resource bundle, and in the installed
-    /// .app there deliberately is no such bundle any more (its assets now live in
-    /// Contents/Resources, signed as part of the app). Checking `Bundle.main` first,
-    /// and using it whenever `Contents/Resources/Skins` exists, means `Bundle.module`
-    /// is never even touched in that case, so its fatal path stays unreachable. The
-    /// fallback is what makes `swift run` and any future test host work, since
-    /// neither has a `Contents/Resources` to find.
+    /// Deliberately never touches `Bundle.module`: the generated
+    /// `resource_bundle_accessor.swift` calls `fatalError` when neither of its two
+    /// candidate paths exists, and that path is reachable in production — if the
+    /// `Skins` assets are ever missing from a shipped `.app` (e.g. a packaging
+    /// mistake on a machine other than the one that built it), touching
+    /// `Bundle.module` would hard-crash the app at launch instead of letting the
+    /// existing nil-handling fall back to the drawn cat with an alert
+    /// (`AppState.reportSkinLoadFailure`). `make app` guards against that mistake at
+    /// build time (see the Makefile's post-copy check, driven by `SkinAssetsTests`),
+    /// but this resolver does not rely on that guard having run.
+    ///
+    /// Instead the two layouts `Bundle.module` would have found are probed by hand,
+    /// and this returns nil — not a crash — when neither exists, so every caller's
+    /// existing nil-handling takes over:
+    /// - `Bundle.main.resourceURL/Skins`: the installed `.app`, where assets were
+    ///   copied into `Contents/Resources/Skins` and signed as part of the bundle.
+    /// - `Bundle.main.bundleURL/CodeCat_CodeCatApp.bundle/Skins`: for a bare
+    ///   SwiftPM executable (`swift run`, or any future test host), `Bundle.main`
+    ///   has no real bundle structure, so Foundation treats the directory holding
+    ///   the executable as its `bundleURL` — the same directory SwiftPM's build
+    ///   output places `CodeCat_CodeCatApp.bundle` in (confirmed by inspecting
+    ///   `.build/<triple>/debug/`), so this is exactly the layout the generated
+    ///   accessor's own `mainPath` resolves to, without hardcoding any absolute path.
     private static let skinsRoot: URL? = {
-        if let mainSkins = Bundle.main.resourceURL?.appendingPathComponent("Skins") {
-            var isDirectory: ObjCBool = false
-            if FileManager.default.fileExists(atPath: mainSkins.path, isDirectory: &isDirectory),
-               isDirectory.boolValue {
-                return mainSkins
-            }
+        let candidates = [
+            Bundle.main.resourceURL?.appendingPathComponent("Skins"),
+            Bundle.main.bundleURL.appendingPathComponent("CodeCat_CodeCatApp.bundle/Skins"),
+        ]
+        for case let candidate? in candidates where isDirectory(candidate) {
+            return candidate
         }
-        return Bundle.module.resourceURL?.appendingPathComponent("Skins")
+        return nil
     }()
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
 
     /// Reads, measures and caches a skin. Returns nil if any declared sheet is
     /// missing or unreadable, or if the skin turns out to be fully transparent.

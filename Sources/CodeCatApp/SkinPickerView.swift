@@ -10,7 +10,6 @@ import CodeCatCore
 /// width inside the panel's own padding.
 struct SkinPickerView: View {
     @ObservedObject var appState: AppState
-    @State private var creditsExpanded = false
 
     /// Previews are small and there are nine of them animating at once, so their
     /// frame rate is capped well below the mascot's own.
@@ -68,7 +67,7 @@ struct SkinPickerView: View {
     }
 
     private var credits: some View {
-        DisclosureGroup("Об ассетах", isExpanded: $creditsExpanded) {
+        DisclosureGroup("Об ассетах", isExpanded: $appState.creditsExpanded) {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(creditedPacks, id: \.author) { pack in
                     VStack(alignment: .leading, spacing: 1) {
@@ -102,7 +101,12 @@ struct SkinPickerView: View {
             guard seen.insert(skin.author).inserted else { continue }
             result.append((author: skin.author,
                            license: licenseText(skin.license),
-                           sourceURL: skin.sourceURL))
+                           // Every sprite-based skin's `sourceURL` is set in
+                           // `MascotSkins` — only the drawn cat (excluded by the
+                           // `where` above) leaves it nil — but nil-coalesce rather
+                           // than force-unwrap so a future skin added without one
+                           // degrades to a missing link instead of a crash.
+                           sourceURL: skin.sourceURL ?? ""))
         }
         return result
     }
@@ -110,9 +114,13 @@ struct SkinPickerView: View {
     private func licenseText(_ license: SkinLicense) -> String {
         switch license {
         case .cc0: return "CC0 1.0 — общественное достояние"
-        // The stored attribution already names the licence (e.g. "Maze.Bit.Boutique
-        // (mxmaze), CC BY 4.0"), so don't prepend "CC BY 4.0 —" again here.
-        case .ccBy4(let attribution): return attribution
+        // The full attribution string (e.g. "Maze.Bit.Boutique (mxmaze), CC BY
+        // 4.0") is deliberately not printed here: the author name it repeats is
+        // already the heading directly above this line (`pack.author`), so
+        // showing it again would print "Maze.Bit.Boutique (mxmaze)" twice for the
+        // same pack. Together the two lines still name both the author and "CC BY
+        // 4.0", which is what the licence actually requires.
+        case .ccBy4: return "CC BY 4.0"
         case .authorTerms(let summary): return summary
         case .builtIn: return "Нарисован для CodeCat"
         }

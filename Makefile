@@ -20,12 +20,11 @@ app:
 	codesign --force -s - $(APP)
 	@test -d "$(APP)/Contents/Resources/Skins" \
 		|| (echo "ОШИБКА: ассеты обликов не попали в бандл"; exit 1)
-	@test -f "$(APP)/Contents/Resources/Skins/mxmaze/16x16-Brown.png" \
-		|| (echo "ОШИБКА: в бандле нет листов обликов"; exit 1)
-	@test -f "$(APP)/Contents/Resources/Skins/elthen/Cat Sprite Sheet.png" \
-		|| (echo "ОШИБКА: в бандле нет листа Elthen"; exit 1)
-	@test -f "$(APP)/Contents/Resources/Skins/luizmelo/Cat-1/Cat-1-Meow.png" \
-		|| (echo "ОШИБКА: в бандле нет листов LuizMelo"; exit 1)
+	# Проверяет не три файла, а КАЖДЫЙ лист, объявленный в реестре MascotSkins —
+	# SkinAssetsTests перечисляет их из кода, а не из ручного списка, поэтому
+	# новый облик, добавленный без своих файлов, тоже завалит эту проверку.
+	@CODECAT_SKINS_DIR="$(PWD)/$(APP)/Contents/Resources/Skins" swift test --filter SkinAssetsTests \
+		|| (echo "ОШИБКА: в собранном .app не хватает листов обликов"; exit 1)
 	@echo "Готово: $(APP)"
 
 clean:
