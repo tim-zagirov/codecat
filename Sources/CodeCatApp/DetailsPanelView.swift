@@ -45,8 +45,15 @@ struct DetailsPanelView: View {
 
             Divider()
             Toggle("Не давать маку спать", isOn: $appState.keepAwakeEnabled)
-            Toggle("Режим закрытой крышки", isOn: $appState.lidModeEnabled)
-                .disabled(!LidSleepController.isHelperInstalled && !appState.lidModeEnabled)
+            Toggle("Режим закрытой крышки", isOn: Binding(
+                get: { appState.lidModeEnabled },
+                set: { appState.requestLidModeChange(to: $0) }
+            ))
+            if !LidSleepController.isHelperInstalled {
+                Text("Первое включение попросит пароль администратора (разовая настройка).")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
             Toggle("Звуки", isOn: $appState.soundsEnabled)
             if !appState.hooksInstalled {
                 Button("Установить хуки Claude Code") {
