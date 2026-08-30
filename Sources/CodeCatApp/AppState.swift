@@ -42,6 +42,8 @@ final class AppState: ObservableObject {
     }
     @Published var hooksInstalled = false
 
+    private var lidHelperInstallInFlight = false
+
     init() {
         let defaults = UserDefaults.standard
         defaults.register(defaults: [
@@ -210,6 +212,126 @@ final class AppState: ObservableObject {
             alert.informativeText = "Не удалось записать в \(CodeCatPaths.claudeSettings.path): \(error.localizedDescription)"
             alert.runModal()
         }
+    }
+
+    // MARK: - Closed-lid mode
+
+    /// Single entry point for the closed-lid toggle, from both the menu bar and the
+    /// details panel. Turning it on when the one-time helper (`scripts/install-lid-mode.sh`,
+    /// see `LidSleepController`) is not yet installed kicks off that install asynchronously
+    /// (it prompts for an administrator password via `osascript`) — `lidModeEnabled` only
+    /// flips to `true` once the install actually took effect, never optimistically. Every
+    /// outcome other than a clean success is reported with an `NSAlert`. Turning the mode
+    /// off is synchronous, never prompts, and always succeeds (it just clears the flag via
+    /// `LidSleepController`).
+    ///
+    /// Closed-lid mode is a strictly stronger form of keep-awake — it is meaningless on its
+    /// own — so turning it on also turns on `keepAwakeEnabled`, updating that toggle's own
+    /// published state so the menu and the details panel both show it on.
+    func requestLidModeChange(to newValue: Bool) {
+        guard newValue != lidModeEnabled else { return }
+        guard newValue else {
+            lidModeEnabled = false
+            return
+        }
+        if LidSleepController.isHelperInstalled {
+            enableLidModeNowThatHelperIsReady()
+            return
+        }
+        guard !lidHelperInstallInFlight else { return }
+        guard let scriptURL = locateScript("install-lid-mode.sh") else {
+            presentLidAlert(
+                title: "Скрипт установки не найден",
+                message: "Запусти вручную: sudo bash scripts/install-lid-mode.sh")
+            return
+        }
+        lidHelperInstallInFlight = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let (status, output) = Self.runLidInstallScript(at: scriptURL)
+            let outcome = LidHelperInstall.classify(status: status, output: output)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.lidHelperInstallInFlight = false
+                self.handleLidInstallOutcome(outcome)
+            }
+        }
+    }
+
+    private func enableLidModeNowThatHelperIsReady() {
+        keepAwakeEnabled = true
+        lidModeEnabled = true
+    }
+
+    private func handleLidInstallOutcome(_ outcome: LidHelperInstall.Outcome) {
+        switch outcome {
+        case .success:
+            // Re-check rather than assume: a successful `osascript` exit only means the
+            // script ran to completion, not that the sudoers rule actually landed.
+            if LidSleepController.isHelperInstalled {
+                enableLidModeNowThatHelperIsReady()
+            } else {
+                presentLidAlert(
+                    title: "Не удалось включить режим закрытой крышки",
+                    message: "Установка завершилась, но правило всё ещё не найдено. Попробуй ещё раз или установи вручную: sudo bash scripts/install-lid-mode.sh")
+            }
+        case .cancelled:
+            presentLidAlert(
+                title: "Нужна разовая установка",
+                message: "Режиму закрытой крышки требуется один раз разрешение администратора. Его можно включить позже — просто попробуй ещё раз, когда будешь готов ввести пароль.")
+        case .failed(let detail):
+            presentLidAlert(
+                title: "Установка не удалась",
+                message: "Скрипт установки завершился с ошибкой (\(detail)). Попробуй установить вручную: sudo bash scripts/install-lid-mode.sh")
+        }
+    }
+
+    private func presentLidAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.runModal()
+    }
+
+    /// Runs the installer via `osascript ... with administrator privileges` and returns its
+    /// exit status plus combined stdout/stderr for diagnosing a failure. Never called on the
+    /// main thread — it blocks for as long as the user takes to respond to the password
+    /// prompt.
+    private static func runLidInstallScript(at scriptURL: URL) -> (status: Int32, output: String) {
+        let osa = LidHelperInstall.appleScript(forScriptAt: scriptURL.path)
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        task.arguments = ["-e", osa]
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        task.standardOutput = outPipe
+        task.standardError = errPipe
+        do {
+            try task.run()
+        } catch {
+            return (-1, "Не удалось запустить osascript: \(error.localizedDescription)")
+        }
+        task.waitUntilExit()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+        var combined = String(data: outData, encoding: .utf8) ?? ""
+        let errString = String(data: errData, encoding: .utf8) ?? ""
+        if !errString.isEmpty {
+            combined += combined.isEmpty ? errString : "\n\(errString)"
+        }
+        return (task.terminationStatus, combined)
+    }
+
+    /// Resolves `name` next to the currently running executable: inside `Contents/Resources/`
+    /// for a packaged `.app` bundle, or under the repo's `scripts/` directory for
+    /// `swift run CodeCatApp` from the repo root.
+    private func locateScript(_ name: String) -> URL? {
+        let exeDir = URL(fileURLWithPath: CommandLine.arguments[0])
+            .resolvingSymlinksInPath().deletingLastPathComponent()
+        let candidates = [
+            exeDir.appendingPathComponent("../Resources/\(name)"),  // внутри .app
+            exeDir.appendingPathComponent("../../../scripts/\(name)"), // swift run из корня
+        ]
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     func shutdown() {
