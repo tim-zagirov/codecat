@@ -8,12 +8,21 @@ import ImageIO
 ///
 /// It reaches the files through `#filePath` because the sheets live in the
 /// `CodeCatApp` target's resources, and an executable target has no test bundle of
-/// its own to read them from. That also means this test verifies the *sources*: that
-/// the assets survive into the built `.app` is a separate check, in `make app`.
+/// its own to read them from. By default this verifies the *sources* — but the same
+/// registry-driven check also needs to run against the assembled `.app`, so it
+/// doubles as `make app`'s post-build guard: setting `CODECAT_SKINS_DIR` points it
+/// at any directory instead (see the Makefile's `app` target, which runs this suite
+/// with that variable set to `dist/CodeCat.app/Contents/Resources/Skins`). Because
+/// `skin.isSpriteBased` sheets are enumerated straight from `MascotSkins.all` rather
+/// than a hand-written file list, a future skin added without its assets fails this
+/// check wherever it points, not just here.
 final class SkinAssetsTests: XCTestCase {
 
     private var skinsDirectory: URL {
-        URL(fileURLWithPath: #filePath)            // .../Tests/CodeCatCoreTests/SkinAssetsTests.swift
+        if let override = ProcessInfo.processInfo.environment["CODECAT_SKINS_DIR"] {
+            return URL(fileURLWithPath: override)
+        }
+        return URL(fileURLWithPath: #filePath)     // .../Tests/CodeCatCoreTests/SkinAssetsTests.swift
             .deletingLastPathComponent()           // .../Tests/CodeCatCoreTests
             .deletingLastPathComponent()           // .../Tests
             .deletingLastPathComponent()           // repo root
