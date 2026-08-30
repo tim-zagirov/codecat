@@ -3,8 +3,11 @@ import XCTest
 
 final class SpriteScaleTests: XCTestCase {
 
-    /// The three packs actually shipped, measured from their pixels: LuizMelo's cats
-    /// are 27x14, Elthen's is 18x12, mxmaze's fills its whole 16x16 tile.
+    /// The three packs actually shipped, measured from their pixels. LuizMelo's six
+    /// cats don't share one exact bounding box — most (including cat-1) measure
+    /// 27x14, but cat-4 is 28x16 and cat-5 is 27x16 — though all six still land on
+    /// the same integer scale below, which is the property this test actually
+    /// covers. Elthen's is 18x12, mxmaze's fills its whole 16x16 tile.
     func testTheThreePacksLandOnComparableHeights() {
         XCTAssertEqual(SpriteScale.factor(boundsWidth: 27, boundsHeight: 14), 4)
         XCTAssertEqual(SpriteScale.factor(boundsWidth: 18, boundsHeight: 12), 5)
