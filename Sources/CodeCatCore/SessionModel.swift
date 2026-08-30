@@ -27,6 +27,13 @@ public struct Session: Identifiable, Equatable, Sendable {
     /// so it was deleted before ever being shown as a problem.
     public var finishedAt: Date? = nil
 
+    /// Where this session lives, as recorded by `codecat-hook`. Nil for a session
+    /// the transcript watcher discovered on its own — it has no route.
+    public var hostPID: pid_t? = nil
+    public var hostBundlePath: String? = nil
+    public var hostBundleID: String? = nil
+    public var tty: String? = nil
+
     public var projectName: String {
         (projectPath as NSString).lastPathComponent
     }
@@ -45,18 +52,35 @@ public struct HookEvent: Codable, Equatable, Sendable {
     public let sessionId: String
     public let cwd: String?
     public let message: String?
+    /// Route to the session, added by `codecat-hook` (see `HookPayload`). All
+    /// optional: an older hook binary, or a payload that failed to parse, sends none
+    /// of them and the event must still be accepted.
+    public let hostPID: pid_t?
+    public let hostBundlePath: String?
+    public let hostBundleID: String?
+    public let tty: String?
 
-    public init(hookEventName: String, sessionId: String, cwd: String?, message: String?) {
+    public init(hookEventName: String, sessionId: String, cwd: String?, message: String?,
+                hostPID: pid_t? = nil, hostBundlePath: String? = nil,
+                hostBundleID: String? = nil, tty: String? = nil) {
         self.hookEventName = hookEventName
         self.sessionId = sessionId
         self.cwd = cwd
         self.message = message
+        self.hostPID = hostPID
+        self.hostBundlePath = hostBundlePath
+        self.hostBundleID = hostBundleID
+        self.tty = tty
     }
 
     enum CodingKeys: String, CodingKey {
         case hookEventName = "hook_event_name"
         case sessionId = "session_id"
         case cwd, message
+        case tty = "host_tty"
+        case hostPID = "host_pid"
+        case hostBundlePath = "host_bundle_path"
+        case hostBundleID = "host_bundle_id"
     }
 }
 
