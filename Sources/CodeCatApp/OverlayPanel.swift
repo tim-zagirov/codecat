@@ -142,7 +142,9 @@ final class OverlayController: NSObject, NSWindowDelegate {
 
     private func makeDetailsPanel() -> OverlayPanel {
         let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 290, height: 200), allowsKey: true)
-        panel.contentView = NSHostingView(rootView: DetailsPanelView(appState: appState))
+        panel.contentView = NSHostingView(rootView: DetailsPanelView(
+            appState: appState,
+            onJump: { [weak self] in self?.hideDetails() }))
         return panel
     }
 
