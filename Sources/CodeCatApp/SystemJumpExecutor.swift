@@ -17,15 +17,15 @@ final class SystemJumpExecutor: JumpExecuting {
     /// one can be owned by a wedged script, and the query must never wait behind it.
     private let permissionQueue = DispatchQueue(label: "com.codecat.jump.permission")
 
-    /// How many dispatched scripts have not returned yet. Main queue only.
-    private var outstandingScripts = 0
-
-    /// The latest deadline among the outstanding scripts, on the monotonic clock —
-    /// not `Date`, which jumps forward across system sleep and would declare a
-    /// healthy script overdue after the lid was closed (this app's other feature
-    /// keeps the Mac awake with the lid shut, so that is not hypothetical).
+    /// How many jumps have work still outstanding — a permission query that has not
+    /// answered, or a script that has not returned. Counted rather than flagged so a
+    /// late finisher cannot clear a deadline belonging to a jump still running.
     /// Main queue only.
-    private var scriptDeadline: DispatchTime?
+    private var outstandingJumps = 0
+
+    /// The latest deadline among the outstanding jumps, on the monotonic clock.
+    /// Main queue only.
+    private var jumpDeadline: DispatchTime?
 
     // MARK: - JumpExecuting
 
@@ -56,95 +56,69 @@ final class SystemJumpExecutor: JumpExecuting {
                 complete(activationOutcome(pid: pid, bundlePath: bundlePath), completion)
                 return
             }
-            let deadlinePassed = scriptDeadline.map { DispatchTime.now() >= $0 } ?? false
-            if JumpExecutionPolicy.isBlocked(outstanding: outstandingScripts,
+            let deadlinePassed = jumpDeadline.map { DispatchTime.now() >= $0 } ?? false
+            if JumpExecutionPolicy.isBlocked(outstanding: outstandingJumps,
                                              deadlinePassed: deadlinePassed) {
-                // An earlier script has passed its deadline and still has not returned,
-                // so the serial queue is blocked. Queuing this jump behind it would be
-                // a silent refusal — the user would click and never hear anything.
-                // Say so, and still give them a destination. (A script that is merely
-                // still running, well inside its deadline, is not blocked: this jump
+                // An earlier jump is past its deadline with its query or script still
+                // outstanding, so the queue it holds is blocked. Queuing behind it
+                // would be a silent refusal — the user would click and never hear
+                // anything. Say so, and still give them a destination. (Work that is
+                // merely still running, inside its deadline, does not block: this jump
                 // queues behind it and runs in a moment.)
                 let fellBack = activate(pid: pid, bundlePath: bundlePath) == .success
                 complete(.failed(JumpMessages.terminalStillBusyDetail(fellBack: fellBack)), completion)
                 return
             }
 
-            // Ask TCC what it will do *before* sending anything: an outright refusal is
-            // reported immediately instead of after a round trip, and — the reason this
-            // matters most — a not-yet-decided permission tells us the send will block
-            // on the consent panel, so it gets the long deadline rather than the short
-            // one meant for a wedged terminal.
-            //
-            // Off the main thread, as `AEDeterminePermissionToAutomateTarget`'s own
-            // documentation demands: it talks to `tccd` and "may take arbitrarily long
-            // to return". With a consent panel already up for this target it can stall
-            // outright, which on the main thread would freeze the whole UI.
-            permissionQueue.async {
-                let permission = JumpExecutionPolicy.permission(
-                    forStatus: Self.automationPermissionStatus(forBundleID: bundleID))
-                DispatchQueue.main.async {
-                    self.afterPermission(permission, source: source, pid: pid,
-                                         bundlePath: bundlePath, completion: completion)
-                }
-            }
-        }
-    }
-
-    /// Acts on TCC's answer, back on the main queue.
-    private func afterPermission(_ permission: JumpExecutionPolicy.Permission,
-                                 source: String, pid: pid_t, bundlePath: String,
-                                 completion: @escaping (JumpOutcome) -> Void) {
-        switch permission {
-        case .denied:
-            let fellBack = activate(pid: pid, bundlePath: bundlePath) == .success
-            complete(.automationDenied(fellBack: fellBack), completion)
-        case .hostGone:
-            complete(.hostGone, completion)
-        case .granted, .awaitingConsent:
-            runScript(source, pid: pid, bundlePath: bundlePath,
-                      timeout: JumpExecutionPolicy.timeout(for: permission),
-                      awaitingConsent: permission == .awaitingConsent,
-                      completion: completion)
+            runTerminalJump(source: source, bundleID: bundleID, pid: pid,
+                            bundlePath: bundlePath, completion: completion)
         }
     }
 
     // MARK: - Running the tab-selection script
 
-    /// Runs `source` on the private queue and reports whichever comes first: the
-    /// script's own answer, or the timeout. `settled` makes that a race with exactly
-    /// one winner — a doubled alert is its own defect — and is only ever touched on
-    /// the main queue, like every other piece of state here.
+    /// One terminal jump, end to end: ask TCC what it will do, then send the script,
+    /// under a single deadline that covers *both* steps.
+    ///
+    /// The permission query needs covering as much as the send does. Its own
+    /// documentation says it "may take arbitrarily long to return", and with a consent
+    /// panel already up for the same target it can stall outright — so without a
+    /// watchdog over it, a second click during that panel would report nothing at all.
+    ///
+    /// `settled` makes the whole thing a race with exactly one winner — a doubled
+    /// alert is its own defect — and, like every other piece of state here, is only
+    /// ever touched on the main queue.
     ///
     /// `self` is captured strongly on purpose: these closures always run, so the
     /// retain is temporary rather than a cycle, and a weak capture would let the
     /// completion be dropped entirely if the executor deallocated mid-flight.
-    private func runScript(_ source: String, pid: pid_t, bundlePath: String,
-                           timeout: TimeInterval, awaitingConsent: Bool,
-                           completion: @escaping (JumpOutcome) -> Void) {
-        outstandingScripts += 1
-        // Keep the furthest deadline: with more than one script outstanding, the queue
-        // is only genuinely wedged once the last of them is overdue.
-        let deadline = DispatchTime.now() + timeout
-        scriptDeadline = scriptDeadline.map { max($0, deadline) } ?? deadline
+    private func runTerminalJump(source: String, bundleID: String, pid: pid_t,
+                                 bundlePath: String,
+                                 completion: @escaping (JumpOutcome) -> Void) {
+        outstandingJumps += 1
         var settled = false
+        var awaitingConsent = false
+        var watchdog: DispatchWorkItem?
+
+        // Marks the underlying work finished — not the same moment as reporting to the
+        // user: a jump that timed out is reported while its query or script is still
+        // outstanding, and that is exactly what the busy gate needs to know about.
+        let finishWork = {
+            self.outstandingJumps -= 1
+            if self.outstandingJumps == 0 { self.jumpDeadline = nil }
+        }
 
         let settle: (ScriptResult) -> Void = { result in
             guard !settled else { return }
             settled = true
+            watchdog?.cancel()
             // Every result other than a hit still owes the user a destination, so the
             // fallback runs first and its *actual* success is what the message reports.
-            // `.hostGone` is excluded: activating an app that is gone cannot work, and
-            // its message promises nothing.
+            // `.hostGone` is the exception: activating an app that is gone cannot work,
+            // and its message promises nothing.
             let fellBack: Bool
             switch result {
             case .switchedToTab, .hostGone:
-                fellBack = false
-            case .timedOut(let awaitingConsent) where awaitingConsent:
-                // The consent panel is still up and the terminal was never asked.
-                // Dragging the terminal over that dialog would make it harder to
-                // answer — and answering it is the only thing that makes the feature
-                // work at all.
                 fellBack = false
             case .automationDenied, .tabNotFound, .failed, .timedOut:
                 fellBack = self.activate(pid: pid, bundlePath: bundlePath) == .success
@@ -152,16 +126,58 @@ final class SystemJumpExecutor: JumpExecuting {
             self.complete(result.outcome(fellBack: fellBack), completion)
         }
 
+        // (Re)arms the watchdog. The clock starts short, covering the permission query;
+        // it is extended only once TCC says the send will be waiting on a human, so a
+        // wedged terminal is still caught quickly.
+        func arm(_ timeout: TimeInterval) {
+            watchdog?.cancel()
+            let item = DispatchWorkItem { settle(.timedOut(awaitingConsent: awaitingConsent)) }
+            watchdog = item
+            // Monotonic, and the same clock `asyncAfter` uses: a wall clock jumps
+            // forward across the system sleep this app's lid mode deliberately allows,
+            // which would declare a healthy jump overdue on wake.
+            let deadline = DispatchTime.now() + timeout
+            jumpDeadline = jumpDeadline.map { max($0, deadline) } ?? deadline
+            DispatchQueue.main.asyncAfter(deadline: deadline, execute: item)
+        }
+
+        arm(JumpExecutionPolicy.scriptTimeout)
+
+        // Off the main thread, as `AEDeterminePermissionToAutomateTarget`'s own
+        // documentation demands. Asking before sending also means an outright refusal
+        // is reported without a round trip, and an undecided permission buys the long
+        // deadline instead of the short one meant for a wedged terminal.
+        permissionQueue.async {
+            let status = Self.automationPermissionStatus(forBundleID: bundleID)
+            DispatchQueue.main.async {
+                guard !settled else { finishWork(); return }
+                switch JumpExecutionPolicy.permission(forStatus: status) {
+                case .denied:
+                    finishWork()
+                    settle(.automationDenied)
+                case .hostGone:
+                    finishWork()
+                    settle(.hostGone)
+                case .awaitingConsent:
+                    awaitingConsent = true
+                    arm(JumpExecutionPolicy.consentTimeout)
+                    self.send(source, settle: settle, finishWork: finishWork)
+                case .granted:
+                    self.send(source, settle: settle, finishWork: finishWork)
+                }
+            }
+        }
+    }
+
+    private func send(_ source: String,
+                      settle: @escaping (ScriptResult) -> Void,
+                      finishWork: @escaping () -> Void) {
         queue.async {
             let result = self.runTabScript(source)
             DispatchQueue.main.async {
-                self.outstandingScripts -= 1
-                if self.outstandingScripts == 0 { self.scriptDeadline = nil }
+                finishWork()
                 settle(result)
             }
-        }
-        DispatchQueue.main.asyncAfter(deadline: deadline) {
-            settle(.timedOut(awaitingConsent: awaitingConsent))
         }
     }
 
