@@ -167,7 +167,25 @@ final class AppState: ObservableObject {
     }
 
     func installHooksIfNeeded() {
-        let existing = try? Data(contentsOf: CodeCatPaths.claudeSettings)
+        let existing: Data?
+        switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
+        case .notFound:
+            existing = nil
+        case .data(let data):
+            existing = data
+        case .unreadable:
+            // Never fall through to `nil` here: `HooksInstaller.install` treats `nil` as
+            // an empty document (`{}`), which is correct for a genuine first install but
+            // would otherwise let a transient read failure destroy the user's real
+            // settings (permission allowlist, MCP config, model settings, other hooks) by
+            // writing a document containing only CodeCat's hooks over it.
+            let alert = NSAlert()
+            alert.messageText = "Не удалось установить хуки"
+            alert.informativeText = "Не удалось прочитать файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте права доступа и попробуйте снова."
+            alert.runModal()
+            return
+        }
+
         guard let updated = try? HooksInstaller.install(
             into: existing, hookCommand: hookBinaryPath()) else {
             let alert = NSAlert()
@@ -181,7 +199,10 @@ final class AppState: ObservableObject {
             try FileManager.default.createDirectory(
                 at: CodeCatPaths.claudeSettings.deletingLastPathComponent(),
                 withIntermediateDirectories: true)
-            try updated.write(to: CodeCatPaths.claudeSettings)
+            // .atomic: a crash or I/O error mid-write must never leave a truncated
+            // settings file — write-to-temp-then-rename either lands the whole new
+            // document or leaves the old one untouched.
+            try updated.write(to: CodeCatPaths.claudeSettings, options: .atomic)
             hooksInstalled = true
         } catch {
             let alert = NSAlert()
