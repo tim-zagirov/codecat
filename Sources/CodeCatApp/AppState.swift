@@ -43,17 +43,33 @@ final class AppState: ObservableObject {
     }
     @Published var hooksInstalled = false
 
+    /// Id of the selected skin. Persisted so the choice survives a restart; read
+    /// back through `MascotSkins.skin(withID:)`, which falls back to the drawn cat
+    /// for anything it does not recognise.
+    @Published var skinID: String {
+        didSet { UserDefaults.standard.set(skinID, forKey: "mascotSkin") }
+    }
+
+    var skin: MascotSkin { MascotSkins.skin(withID: skinID) }
+
+    /// Skins already reported as broken. A failed load is reported once per launch:
+    /// the view that renders the mascot is rebuilt constantly, and an alert on every
+    /// rebuild would be unusable.
+    private var reportedSkinFailures: Set<String> = []
+
     private var lidHelperInstallInFlight = false
 
     init() {
         let defaults = UserDefaults.standard
         defaults.register(defaults: [
             "keepAwake": true, "lidMode": false, "sounds": false, "showMascot": true,
+            "mascotSkin": "drawn",
         ])
         keepAwakeEnabled = defaults.bool(forKey: "keepAwake")
         lidModeEnabled = defaults.bool(forKey: "lidMode")
         soundsEnabled = defaults.bool(forKey: "sounds")
         showMascot = defaults.bool(forKey: "showMascot")
+        skinID = defaults.string(forKey: "mascotSkin") ?? MascotSkins.drawn.id
 
         jumpExecutor = SystemJumpExecutor()
         powerManager = PowerManager(
@@ -407,6 +423,25 @@ final class AppState: ObservableObject {
         let alert = NSAlert()
         alert.messageText = message.title
         alert.informativeText = message.body
+        alert.window.level = .modalPanel
+        alert.window.orderFrontRegardless()
+        alert.runModal()
+    }
+
+    /// Reports a skin whose sheets could not be read, and switches back to the drawn
+    /// cat. Told with an alert rather than a line in the details panel because the
+    /// panel may well be closed — this project's rule is that there are no silent
+    /// refusals.
+    func reportSkinLoadFailure(_ skin: MascotSkin) {
+        guard !reportedSkinFailures.contains(skin.id) else { return }
+        reportedSkinFailures.insert(skin.id)
+        if skinID == skin.id { skinID = MascotSkins.drawn.id }
+        // Same activation dance as `presentJumpAlert`: CodeCat is an accessory app
+        // and its windows do not come forward on their own.
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Не удалось загрузить облик «\(skin.name)»"
+        alert.informativeText = "Файлы набора не читаются. Вернул нарисованного кота."
         alert.window.level = .modalPanel
         alert.window.orderFrontRegardless()
         alert.runModal()
