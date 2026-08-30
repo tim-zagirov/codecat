@@ -12,10 +12,13 @@ import CodeCatCore
 /// `onAppear` transaction that only ever animated whatever happened to be
 /// mounted at that instant.
 ///
-/// Designed for a ~96x96pt frame (see Task 13's floating panel) and to read
-/// clearly over an arbitrary desktop background: every color is a fixed, opaque
-/// value (never a system/semantic color), so the cat looks the same in light or
-/// dark environments instead of blending into them.
+/// Drawn in a ~96pt coordinate space but laid out on a larger canvas
+/// (`MascotLayout.canvasSize`): the tail swish and the badge pulse reach past the
+/// drawing's nominal bounds, and the panel window has no slack of its own, so
+/// without that margin the window edge slices the tail off. See `MascotLayout`.
+/// It reads clearly over an arbitrary desktop background: every color is a fixed,
+/// opaque value (never a system/semantic color), so the cat looks the same in
+/// light or dark environments instead of blending into them.
 private struct Triangle: Shape {
     func path(in rect: CGRect) -> Path {
         var p = Path()
@@ -56,7 +59,7 @@ struct CatView: View {
             }
             badge
         }
-        .frame(width: 96, height: 96)
+        .frame(width: MascotLayout.canvasSize, height: MascotLayout.canvasSize)
     }
 
     // MARK: - Sleeping
