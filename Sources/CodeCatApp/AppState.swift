@@ -13,6 +13,7 @@ final class AppState: ObservableObject {
     let awayLog = AwayLog()
     let powerManager: PowerManager
     let lidController: LidSleepController
+    let jumpExecutor: JumpExecuting
 
     private var socketServer: HookSocketServer?
     private var watcher: TranscriptWatcher?
@@ -54,6 +55,7 @@ final class AppState: ObservableObject {
         soundsEnabled = defaults.bool(forKey: "sounds")
         showMascot = defaults.bool(forKey: "showMascot")
 
+        jumpExecutor = SystemJumpExecutor()
         powerManager = PowerManager(
             assertion: IOKitSleepAssertion(),
             batteryLevel: { Battery.currentLevelIfOnBattery() })
@@ -345,5 +347,28 @@ final class AppState: ObservableObject {
         socketServer?.stop()
         watcher?.stop()
         timer?.invalidate()
+    }
+
+    // MARK: - Jumping to a session
+
+    /// Where a click on this session's row would send the user. Cheap enough to call
+    /// during a view body: one `kill(pid, 0)` per visible row.
+    func route(for session: Session) -> JumpRoute {
+        SessionRouter.route(for: session, isHostRunning: SessionRouter.isProcessRunning)
+    }
+
+    /// Executes the jump and reports the outcome. Successful jumps say nothing — the
+    /// user is already looking at the destination; everything else gets an alert, so
+    /// there are no silent refusals.
+    func jump(to session: Session) {
+        let route = route(for: session)
+        if case .unavailable = route { return }
+        jumpExecutor.perform(route) { outcome in
+            guard let message = JumpMessages.alert(for: outcome) else { return }
+            let alert = NSAlert()
+            alert.messageText = message.title
+            alert.informativeText = message.body
+            alert.runModal()
+        }
     }
 }
