@@ -12,5 +12,6 @@
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSAppleEventsUsageDescription</key><string>CodeCat переключает вас во вкладку терминала, где ждёт ответа агент Claude Code.</string>
 </dict>
 </plist>
