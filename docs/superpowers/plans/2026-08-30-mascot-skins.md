@@ -48,7 +48,7 @@
 
 ---
 
-## Задача 1: Типы модели обликов
+## Task 1: Типы модели обликов
 
 **Files:**
 - Create: `Sources/CodeCatCore/MascotSkin.swift`
@@ -227,7 +227,7 @@ git commit -m "feat: типы модели обликов маскота"
 
 ---
 
-## Задача 2: Реестр девяти обликов
+## Task 2: Реестр девяти обликов
 
 **Files:**
 - Create: `Sources/CodeCatCore/MascotSkins.swift`
@@ -508,7 +508,7 @@ git commit -m "feat: реестр девяти обликов маскота"
 
 ---
 
-## Задача 3: Правило масштаба
+## Task 3: Правило масштаба
 
 **Files:**
 - Create: `Sources/CodeCatCore/SpriteScale.swift`
@@ -639,7 +639,7 @@ git commit -m "feat: правило масштаба спрайтовых обл
 
 ---
 
-## Задача 4: Ассеты внутри таргета и тест согласованности
+## Task 4: Ассеты внутри таргета и тест согласованности
 
 **Files:**
 - Move: `Resources/Skins/` → `Sources/CodeCatApp/Skins/` (через `git mv`)
@@ -776,7 +776,7 @@ git commit -m "feat: ассеты обликов переехали в ресу�
 
 ---
 
-## Задача 5: Загрузка листов, рамка и масштаб облика
+## Task 5: Загрузка листов, рамка и масштаб облика
 
 **Files:**
 - Create: `Sources/CodeCatApp/SpriteSheetStore.swift`
@@ -991,7 +991,7 @@ git commit -m "feat: загрузка спрайт-листов, рамка и �
 
 ---
 
-## Задача 6: Отрисовка маскота — бейдж, спрайтовый вид, выбор вида
+## Task 6: Отрисовка маскота — бейдж, спрайтовый вид, выбор вида
 
 **Files:**
 - Create: `Sources/CodeCatApp/MascotBadge.swift`
@@ -1320,7 +1320,7 @@ git commit -m "feat: отрисовка спрайтовых обликов ма
 
 ---
 
-## Задача 7: Переключатель обликов в панели деталей
+## Task 7: Переключатель обликов в панели деталей
 
 **Files:**
 - Create: `Sources/CodeCatApp/SkinPickerView.swift`
@@ -1473,7 +1473,7 @@ git commit -m "feat: переключатель обликов в панели �
 
 ---
 
-## Задача 8: Сборка приложения и документация
+## Task 8: Сборка приложения и документация
 
 **Files:**
 - Modify: `Makefile`
