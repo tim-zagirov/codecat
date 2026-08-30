@@ -347,4 +347,46 @@ final class HooksInstallerTests: XCTestCase {
         XCTAssertTrue(HooksInstaller.isInstalled(in: installed, hookCommand: cmd),
                       "isInstalled must find our command even when the event array has foreign junk")
     }
+
+    // MARK: - readSettings (Important 1)
+
+    /// Pins Important 1: a missing settings file (first-ever install) must read as
+    /// `.notFound`, which the caller then treats as an empty document — the correct,
+    /// safe behavior for a first install.
+    func testReadSettingsNotFoundWhenFileMissing() {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = dir.appendingPathComponent("settings.json")
+        XCTAssertEqual(HooksInstaller.readSettings(at: url), .notFound)
+    }
+
+    func testReadSettingsReturnsDataForReadableFile() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("settings.json")
+        let payload = "{\"model\":\"opus\"}".data(using: .utf8)!
+        try payload.write(to: url)
+        XCTAssertEqual(HooksInstaller.readSettings(at: url), .data(payload))
+    }
+
+    /// Pins Important 1's core distinction: a file that *exists* but cannot be read as
+    /// data (here: a directory sitting at the settings path, which `fileExists` reports
+    /// as present but `Data(contentsOf:)` cannot read) must come back as `.unreadable`,
+    /// never silently collapse into the same `nil`/empty-document treatment as
+    /// `.notFound` — collapsing the two is exactly what let a transient read failure
+    /// destroy a user's real settings file.
+    func testReadSettingsUnreadableWhenPathExistsButCannotBeReadAsData() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        // A directory at the settings path: `fileExists` is true, but `Data(contentsOf:)`
+        // fails — the same shape of failure as unreadable permissions, without needing a
+        // chmod that might behave differently across CI environments/users (e.g. root).
+        let url = dir.appendingPathComponent("settings.json")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        XCTAssertEqual(HooksInstaller.readSettings(at: url), .unreadable)
+    }
 }
