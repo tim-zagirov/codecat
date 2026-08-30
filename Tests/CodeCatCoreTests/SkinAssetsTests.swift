@@ -30,6 +30,10 @@ final class SkinAssetsTests: XCTestCase {
     }
 
     func testSkinsDirectoryExists() {
+        // Printed so the Makefile's post-build guard can grep for it: that is the
+        // only way to tell "checked the assembled .app" apart from "CODECAT_SKINS_DIR
+        // didn't reach this test and it silently fell back to the source tree".
+        print("SKINS DIR: \(skinsDirectory.path)")
         XCTAssertTrue(FileManager.default.fileExists(atPath: skinsDirectory.path),
                       "Ассеты обликов не найдены: \(skinsDirectory.path)")
     }
