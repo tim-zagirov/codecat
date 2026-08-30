@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// One process, reduced to what routing needs. Kept separate from the syscalls that
 /// produce it so ancestry logic can be tested on a modelled tree.
@@ -93,5 +94,44 @@ public enum ProcessTree {
             current = snapshot.ppid
         }
         return nil
+    }
+}
+
+/// `ProcessTreeProviding` backed by `sysctl(KERN_PROC_PID)` plus `proc_pidpath`.
+///
+/// A few syscalls and no subprocesses: this runs inside `codecat-hook`, which
+/// Claude Code blocks on, so shelling out to `ps` would be paying milliseconds of
+/// process spawn on every hook event.
+public struct LiveProcessTree: ProcessTreeProviding {
+    public init() {}
+
+    public func snapshot(for pid: pid_t) -> ProcessSnapshot? {
+        guard pid > 0 else { return nil }
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        var kp = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        let rc = sysctl(&mib, 4, &kp, &size, nil, 0)
+        // A dead pid returns 0 with size 0 rather than an error.
+        guard rc == 0, size > 0, kp.kp_proc.p_pid == pid else { return nil }
+        return ProcessSnapshot(pid: pid,
+                               ppid: kp.kp_eproc.e_ppid,
+                               executablePath: Self.executablePath(for: pid),
+                               tty: Self.ttyName(kp.kp_eproc.e_tdev))
+    }
+
+    private static func executablePath(for pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard length > 0 else { return nil }
+        return String(cString: buffer)
+    }
+
+    /// `e_tdev` is the controlling terminal's device number, or `NODEV` (-1) when
+    /// the process has none — a GUI-launched session.
+    private static func ttyName(_ device: dev_t) -> String? {
+        // NODEV is -1; skip invalid devices
+        guard device != -1, device != 0 else { return nil }
+        guard let name = devname(device, S_IFCHR) else { return nil }
+        return "/dev/" + String(cString: name)
     }
 }

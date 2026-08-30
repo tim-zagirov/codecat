@@ -130,4 +130,27 @@ final class ProcessTreeTests: XCTestCase {
         ]))
         XCTAssertEqual(ProcessTree.tty(startingAt: 700, provider: tree), "/dev/ttys004")
     }
+
+    // MARK: - Live process tree backed by sysctl
+
+    /// The syscall layer cannot be modelled, so it is pinned against the one process
+    /// whose facts the test already knows: itself.
+    func testLiveTreeReportsThisProcessCorrectly() {
+        let snapshot = LiveProcessTree().snapshot(for: getpid())
+        XCTAssertEqual(snapshot?.pid, getpid())
+        XCTAssertEqual(snapshot?.ppid, getppid())
+        XCTAssertNotNil(snapshot?.executablePath)
+        XCTAssertTrue(snapshot?.executablePath?.hasPrefix("/") == true)
+    }
+
+    func testLiveTreeReturnsNilForAPidThatCannotExist() {
+        XCTAssertNil(LiveProcessTree().snapshot(for: -1))
+    }
+
+    /// Walking from the test process must reach launchd's children without hanging
+    /// or crashing, whatever the real machine's tree looks like.
+    func testWalkingTheRealTreeTerminates() {
+        _ = ProcessTree.host(startingAt: getpid(), provider: LiveProcessTree())
+        _ = ProcessTree.tty(startingAt: getpid(), provider: LiveProcessTree())
+    }
 }
