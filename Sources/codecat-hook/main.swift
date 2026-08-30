@@ -13,8 +13,8 @@ if !input.isEmpty {
     let fields = HookPayload.RouteFields(
         hostPID: host?.pid,
         hostBundlePath: host?.bundlePath,
-        // Reading the bundle's Info.plist is a single small file read; the terminal
-        // recognition in `SessionRouter` keys off the identifier, not the file name.
+        // Чтение Info.plist бандла — одно обращение к маленькому файлу; опознание
+        // терминала идёт по идентификатору, а не по имени файла бандла.
         hostBundleID: host.flatMap { Bundle(path: $0.bundlePath)?.bundleIdentifier },
         tty: ProcessTree.tty(startingAt: getpid(), provider: tree))
     HookSocketClient.send(HookPayload.enriched(input, with: fields), to: CodeCatPaths.socketURL)
