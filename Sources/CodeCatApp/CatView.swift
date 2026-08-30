@@ -57,7 +57,7 @@ struct CatView: View {
             } else {
                 sittingCat
             }
-            badge
+            MascotBadge(sessionCount: sessionCount, status: status)
         }
         .frame(width: MascotLayout.canvasSize, height: MascotLayout.canvasSize)
     }
@@ -216,40 +216,5 @@ struct CatView: View {
         }
         .stroke(dark, lineWidth: 1.6)
         .frame(width: 8, height: 6)
-    }
-
-    // MARK: - Badge
-
-    private var badge: some View {
-        Group {
-            if sessionCount > 0 && !isSleeping {
-                if isWaiting {
-                    // Waiting stays the most attention-grabbing state: opaque red,
-                    // plus a gentle pulse so it reads as needing input.
-                    badgeContent(fill: Color(red: 0.86, green: 0.15, blue: 0.15))
-                        .phaseAnimator([false, true]) { content, pulsePhase in
-                            content.scaleEffect(pulsePhase ? 1.15 : 1.0)
-                        } animation: { _ in .easeInOut(duration: 1.0) }
-                } else {
-                    badgeContent(fill: Color(white: 0.32))
-                }
-            }
-        }
-    }
-
-    /// Opaque fill (never `.opacity(...)`) plus a light stroke so the badge stays
-    /// legible whether the desktop behind the transparent panel is light or dark.
-    /// A `Capsule` renders as a circle for the single-digit case (equal width and
-    /// height) and grows horizontally for two- or three-digit counts instead of
-    /// clipping a fixed-size circle.
-    private func badgeContent(fill: Color) -> some View {
-        Text("\(sessionCount)")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(.white)
-            .padding(.horizontal, 4)
-            .frame(minWidth: 18, minHeight: 18)
-            .background(Capsule().fill(fill))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.9), lineWidth: 1.5))
-            .offset(x: 34, y: -34)
     }
 }
