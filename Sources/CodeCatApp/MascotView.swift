@@ -13,6 +13,10 @@ struct MascotView: View {
     let skin: MascotSkin
     let status: AggregateStatus
     let sessionCount: Int
+    /// Размеры для острова. Не заданы — канва и нормировка плавающего маскота.
+    var drawingSize: CGSize?
+    var canvasSize: CGSize?
+    var showsBadge: Bool = true
     /// Called when a sprite skin could not be loaded, so the app can report it.
     var onLoadFailure: (MascotSkin) -> Void = { _ in }
 
@@ -38,7 +42,9 @@ struct MascotView: View {
     @ViewBuilder
     private var content: some View {
         if let loaded = SpriteSheetStore.shared.load(skin) {
-            SpriteMascotView(loaded: loaded, status: status, sessionCount: sessionCount)
+            SpriteMascotView(loaded: loaded, status: status, sessionCount: sessionCount,
+                             showsBadge: showsBadge,
+                             drawingSize: drawingSize, canvasSize: canvasSize)
         } else {
             CatView(status: status, sessionCount: sessionCount)
         }
