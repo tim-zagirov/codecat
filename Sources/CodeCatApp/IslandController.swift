@@ -65,6 +65,11 @@ final class IslandController: NSObject, MascotPresenting {
         }
         let panel = islandPanel ?? makePanel()
         islandPanel = panel
+        if let hosting = panel.contentView as? NSHostingView<IslandView> {
+            hosting.rootView = content(for: geometry)
+        } else {
+            panel.contentView = NSHostingView(rootView: content(for: geometry))
+        }
         panel.setFrame(geometry.island, display: true)
         panel.orderFrontRegardless()
     }
@@ -76,15 +81,17 @@ final class IslandController: NSObject, MascotPresenting {
     private func makePanel() -> OverlayPanel {
         let panel = OverlayPanel(contentRect: .zero, allowsKey: false)
         panel.level = Self.islandLevel
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
         panel.acceptsMouseMovedEvents = true
-        // Плашка пока пустая: содержимое приезжает следующей задачей.
-        panel.contentView = NSHostingView(rootView:
-            RoundedRectangle(cornerRadius: IslandLayout.cornerRadius)
-                .fill(Color.black)
-                .ignoresSafeArea())
         return panel
+    }
+
+    private func content(for geometry: Geometry) -> IslandView {
+        IslandView(appState: appState,
+                   notchWidth: geometry.notch.width,
+                   leftWingWidth: geometry.leftWingWidth,
+                   rightWingWidth: geometry.rightWingWidth,
+                   spriteSize: geometry.spriteSize,
+                   height: geometry.island.height)
     }
 
     /// Экран с вырезом и вся производная геометрия. `nil` — острову негде жить.
