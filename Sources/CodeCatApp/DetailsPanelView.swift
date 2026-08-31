@@ -59,6 +59,9 @@ struct DetailsPanelView: View {
             }
 
             Divider()
+            SkinPickerView(appState: appState)
+
+            Divider()
             Toggle("Не давать маку спать", isOn: $appState.keepAwakeEnabled)
             Toggle("Режим закрытой крышки", isOn: Binding(
                 get: { appState.lidModeEnabled },
