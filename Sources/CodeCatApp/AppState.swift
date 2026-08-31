@@ -9,7 +9,7 @@ import CodeCatCore
 /// `.main` before invoking its callback, and the maintenance `Timer` is scheduled
 /// on the main run loop.
 final class AppState: ObservableObject {
-    let store = SessionStore()
+    let store: SessionStore
     let awayLog = AwayLog()
     let powerManager: PowerManager
     let lidController: LidSleepController
@@ -90,6 +90,15 @@ final class AppState: ObservableObject {
         // tile selected in `SkinPickerView` (it compares `skin.id == skinID`) until
         // the user happens to tap one, since `didSet` does not fire on `init`.
         skinID = MascotSkins.skin(withID: defaults.string(forKey: "mascotSkin") ?? MascotSkins.default.id).id
+
+        // Read once at startup (see the design spec): a route recorded by a hook
+        // before this launch is what makes a session the transcript watcher
+        // re-discovers after a restart clickable again, with its real `startedAt`.
+        // A missing or corrupt file yields an empty cache silently — nothing here
+        // needs to branch on that; `SessionRouteCache.load` already handles it.
+        let routeCache = SessionRouteCache(url: CodeCatPaths.routeCacheURL)
+        routeCache.load()
+        store = SessionStore(routeCache: routeCache)
 
         jumpExecutor = SystemJumpExecutor()
         powerManager = PowerManager(
