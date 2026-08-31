@@ -14,21 +14,36 @@ struct SkinPickerView: View {
     /// Previews are small and there are eight of them animating at once, so their
     /// frame rate is capped well below the mascot's own.
     private let previewFPS: Double = 4
-    private let previewSize: CGFloat = 34
+
+    @Environment(\.menuStyle) private var style
+    /// Облик под курсором. Ячейка без ответа на наведение читается как картинка,
+    /// а не как то, на что можно нажать.
+    @State private var hoveredSkin: String?
+
+    private var cell: CGSize { style.cellSize }
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.fixed(previewSize), spacing: 8), count: 4)
+        Array(repeating: GridItem(.fixed(cell.width), spacing: style.cellSpacing), count: 4)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Облик").font(.system(size: 12, weight: .medium))
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+            header
+            LazyVGrid(columns: columns, alignment: .leading, spacing: style.cellSpacing) {
                 ForEach(MascotSkins.all) { skin in
                     preview(skin)
                 }
             }
             credits
+        }
+    }
+
+    @ViewBuilder
+    private var header: some View {
+        if style.separator == nil {
+            Text("Облик").font(.system(size: 12, weight: .medium))
+        } else {
+            MenuSectionHeader(title: "Облик")
         }
     }
 
@@ -41,14 +56,23 @@ struct SkinPickerView: View {
         // path additionally passes `showsBadge: false` since the badge there is a
         // separate view, not gated on the count. At 34pt the badge would cover the
         // cat either way.
+        let isHovered = hoveredSkin == skin.id
+        // Масштаб берётся по меньшей стороне ячейки: у острова она шире, чем
+        // высока, и делить на ширину значило бы обрезать кота сверху и снизу.
         return previewContent(skin)
-            .scaleEffect(previewSize / MascotLayout.canvasSize)
-            .frame(width: previewSize, height: previewSize)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
+            .scaleEffect(min(cell.width, cell.height) / MascotLayout.canvasSize)
+            .frame(width: cell.width, height: cell.height)
+            .background(RoundedRectangle(cornerRadius: style.cellRadius)
+                .fill(isSelected ? style.cellSelected : (isHovered ? style.cellHover : style.cellFill)))
             .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(isSelected ? Color.accentColor : Color.clear, lineWidth: 2))
+                RoundedRectangle(cornerRadius: style.cellRadius)
+                    .strokeBorder(isSelected ? style.selectionBorder : Color.clear,
+                                  lineWidth: style.selectionBorderWidth))
             .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { hoveredSkin = skin.id }
+                else if hoveredSkin == skin.id { hoveredSkin = nil }
+            }
             .onTapGesture { appState.skinID = skin.id }
             .help(skin.name)
             .accessibilityLabel(skin.name)

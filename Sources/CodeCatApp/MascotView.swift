@@ -13,6 +13,10 @@ struct MascotView: View {
     let skin: MascotSkin
     let status: AggregateStatus
     let sessionCount: Int
+    /// Размеры для острова. Не заданы — канва и нормировка плавающего маскота.
+    var drawingSize: CGSize?
+    var canvasSize: CGSize?
+    var showsBadge: Bool = true
     /// Called when a sprite skin could not be loaded, so the app can report it.
     var onLoadFailure: (MascotSkin) -> Void = { _ in }
 
@@ -38,9 +42,43 @@ struct MascotView: View {
     @ViewBuilder
     private var content: some View {
         if let loaded = SpriteSheetStore.shared.load(skin) {
-            SpriteMascotView(loaded: loaded, status: status, sessionCount: sessionCount)
+            SpriteMascotView(loaded: loaded, status: status, sessionCount: sessionCount,
+                             showsBadge: showsBadge,
+                             drawingSize: drawingSize, canvasSize: canvasSize)
         } else {
-            CatView(status: status, sessionCount: sessionCount)
+            fallback
+        }
+    }
+
+    /// Аварийная отрисовка: у `CatView` нет своего `showsBadge` — он рисует
+    /// `MascotBadge` безусловно, — поэтому бейдж гасится здесь, на уровне ветки,
+    /// где `MascotView` уже знает про `showsBadge`, а не правкой контракта
+    /// `CatView` (у плавающего кота бейдж обязан остаться на месте). `MascotBadge`
+    /// рисует себя только при `sessionCount > 0` (см. её тело), так что нулевой
+    /// счётчик надёжно её выключает — тем же приёмом, каким уже пользуется
+    /// `SkinPickerView` для своих превью 34pt.
+    @ViewBuilder
+    private var fallback: some View {
+        let cat = CatView(status: status, sessionCount: showsBadge ? sessionCount : 0)
+        if let canvasSize {
+            // `CatView` рисует себя на квадратной канве `MascotLayout.canvasSize`
+            // (128pt) — без сжатия в островном крыле высотой 32pt он показался бы
+            // обрезанным фрагментом. Тот же приём, что и у `SkinPickerView`
+            // (`.scaleEffect(previewSize / MascotLayout.canvasSize)`), только
+            // размер берётся из уже переданного `canvasSize`. Масштаб — по меньшей
+            // стороне, а не по высоте: запасной `spriteSize` из `geometry()`
+            // (24×24) даёт неквадратную канву 24×32, и масштаб по высоте растянул
+            // бы квадратного кота до 32×32 — на 4pt шире рамки с каждой стороны,
+            // сегодня незаметно только потому, что `wingPadding` (8pt) это
+            // проглатывает. Масштаб по меньшей стороне держит кота внутри рамки по
+            // построению, а не по совпадению констант. Когда `canvasSize` не
+            // задан (плавающий кот), эта ветка не выполняется — поведение не
+            // меняется ни на пиксель.
+            cat
+                .scaleEffect(min(canvasSize.width, canvasSize.height) / MascotLayout.canvasSize)
+                .frame(width: canvasSize.width, height: canvasSize.height)
+        } else {
+            cat
         }
     }
 }
