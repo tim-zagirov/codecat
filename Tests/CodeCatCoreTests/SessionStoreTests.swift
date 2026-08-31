@@ -554,3 +554,113 @@ extension SessionStoreTests {
         assertInvariant(mixedWorkingAndDone)
     }
 }
+
+extension SessionStoreTests {
+
+    // MARK: - Route cache integration
+    //
+    // `SessionRouteCache(url: nil)` is in-memory only (see its doc comment): these
+    // tests seed/read it directly and never touch disk, keeping `SessionStore`
+    // testable on fixed values the same way the rest of this file is.
+
+    /// The whole point of the cache: a session the transcript watcher discovers
+    /// after a CodeCat restart (no hook data at all) must regain its route *and*
+    /// its real `startedAt` from a cache entry left by the hook before the restart.
+    func testWatcherDiscoveredSessionGainsRouteAndStartedAtFromCache() {
+        let cache = SessionRouteCache()
+        let realStart = t0.addingTimeInterval(-3600) // сессия шла час до перезапуска CodeCat
+        cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
+                    startedAt: realStart, now: realStart)
+
+        let store = SessionStore(routeCache: cache)
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "правит файл", timestamp: t0))
+
+        let session = store.sessions["s1"]
+        XCTAssertEqual(session?.hostPID, 4242)
+        XCTAssertEqual(session?.hostBundlePath, "/Applications/Claude.app")
+        XCTAssertEqual(session?.hostBundleID, "com.anthropic.claudefordesktop")
+        XCTAssertEqual(session?.tty, "/dev/ttys001")
+        XCTAssertEqual(session?.startedAt, realStart, "должен унаследовать реальное время старта, а не момент обнаружения вотчером")
+    }
+
+    /// Same substitution, but the first sighting comes through the hook (e.g. the
+    /// hook fires `SessionStart` for a session CodeCat already has a cached route
+    /// for — a stale cache entry from before this exact restart).
+    func testHookDiscoveredSessionGainsMissingRouteFieldsFromCache() {
+        let cache = SessionRouteCache()
+        let realStart = t0.addingTimeInterval(-120)
+        cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
+                    startedAt: realStart, now: realStart)
+
+        let store = SessionStore(routeCache: cache)
+        // A hook event carrying no route fields at all (older hook binary) — the
+        // cache is the only source of the route for a session this store has
+        // never seen before.
+        store.apply(hook: HookEvent(hookEventName: "Notification", sessionId: "s1",
+                                    cwd: "/proj", message: "нужно разрешение"), now: t0)
+
+        let session = store.sessions["s1"]
+        XCTAssertEqual(session?.hostPID, 4242)
+        XCTAssertEqual(session?.tty, "/dev/ttys001")
+        XCTAssertEqual(session?.startedAt, realStart)
+    }
+
+    /// Route fields the hook brings must reach the cache (so a *later* restart can
+    /// restore them) — and a subsequent event that carries none of them must not
+    /// clobber what the cache already has, mirroring the never-clobber rule
+    /// `SessionStore` already enforces on the in-memory `Session`.
+    func testHookFieldsAreRecordedIntoCacheAndNotClobberedByALaterEventWithoutThem() {
+        let cache = SessionRouteCache()
+        let store = SessionStore(routeCache: cache)
+        store.apply(hook: routedEvent("SessionStart"), now: t0)
+        XCTAssertEqual(cache.route(for: "s1")?.hostPID, 4242)
+        XCTAssertEqual(cache.route(for: "s1")?.startedAt, t0)
+
+        // A later event for the same session with no route fields at all.
+        store.apply(hook: HookEvent(hookEventName: "Notification", sessionId: "s1",
+                                    cwd: "/tmp/project", message: "permission"),
+                    now: t0.addingTimeInterval(5))
+        XCTAssertEqual(cache.route(for: "s1")?.hostPID, 4242,
+                       "поле, уже известное кэшу, не должно затираться событием без маршрута")
+        XCTAssertEqual(cache.route(for: "s1")?.hostBundlePath, "/Applications/Claude.app")
+    }
+
+    /// `SessionEnd` must drop the cache entry — the session is over, nothing to
+    /// remember for a future restart.
+    func testSessionEndRemovesTheCacheEntry() {
+        let cache = SessionRouteCache()
+        let store = SessionStore(routeCache: cache)
+        store.apply(hook: routedEvent("SessionStart"), now: t0)
+        XCTAssertNotNil(cache.route(for: "s1"))
+        store.apply(hook: hook("SessionEnd"), now: t0.addingTimeInterval(10))
+        XCTAssertNil(cache.route(for: "s1"))
+    }
+
+    /// Pins the whole design: a cache full of routes, on its own, must never
+    /// produce a session. Sessions only ever come from live activity — a hook
+    /// event or a transcript line — never from what the cache happens to hold.
+    func testPopulatedCacheWithNoLiveActivityProducesNoSessions() {
+        let cache = SessionRouteCache()
+        cache.record(sessionId: "ghost", hostPID: 9999, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys002",
+                    startedAt: t0.addingTimeInterval(-1000), now: t0.addingTimeInterval(-1000))
+        let store = SessionStore(routeCache: cache)
+        XCTAssertTrue(store.ordered.isEmpty)
+        XCTAssertEqual(store.aggregate, .sleeping)
+    }
+
+    /// A session id the cache has never heard of must not blow up substitution —
+    /// it simply gets no route, same as today without a cache at all.
+    func testUnknownSessionIdInCacheLeavesSessionWithoutARoute() {
+        let cache = SessionRouteCache()
+        cache.record(sessionId: "some-other-session", hostPID: 1, hostBundlePath: "/a",
+                    hostBundleID: "a", tty: "/dev/t1", startedAt: t0, now: t0)
+        let store = SessionStore(routeCache: cache)
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "думает", timestamp: t0))
+        XCTAssertNil(store.sessions["s1"]?.hostPID)
+    }
+}
