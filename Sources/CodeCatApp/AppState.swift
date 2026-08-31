@@ -44,8 +44,8 @@ final class AppState: ObservableObject {
     @Published var hooksInstalled = false
 
     /// Id of the selected skin. Persisted so the choice survives a restart; read
-    /// back through `MascotSkins.skin(withID:)`, which falls back to the drawn cat
-    /// for anything it does not recognise.
+    /// back through `MascotSkins.skin(withID:)`, which falls back to
+    /// `MascotSkins.default` for anything it does not recognise.
     @Published var skinID: String {
         didSet { UserDefaults.standard.set(skinID, forKey: "mascotSkin") }
     }
@@ -63,9 +63,11 @@ final class AppState: ObservableObject {
 
     /// Skins whose failure alert has already been shown. Only the *alert* is
     /// once-per-launch: the view that renders the mascot is rebuilt constantly, and
-    /// an alert on every rebuild would be unusable. The fallback to the drawn cat in
+    /// an alert on every rebuild would be unusable. The revert to the default skin in
     /// `reportSkinLoadFailure` is unconditional and runs every time, regardless of
-    /// this set.
+    /// this set — the drawn cat is not involved here; it is only `MascotView`'s
+    /// in-place render fallback for a single failed frame, not something `AppState`
+    /// switches to.
     private var reportedSkinFailures: Set<String> = []
 
     private var lidHelperInstallInFlight = false
@@ -74,13 +76,20 @@ final class AppState: ObservableObject {
         let defaults = UserDefaults.standard
         defaults.register(defaults: [
             "keepAwake": true, "lidMode": false, "sounds": false, "showMascot": true,
-            "mascotSkin": "drawn",
+            "mascotSkin": MascotSkins.default.id,
         ])
         keepAwakeEnabled = defaults.bool(forKey: "keepAwake")
         lidModeEnabled = defaults.bool(forKey: "lidMode")
         soundsEnabled = defaults.bool(forKey: "sounds")
         showMascot = defaults.bool(forKey: "showMascot")
-        skinID = defaults.string(forKey: "mascotSkin") ?? MascotSkins.drawn.id
+        // Resolve through `MascotSkins.skin(withID:)` rather than trusting the raw
+        // stored string: an id from an older build (e.g. the retired `"drawn"`) must
+        // migrate to the default skin here, at read time, so `skinID` and `skin.id`
+        // never disagree. Assigning the raw value directly would leave a stale id
+        // sitting in `skinID` — rendering the default skin correctly, but with no
+        // tile selected in `SkinPickerView` (it compares `skin.id == skinID`) until
+        // the user happens to tap one, since `didSet` does not fire on `init`.
+        skinID = MascotSkins.skin(withID: defaults.string(forKey: "mascotSkin") ?? MascotSkins.default.id).id
 
         jumpExecutor = SystemJumpExecutor()
         powerManager = PowerManager(
@@ -439,27 +448,40 @@ final class AppState: ObservableObject {
         alert.runModal()
     }
 
-    /// Reports a skin whose sheets could not be read, and switches back to the drawn
-    /// cat. Told with an alert rather than a line in the details panel because the
-    /// panel may well be closed — this project's rule is that there are no silent
-    /// refusals.
+    /// Reports a skin whose sheets could not be read, and switches back to the
+    /// default skin. Told with an alert rather than a line in the details panel
+    /// because the panel may well be closed — this project's rule is that there are
+    /// no silent refusals.
     ///
     /// Only the alert is once per launch (see `reportedSkinFailures`'s doc comment);
-    /// the fallback to the drawn cat runs unconditionally, every time this is
+    /// the revert to `MascotSkins.default` runs unconditionally, every time this is
     /// called. Selecting the same broken skin a second time still needs `skinID`
     /// reverted and persisted — otherwise the second selection would return at the
     /// old guard before reverting, leaving `skinID` pointing at a skin that fails to
     /// load, silently persisted to `UserDefaults`, with the picker's selection
     /// border drawn around a skin the mascot isn't actually showing.
+    ///
+    /// If `MascotSkins.default` is itself the broken skin, this still terminates
+    /// rather than looping: the revert assigns `skinID` its *current* value (`skin.id
+    /// == MascotSkins.default.id` already), so `didSet` persists the same string and
+    /// nothing about the view's `skin.id` changes. `MascotView`'s `.task(id: skin.id)`
+    /// only restarts when that id actually changes, so it does not re-fire and call
+    /// back in here — the `reportedSkinFailures` guard below is a second, independent
+    /// backstop against repeating the alert, not what actually stops the recursion.
     func reportSkinLoadFailure(_ skin: MascotSkin) {
-        if skinID == skin.id { skinID = MascotSkins.drawn.id }
+        if skinID == skin.id { skinID = MascotSkins.default.id }
         guard reportedSkinFailures.insert(skin.id).inserted else { return }
         // Same activation dance as `presentJumpAlert`: CodeCat is an accessory app
         // and its windows do not come forward on their own.
         NSApp.activate()
         let alert = NSAlert()
         alert.messageText = "Не удалось загрузить облик «\(skin.name)»"
-        alert.informativeText = "Файлы набора не читаются. Вернул нарисованного кота."
+        // Must not claim which skin ended up on screen: if the whole `Skins`
+        // directory is missing, the default skin's own sheets fail to load too, and
+        // the user is looking at `CatView`'s drawn-cat fallback, not the default
+        // skin. Naming only the skin that failed and saying "мы переключились" keeps
+        // this true in both cases.
+        alert.informativeText = "Файлы набора не читаются. Переключились на другой облик."
         alert.window.level = .modalPanel
         alert.window.orderFrontRegardless()
         alert.runModal()

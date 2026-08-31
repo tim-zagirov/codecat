@@ -41,8 +41,6 @@ public enum SkinLicense: Equatable, Sendable {
     case ccBy4
     /// Elthen publishes no formal licence — the terms are the author's own words.
     case authorTerms(summary: String)
-    /// The hand-drawn cat: ours, no third-party terms involved.
-    case builtIn
 
     public var requiresAttribution: Bool {
         if case .ccBy4 = self { return true }
@@ -74,17 +72,16 @@ public struct MascotSkin: Equatable, Sendable, Identifiable {
     public let name: String
     public let author: String
     public let license: SkinLicense
-    /// The itch.io page the sprites came from; nil for the drawn cat, which has no
-    /// upstream source to link to (it was drawn for CodeCat, not downloaded).
-    public let sourceURL: String?
-    /// Directory holding the sheets inside the app's resources; nil for the drawn cat.
-    public let directory: String?
+    /// The itch.io page the sprites came from.
+    public let sourceURL: String
+    /// Directory holding the sheets inside the app's resources.
+    public let directory: String
     /// 50 for LuizMelo, 32 for Elthen, 16 for mxmaze.
     public let frameSize: Int
     public let animations: [AggregateStatusKey: SpriteAnimation]
 
     public init(id: String, name: String, author: String, license: SkinLicense,
-                sourceURL: String?, directory: String?, frameSize: Int,
+                sourceURL: String, directory: String, frameSize: Int,
                 animations: [AggregateStatusKey: SpriteAnimation]) {
         self.id = id
         self.name = name
@@ -95,9 +92,6 @@ public struct MascotSkin: Equatable, Sendable, Identifiable {
         self.frameSize = frameSize
         self.animations = animations
     }
-
-    /// Whether this skin is drawn from sprite sheets (as opposed to the hand-drawn cat).
-    public var isSpriteBased: Bool { directory != nil }
 
     public func animation(for key: AggregateStatusKey) -> SpriteAnimation? {
         animations[key]
