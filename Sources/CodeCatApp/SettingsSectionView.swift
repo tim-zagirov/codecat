@@ -8,6 +8,21 @@ struct SettingsSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text("Вид").font(.system(size: 12, weight: .medium))
+            Picker("Вид", selection: $appState.displayMode) {
+                ForEach(MascotDisplayMode.allCases, id: \.self) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if appState.displayMode == .island {
+                Toggle("Прятать остров, когда сессий нет", isOn: $appState.islandHidesWhenIdle)
+            }
+
+            Divider()
+
             SkinPickerView(appState: appState)
 
             Divider()
