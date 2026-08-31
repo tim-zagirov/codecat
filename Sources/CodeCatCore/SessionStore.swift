@@ -84,7 +84,16 @@ public final class SessionStore: ObservableObject {
     public func apply(hook event: HookEvent, now: Date) {
         switch event.hookEventName {
         case "SessionStart":
-            upsert(event: event, now: now) { s in
+            // A genuine new run (source anything but "compact") resets a stale
+            // cached startedAt — see SessionRouteCache.merged's doc comment. Missing
+            // or unknown `source` also resets: that is the safe default, since
+            // SessionStart never fires merely because CodeCat restarted, so there is
+            // no legitimate case where an unrecognised source means "preserve this".
+            // SessionStart also fires mid-session after auto-compaction
+            // (source == "compact") — resetting there would break the duration of a
+            // session that never stopped, so that one case is excluded.
+            let resetStartedAt = event.source != "compact"
+            upsert(event: event, now: now, resetStartedAt: resetStartedAt) { s in
                 s.status = .working
                 s.activityDescription = "начинает работу"
             }
@@ -199,11 +208,12 @@ public final class SessionStore: ObservableObject {
         }
     }
 
-    private func upsert(event: HookEvent, now: Date,
+    private func upsert(event: HookEvent, now: Date, resetStartedAt: Bool = false,
                         _ mutate: (inout Session) -> Void) {
         var s = sessions[event.sessionId] ?? newSession(
             id: event.sessionId, projectPath: event.cwd ?? "",
-            activityDescription: "", fallbackStartedAt: now, lastActivity: now)
+            activityDescription: "", fallbackStartedAt: now, lastActivity: now,
+            resetStartedAt: resetStartedAt)
         if let cwd = event.cwd, !cwd.isEmpty { s.projectPath = cwd }
         s.lastActivity = now
         // Only ever fill the route in, never clear it: a `Notification` from an older
@@ -228,11 +238,27 @@ public final class SessionStore: ObservableObject {
         // against whatever it already has, so a partial payload here (some
         // fields present, some not) still cannot blank out a field the cache
         // already knows.
+        //
+        // Known limitation: `s.startedAt` passed below can be a value `newSession`
+        // set from `fallbackStartedAt` — the moment the transcript watcher first
+        // discovered this session, not its real start — when no cached route
+        // existed yet and this is the first hook event for it. Before this cache
+        // existed, that guess was recomputed fresh on every launch; now `merged`
+        // freezes whatever gets recorded first, so this particular guess can no
+        // longer self-correct on a later restart. Not fixed here — see the design
+        // spec's "За скобками" (recovering the route for a pre-CodeCat session is
+        // explicitly out of scope, and this is the same root cause: nothing tells
+        // us the watcher's discovery time isn't the true start).
         if event.hostPID != nil || event.hostBundlePath != nil
             || event.hostBundleID != nil || event.tty != nil {
+            // `resetStartedAt` must also reach the persisted entry, not just the
+            // in-memory `Session` built above — otherwise a *second* silent crash
+            // (no SessionEnd) followed by another resume within the cache's 7-day
+            // window would restore the very value we just corrected.
             routeCache?.record(
                 sessionId: event.sessionId, hostPID: s.hostPID, hostBundlePath: s.hostBundlePath,
-                hostBundleID: s.hostBundleID, tty: s.tty, startedAt: s.startedAt, now: now)
+                hostBundleID: s.hostBundleID, tty: s.tty, startedAt: s.startedAt, now: now,
+                resetStartedAt: resetStartedAt)
         }
     }
 
@@ -247,15 +273,30 @@ public final class SessionStore: ObservableObject {
     /// Shared by both `upsert` (hook path) and `apply(activity:)` (transcript
     /// watcher path): whichever one sees a session first, the substitution is
     /// identical, per the design spec's «Подстановка» test list.
+    ///
+    /// - Parameter resetStartedAt: true only for a genuine `SessionStart` (see
+    ///   `apply(hook:)`). `apply(activity:)` never passes it — a session the
+    ///   transcript watcher discovers on its own carries no such signal, and
+    ///   must keep inheriting the cache's `startedAt` exactly as before: that is
+    ///   the core case this cache exists for (a bare CodeCat restart fires no
+    ///   `SessionStart` at all).
+    ///
+    ///   Known limitation, not fixed here: for a session first seen by the
+    ///   transcript watcher with no cached route at all, `startedAt` is the
+    ///   discovery time (`fallbackStartedAt`), and once persisted by the next
+    ///   hook event, `merged` freezes that value for good — it can no longer be
+    ///   corrected retroactively the way a stale value now can on `SessionStart`.
     private func newSession(id: String, projectPath: String, activityDescription: String,
-                            fallbackStartedAt: Date, lastActivity: Date) -> Session {
+                            fallbackStartedAt: Date, lastActivity: Date,
+                            resetStartedAt: Bool = false) -> Session {
         let cached = routeCache?.route(for: id)
+        let startedAt = resetStartedAt ? fallbackStartedAt : (cached?.startedAt ?? fallbackStartedAt)
         var s = Session(
             id: id,
             projectPath: projectPath,
             status: .working,
             activityDescription: activityDescription,
-            startedAt: cached?.startedAt ?? fallbackStartedAt,
+            startedAt: startedAt,
             lastActivity: lastActivity)
         if let cached {
             s.hostPID = cached.hostPID
