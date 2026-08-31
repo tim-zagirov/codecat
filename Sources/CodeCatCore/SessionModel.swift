@@ -59,10 +59,16 @@ public struct HookEvent: Codable, Equatable, Sendable {
     public let hostBundlePath: String?
     public let hostBundleID: String?
     public let tty: String?
+    /// Claude Code's own field on `SessionStart`, documented values `startup`,
+    /// `resume`, `clear`, `compact`. Confirmed by capturing a real payload from a
+    /// live `claude -p`/`claude --resume` run against the hook socket — see
+    /// route-cache-report.md. `nil` for every other event, and for a `SessionStart`
+    /// sent by an older Claude Code version that doesn't send it.
+    public let source: String?
 
     public init(hookEventName: String, sessionId: String, cwd: String?, message: String?,
                 hostPID: pid_t? = nil, hostBundlePath: String? = nil,
-                hostBundleID: String? = nil, tty: String? = nil) {
+                hostBundleID: String? = nil, tty: String? = nil, source: String? = nil) {
         self.hookEventName = hookEventName
         self.sessionId = sessionId
         self.cwd = cwd
@@ -71,12 +77,13 @@ public struct HookEvent: Codable, Equatable, Sendable {
         self.hostBundlePath = hostBundlePath
         self.hostBundleID = hostBundleID
         self.tty = tty
+        self.source = source
     }
 
     enum CodingKeys: String, CodingKey {
         case hookEventName = "hook_event_name"
         case sessionId = "session_id"
-        case cwd, message
+        case cwd, message, source
         case tty = "host_tty"
         case hostPID = "host_pid"
         case hostBundlePath = "host_bundle_path"
@@ -89,11 +96,19 @@ public struct TranscriptActivity: Equatable, Sendable {
     public let projectPath: String
     public let description: String
     public let timestamp: Date
+    /// Активность пришла из транскрипта субагента (`~/.claude/projects/.../subagents/agent-*.jsonl`),
+    /// а не из транскрипта самой сессии. Субагент несёт `sessionId` родительской сессии,
+    /// поэтому его работа корректно приписывается ей же — но неотличимо от собственной
+    /// работы сессии, что и путает пользователя, глядя на панель. Этот флаг даёт панели
+    /// способ отличить одно от другого, ничего не меняя в том, кому активность засчитана.
+    public let isSubagent: Bool
 
-    public init(sessionId: String, projectPath: String, description: String, timestamp: Date) {
+    public init(sessionId: String, projectPath: String, description: String, timestamp: Date,
+                isSubagent: Bool = false) {
         self.sessionId = sessionId
         self.projectPath = projectPath
         self.description = description
         self.timestamp = timestamp
+        self.isSubagent = isSubagent
     }
 }
