@@ -8,6 +8,10 @@ import CodeCatCore
 ///
 /// Комментарии про курсор и `hovered` переехали сюда дословно: они описывают
 /// нетривиальный обход поведения AppKit, а не стиль кода.
+///
+/// Всё, что здесь показано, вычисляется прямо из `appState` в момент вычисления
+/// `body`, поэтому отражает живое состояние само по себе — отдельной подписки
+/// на `store`/`awayLog` не нужно.
 struct SessionListView: View {
     @ObservedObject var appState: AppState
     var onJump: () -> Void = {}
