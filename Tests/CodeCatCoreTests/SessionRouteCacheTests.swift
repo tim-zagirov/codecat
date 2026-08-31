@@ -59,6 +59,22 @@ final class SessionRouteCacheTests: XCTestCase {
         XCTAssertEqual(merged.tty, "/dev/ttys009")
     }
 
+    /// Review item 6: `hostPID`, `hostBundlePath` and `hostBundleID` all describe one
+    /// host reading and must be replaced together. A fresh `hostPID` whose
+    /// `hostBundleID` lookup failed (e.g. `Bundle(path:)?.bundleIdentifier` returned
+    /// nil for the new host) must not inherit the *old* host's bundle id — that would
+    /// describe a route pointing at two different hosts at once.
+    func testMergedReplacesWholeHostUnitWhenNewPIDArrivesEvenIfBundleIDLookupFails() {
+        let existing = route(startedAt: t0, updatedAt: t0, pid: 1) // bundleID "com.anthropic.claudefordesktop"
+        let merged = SessionRouteCache.merged(
+            existing: existing, hostPID: 2, hostBundlePath: "/Applications/NewHost.app",
+            hostBundleID: nil, tty: nil, startedAt: t0, updatedAt: t0.addingTimeInterval(5))
+        XCTAssertEqual(merged.hostPID, 2)
+        XCTAssertEqual(merged.hostBundlePath, "/Applications/NewHost.app")
+        XCTAssertNil(merged.hostBundleID,
+                     "новый pid не должен унаследовать bundle id старого хоста")
+    }
+
     func testPrunedKeepsFreshEntriesAndDropsStaleOnes() {
         let fresh = route(startedAt: t0, updatedAt: t0.addingTimeInterval(-6 * 24 * 60 * 60))
         let stale = route(startedAt: t0, updatedAt: t0.addingTimeInterval(-8 * 24 * 60 * 60))
@@ -72,6 +88,16 @@ final class SessionRouteCacheTests: XCTestCase {
         let boundary = route(startedAt: t0, updatedAt: t0.addingTimeInterval(-7 * 24 * 60 * 60))
         let result = SessionRouteCache.pruned(["b": boundary], now: t0, maxAge: 7 * 24 * 60 * 60)
         XCTAssertNotNil(result["b"])
+    }
+
+    /// Review item 5: `now.timeIntervalSince(updatedAt) <= maxAge` is satisfied by any
+    /// *negative* interval too, so a backwards clock jump or a foreign file with a
+    /// future `updatedAt` used to survive pruning forever. Comparing the absolute
+    /// value catches this.
+    func testPrunedDropsFutureDatedEntriesBeyondMaxAge() {
+        let future = route(startedAt: t0, updatedAt: t0.addingTimeInterval(8 * 24 * 60 * 60))
+        let result = SessionRouteCache.pruned(["f": future], now: t0, maxAge: 7 * 24 * 60 * 60)
+        XCTAssertNil(result["f"], "запись с updatedAt из будущего дальше maxAge тоже должна отбрасываться")
     }
 
     func testDecodeOfCorruptJSONYieldsEmptyDictionaryWithoutThrowing() {
@@ -130,6 +156,20 @@ final class SessionRouteCacheTests: XCTestCase {
         XCTAssertNil(cache.route(for: "does-not-exist"))
     }
 
+    /// Review item 3: the doc comment says `load()`/`save()` are no-ops in the
+    /// in-memory (`url == nil`) mode, but `load()` used to fall through and wipe
+    /// `entries` regardless. A future test that seeds via `record` and calls `load`
+    /// to simulate a restart must not silently get an empty cache and pass for the
+    /// wrong reason.
+    func testLoadIsANoOpWhenURLIsNil() {
+        let cache = SessionRouteCache()
+        cache.record(sessionId: "s1", hostPID: 1, hostBundlePath: "/a", hostBundleID: "a",
+                    tty: "/dev/t1", startedAt: t0, now: t0)
+        cache.load(now: t0.addingTimeInterval(1))
+        XCTAssertNotNil(cache.route(for: "s1"),
+                        "load() без url — заявленный no-op, не должен стирать записанное через record")
+    }
+
     func testRemoveDeletesTheEntry() {
         let url = tempCacheURL()
         defer { try? FileManager.default.removeItem(at: url) }
@@ -165,15 +205,40 @@ final class SessionRouteCacheTests: XCTestCase {
     func testLoadDropsEntriesOlderThanSevenDaysButKeepsFreshOnes() {
         let url = tempCacheURL()
         defer { try? FileManager.default.removeItem(at: url) }
-        let cache = SessionRouteCache(url: url)
+        // maxAge now lives on the instance (review item 2) rather than being passed
+        // only to `load`, so both the writer (whose `record` calls prune too) and the
+        // reader need it here — a mismatched maxAge on the writer would prune "fresh"
+        // away before it ever reaches disk.
+        let cache = SessionRouteCache(url: url, maxAge: 7 * 24 * 60 * 60)
         cache.record(sessionId: "fresh", hostPID: 1, hostBundlePath: "/a", hostBundleID: "a",
                     tty: "/dev/t1", startedAt: t0, now: t0.addingTimeInterval(-6 * 24 * 60 * 60))
         cache.record(sessionId: "stale", hostPID: 2, hostBundlePath: "/b", hostBundleID: "b",
                     tty: "/dev/t2", startedAt: t0, now: t0.addingTimeInterval(-8 * 24 * 60 * 60))
 
-        let reloaded = SessionRouteCache(url: url)
-        reloaded.load(now: t0, maxAge: 7 * 24 * 60 * 60)
+        let reloaded = SessionRouteCache(url: url, maxAge: 7 * 24 * 60 * 60)
+        reloaded.load(now: t0)
         XCTAssertNotNil(reloaded.route(for: "fresh"))
         XCTAssertNil(reloaded.route(for: "stale"))
+    }
+
+    /// Review item 2: previously `pruned` only ran inside `load()`, called once at
+    /// startup — so on a machine that leaves CodeCat running for weeks, a session
+    /// that ended without `SessionEnd` stayed in `entries`, and therefore in the file
+    /// rewritten on every `Stop`, indefinitely. `record` must prune too, using the
+    /// `now` it already has — no timer needed.
+    func testRecordPrunesStaleEntriesWithoutWaitingForARestart() {
+        let url = tempCacheURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let cache = SessionRouteCache(url: url, maxAge: 7 * 24 * 60 * 60)
+        // "stale" is already older than maxAge the moment it's recorded — as if this
+        // process has been running long enough for it to have gone dead in the past.
+        cache.record(sessionId: "stale", hostPID: 1, hostBundlePath: "/a", hostBundleID: "a",
+                    tty: "/dev/t1", startedAt: t0, now: t0.addingTimeInterval(-8 * 24 * 60 * 60))
+        // A later record for a different, fresh session — no restart in between.
+        cache.record(sessionId: "fresh", hostPID: 2, hostBundlePath: "/b", hostBundleID: "b",
+                    tty: "/dev/t2", startedAt: t0, now: t0)
+        XCTAssertNil(cache.route(for: "stale"),
+                    "должен быть вычищен уже при следующей записи, не дожидаясь перезапуска")
+        XCTAssertNotNil(cache.route(for: "fresh"))
     }
 }
