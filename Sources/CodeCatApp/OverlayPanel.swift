@@ -82,6 +82,13 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        // Симметрично `IslandController.deinit`: сегодня контроллер уничтожается
+        // только после того, как вызывающий сам сделал `setVisible(false)`, так
+        // что панели тут уже не на экране и это защита на будущее, а не действующий
+        // путь. Но она должна стоять на обоих контроллерах уничтожения — иначе
+        // читалось бы так, будто один из двух случаев опаснее другого.
+        detailsPanel?.orderOut(nil)
+        catPanel?.orderOut(nil)
     }
 
     /// Shows or hides the whole overlay (cat + details). Hiding the cat also hides
