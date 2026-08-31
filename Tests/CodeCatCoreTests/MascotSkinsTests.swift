@@ -89,6 +89,10 @@ extension MascotSkinsTests {
     }
 
     func testUnknownIDFallsBackToTheDefaultSkin() {
+        // Which skin is the default is a product decision, not an implementation
+        // detail: pin it directly so a change to `MascotSkins.default` shows up here
+        // rather than being absorbed by the relative assertions below.
+        XCTAssertEqual(MascotSkins.default.id, "luizmelo-cat-1")
         XCTAssertEqual(MascotSkins.skin(withID: "мусор-из-настроек").id, MascotSkins.default.id)
         XCTAssertEqual(MascotSkins.skin(withID: "").id, MascotSkins.default.id)
         XCTAssertEqual(MascotSkins.skin(withID: "elthen-cat").id, "elthen-cat")
