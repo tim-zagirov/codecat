@@ -39,11 +39,25 @@ struct SessionListView: View {
     /// each of which lets the arrow win back via the `onChange` below.
     @State private var hovered: String?
 
+    @Environment(\.menuStyle) private var style
+
+    /// В панели заголовок сводки — обычный текст того же кегля, что и раньше; в
+    /// меню острова у секций есть свой заголовочный стиль.
+    @ViewBuilder
+    private var awayLogHeader: some View {
+        if style.separator == nil {
+            Text("Пока тебя не было").font(.system(size: 12, weight: .medium))
+        } else {
+            MenuSectionHeader(title: "Пока тебя не было")
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: style.blockSpacing) {
             if appState.store.ordered.isEmpty {
                 Text("Нет активных сессий")
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(style.secondary)
             } else {
                 ForEach(appState.store.ordered) { session in
                     sessionRow(session)
@@ -51,12 +65,14 @@ struct SessionListView: View {
             }
 
             if !appState.awayLog.lastSummary.isEmpty {
-                Divider()
-                Text("Пока тебя не было").font(.system(size: 12, weight: .medium))
+                MenuSeparator()
+                awayLogHeader
                 ForEach(appState.awayLog.lastSummary) { entry in
-                    Text("• \(entry.text)")
+                    // Маркер «• » нужен был, пока сводка шла вплотную к списку
+                    // сессий; с заголовком секции и отступом он лишний.
+                    Text(style.separator == nil ? "• \(entry.text)" : entry.text)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(style.secondary)
                 }
             }
         }
@@ -70,6 +86,33 @@ struct SessionListView: View {
             } else {
                 NSCursor.arrow.set()
             }
+        }
+    }
+
+    /// Точка статуса. На чёрном 8 pt читаются как клякса, а костыль
+    /// `.padding(.top, 5)` под неё подгонялся к трёхстрочной раскладке.
+    private var dotSize: CGFloat { style.rowLayout == .twoLine ? 6 : 8 }
+    private var dotTopInset: CGFloat { style.rowLayout == .twoLine ? 4 : 5 }
+
+    /// Вторая строка. В двухстрочной раскладке длительность уезжает сюда же и
+    /// прижимается вправо: длительности всех сессий выстраиваются в колонку у
+    /// правого края — это и есть сетка, которая держит список.
+    @ViewBuilder
+    private func secondLine(_ session: Session) -> some View {
+        let status = Text("\(label(for: session.status)) · \(session.activityDescription)")
+            .font(.system(size: 11))
+            .foregroundStyle(style.secondary)
+        if style.rowLayout == .twoLine {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                status
+                Spacer(minLength: 8)
+                Text(duration(session))
+                    .font(.system(size: 10))
+                    .foregroundStyle(style.tertiary)
+                    .monospacedDigit()
+            }
+        } else {
+            status
         }
     }
 
@@ -87,20 +130,22 @@ struct SessionListView: View {
 
         let content = HStack(alignment: .top, spacing: 8) {
             Circle().fill(color(for: session.status))
-                .frame(width: 8, height: 8)
-                .padding(.top, 5)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.projectName).font(.system(size: 12, weight: .medium))
-                Text("\(label(for: session.status)) · \(session.activityDescription)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                Text("длится \(duration(session))")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
+                .frame(width: dotSize, height: dotSize)
+                .padding(.top, dotTopInset)
+            VStack(alignment: .leading, spacing: style.lineSpacing) {
+                Text(session.projectName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(style.primary)
+                secondLine(session)
+                if style.rowLayout == .threeLine {
+                    Text("длится \(duration(session))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(style.tertiary)
+                }
                 if let reason = unavailableReason {
                     Text(JumpMessages.rowHint(for: reason))
                         .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(style.tertiary)
                 }
             }
             Spacer(minLength: 0)
@@ -108,8 +153,8 @@ struct SessionListView: View {
         .padding(.vertical, 3)
         .padding(.horizontal, 4)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(hovered == session.id ? Color.primary.opacity(0.08) : Color.clear))
+            RoundedRectangle(cornerRadius: style.rowRadius)
+                .fill(hovered == session.id ? style.rowHover : Color.clear))
         .onDisappear {
             // This row is leaving the hierarchy (its session ended and `ForEach`
             // dropped it) — possibly while still under the pointer, in which case no

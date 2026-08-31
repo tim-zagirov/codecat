@@ -18,8 +18,19 @@ public enum IslandLayout {
     /// поэтому они делаются ровно по спрайту, а не «пошире на глаз».
     public static let wingPadding: CGFloat = 8
 
-    /// Правое крыло не зависит от облика: там либо число сессий, либо точка.
-    public static let counterWingWidth: CGFloat = 34
+    /// Ширина крыла, одна и та же слева и справа.
+    ///
+    /// Крылья намеренно не подгоняются под текущий облик. Кот — объект с
+    /// габаритом, счётчик — штрих, и уравновесить их можно только геометрией:
+    /// равные крылья ставят всё чёрное пятно ровно по центру выреза при любом
+    /// облике. Раньше крыло считалось по спрайту (48–72 pt слева против
+    /// фиксированных 34 справа), и пятно уезжало от центра экрана на 9.5 pt.
+    ///
+    /// 72 = 56 (самый широкий спрайт: LuizMelo `cat-4`, 28×16 px при
+    /// обязательном целочисленном ×2) плюс отступ с обеих сторон. Облики поуже
+    /// просто получают больше воздуха вокруг кота; ширина острова при смене
+    /// облика не меняется, и в строке меню ничего не дёргается.
+    public static let wingWidth: CGFloat = 72
 
     /// Скругление нижних углов острова и меню. Верхние углы острова прямые —
     /// они упираются в кромку экрана.
@@ -38,37 +49,35 @@ public enum IslandLayout {
         return CGRect(x: auxLeft.maxX, y: auxLeft.minY, width: width, height: auxLeft.height)
     }
 
-    /// Ширина крыла под спрайт: сам спрайт плюс `wingPadding` с каждой стороны.
-    public static func wingWidth(spriteWidth: CGFloat) -> CGFloat {
-        spriteWidth + 2 * wingPadding
-    }
-
-    /// Вся плашка: вырез плюс два крыла. Высота равна высоте выреза — остров не
-    /// выходит за строку меню.
-    public static func islandFrame(notch: CGRect,
-                                   leftWingWidth: CGFloat,
-                                   rightWingWidth: CGFloat) -> CGRect {
-        CGRect(x: notch.minX - leftWingWidth,
+    /// Вся плашка: вырез плюс два одинаковых крыла. Высота равна высоте выреза —
+    /// остров не выходит за строку меню.
+    public static func islandFrame(notch: CGRect) -> CGRect {
+        CGRect(x: notch.minX - wingWidth,
                y: notch.minY,
-               width: leftWingWidth + notch.width + rightWingWidth,
+               width: 2 * wingWidth + notch.width,
                height: notch.height)
     }
 
     /// Выпадающее меню: верхняя кромка вплотную к низу острова (щель между чёрным
     /// меню и чёрным островом сразу выдала бы, что это два разных окна), центр по
     /// острову, всё подрезано по краям экрана.
+    /// Ширину меню задаёт остров, а не вызывающий: две чёрные формы разной ширины
+    /// на стыке дают видимый разрыв — обои проступают в уступах по краям. Пока
+    /// ширина принималась снаружи, разрыв можно было вернуть одним неверным
+    /// аргументом; теперь равенство ширин обеспечено по построению.
     public static func menuFrame(island: CGRect,
-                                 size: CGSize,
+                                 height: CGFloat,
                                  screenFrame: CGRect,
                                  edgeInset: CGFloat = 8) -> CGRect {
+        let width = island.width
         let lowerBound = screenFrame.minX + edgeInset
-        let upperBound = screenFrame.maxX - size.width - edgeInset
-        // Меню шире экрана: подрезка сверху и снизу противоречат друг другу,
+        let upperBound = screenFrame.maxX - width - edgeInset
+        // Меню шире экрана: подрезка слева и справа противоречат друг другу,
         // поэтому прижимаем к левому краю, а не считаем min от max.
         let x = upperBound >= lowerBound
-            ? min(max(island.midX - size.width / 2, lowerBound), upperBound)
+            ? min(max(island.midX - width / 2, lowerBound), upperBound)
             : lowerBound
-        let y = max(screenFrame.minY, island.minY - size.height)
-        return CGRect(x: x, y: y, width: size.width, height: size.height)
+        let y = max(screenFrame.minY, island.minY - height)
+        return CGRect(x: x, y: y, width: width, height: height)
     }
 }
