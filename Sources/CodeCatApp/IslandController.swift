@@ -20,6 +20,9 @@ final class IslandController: NSObject, MascotPresenting {
 
     private let appState: AppState
     private var islandPanel: OverlayPanel?
+    private var menuPanel: OverlayPanel?
+    private var menuLevel: IslandMenuLevel?
+    private var pendingClose: DispatchWorkItem?
     private var cancellables: Set<AnyCancellable> = []
     /// Последняя запрошенная видимость острова. Сегодня её никто не читает —
     /// читатель появится в задаче 8: `screensChanged()` будет звать
@@ -48,27 +51,38 @@ final class IslandController: NSObject, MascotPresenting {
             .sink { [weak self] _ in self?.handleStateChange() }
             .store(in: &cancellables)
 
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(menuDidResignKey(_:)),
+            name: NSWindow.didResignKeyNotification, object: nil)
+
         setVisible(appState.showMascot)
     }
 
     deinit {
         // Панель надо увести с экрана явно: контроллер умирает при смене режима,
         // и оставленное видимым окно пережило бы его.
+        NotificationCenter.default.removeObserver(self)
+        menuPanel?.orderOut(nil)
         islandPanel?.orderOut(nil)
     }
 
     func setVisible(_ visible: Bool) {
         isVisible = visible
         guard visible, let geometry = geometry() else {
+            hideMenu()
             islandPanel?.orderOut(nil)
             return
         }
         let panel = islandPanel ?? makePanel()
         islandPanel = panel
-        if let hosting = panel.contentView as? NSHostingView<IslandView> {
+        if let hosting = panel.contentView as? IslandHostingView {
             hosting.rootView = content(for: geometry)
         } else {
-            panel.contentView = NSHostingView(rootView: content(for: geometry))
+            let hosting = IslandHostingView(rootView: content(for: geometry))
+            hosting.onEnter = { [weak self] in self?.pointerEnteredRegion() }
+            hosting.onExit = { [weak self] in self?.pointerLeftRegion() }
+            hosting.onClick = { [weak self] in self?.islandClicked() }
+            panel.contentView = hosting
         }
         panel.setFrame(geometry.island, display: true)
         panel.orderFrontRegardless()
@@ -76,6 +90,121 @@ final class IslandController: NSObject, MascotPresenting {
 
     private func handleStateChange() {
         setVisible(appState.showMascot)
+        if menuPanel != nil, let geometry = geometry() {
+            layoutMenu(geometry: geometry)
+        }
+    }
+
+    // MARK: - Наведение и клик
+
+    /// Курсор внутри острова или внутри меню — это один регион: пока он в любом из
+    /// двух окон, короткое меню живёт. Иначе оно закрывалось бы ровно в тот момент,
+    /// когда мышь переходит с острова на меню, то есть всегда.
+    private func pointerEnteredRegion() {
+        pendingClose?.cancel()
+        pendingClose = nil
+        if menuLevel == nil { showMenu(.short) }
+    }
+
+    private func pointerLeftRegion() {
+        // Полное меню закрывается только кликом мимо: в нём тумблеры и выбор
+        // облика, и оно не должно исчезать, пока пользователь ведёт мышь к нужному
+        // переключателю.
+        guard menuLevel == .short else { return }
+        pendingClose?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            // Опрос реального положения курсора, а не доверие порядку событий.
+            // Остров и меню — два разных окна, и на переходе между ними AppKit
+            // шлёт `mouseExited` острова и `mouseEntered` меню без гарантии
+            // порядка. Полагаться на то, что `mouseEntered` успеет отменить это
+            // задание, нельзя: при обратном порядке меню закрывалось бы ровно в
+            // тот момент, когда пользователь до него дотянулся.
+            guard !self.pointerIsInsideRegion() else { return }
+            self.hideMenu()
+        }
+        pendingClose = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
+    /// Курсор внутри острова или внутри меню. `NSEvent.mouseLocation` — в тех же
+    /// экранных координатах, что и `NSWindow.frame`.
+    private func pointerIsInsideRegion() -> Bool {
+        let point = NSEvent.mouseLocation
+        if let island = islandPanel, island.isVisible, island.frame.contains(point) { return true }
+        if let menu = menuPanel, menu.isVisible, menu.frame.contains(point) { return true }
+        return false
+    }
+
+    private func islandClicked() {
+        if menuLevel == .full {
+            hideMenu()
+        } else {
+            showMenu(.full)
+        }
+    }
+
+    private func showMenu(_ level: IslandMenuLevel) {
+        guard let geometry = geometry() else { return }
+        hideMenu()
+
+        // Полное меню обязано становиться key, иначе тумблеры и кнопки внутри не
+        // получают кликов; короткому это не нужно, и ему незачем трогать фокус.
+        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 290, height: 200),
+                                 allowsKey: level == .full)
+        panel.level = Self.islandLevel
+        panel.acceptsMouseMovedEvents = true
+        let hosting = HoverHostingView(rootView: IslandMenuView(
+            appState: appState,
+            level: level,
+            onJump: { [weak self] in self?.hideMenu() }))
+        hosting.onEnter = { [weak self] in self?.pointerEnteredRegion() }
+        hosting.onExit = { [weak self] in self?.pointerLeftRegion() }
+        panel.contentView = hosting
+
+        menuPanel = panel
+        menuLevel = level
+        layoutMenu(geometry: geometry)
+
+        if level == .full {
+            panel.makeKeyAndOrderFront(nil)
+        } else {
+            panel.orderFrontRegardless()
+        }
+    }
+
+    /// Панель уводится с экрана и отпускается, а не прячется для повторного
+    /// использования: внутри полного меню живут восемь превью обликов, каждое со
+    /// своим таймером анимации, и держать их между открытиями — ровно тот расход
+    /// батареи, которого спек обликов велел избегать. Та же причина, что и у
+    /// `OverlayController.hideDetails()`.
+    private func hideMenu() {
+        pendingClose?.cancel()
+        pendingClose = nil
+        menuPanel?.orderOut(nil)
+        menuPanel = nil
+        menuLevel = nil
+    }
+
+    private func layoutMenu(geometry: Geometry) {
+        guard let panel = menuPanel,
+              let hosting = panel.contentView else { return }
+        let fitting = hosting.fittingSize
+        let size = (fitting.width > 0 && fitting.height > 0)
+            ? fitting : CGSize(width: 290, height: 200)
+        panel.setContentSize(size)
+        panel.setFrame(IslandLayout.menuFrame(island: geometry.island,
+                                              size: size,
+                                              screenFrame: geometry.screen.frame),
+                       display: true)
+    }
+
+    /// Непривязанная панель, ставшая key, может её потерять — пользователь кликнул
+    /// в другое окно или по рабочему столу. Для полного меню это «клик мимо».
+    /// Короткое меню key никогда не становится, поэтому сюда не попадает.
+    @objc private func menuDidResignKey(_ notification: Notification) {
+        guard let panel = notification.object as? NSPanel, panel === menuPanel else { return }
+        hideMenu()
     }
 
     private func makePanel() -> OverlayPanel {
@@ -112,11 +241,20 @@ final class IslandController: NSObject, MascotPresenting {
         // этот факт, а не меняет архитектуру.
         //
         // Инвариант: всякий путь сюда приходит на главном потоке. Сегодня в
-        // `geometry()` ведут ровно два вызова — из `init` (через
-        // `setVisible(appState.showMascot)`) и из `handleStateChange()` — и оба на
-        // главном потоке. Если появится третий путь не с главного потока,
-        // `assumeIsolated` не предупредит об этом, а уронит процесс — держи это в
-        // уме при правках.
+        // `geometry()` ведут пять вызовов:
+        //  - из `init` (через `setVisible(appState.showMascot)`);
+        //  - из `handleStateChange()` дважды — через `setVisible(...)` и напрямую,
+        //    при перекладке уже открытого меню под новую геометрию;
+        //  - из `pointerEnteredRegion()` (через `showMenu(.short)`) — вызывается из
+        //    `mouseEntered` хоста острова и хоста меню;
+        //  - из `islandClicked()` (через `showMenu(.full)`) — вызывается из
+        //    `mouseUp` хоста острова.
+        // `handleStateChange()` доходит сюда через `Combine`-сток с
+        // `.receive(on: DispatchQueue.main)`, а `pointerEnteredRegion()` и
+        // `islandClicked()` — из переопределений `NSResponder.mouseEntered` /
+        // `mouseUp`, которые AppKit всегда доставляет на главном потоке. Если
+        // появится путь не с главного потока, `assumeIsolated` не предупредит об
+        // этом, а уронит процесс — держи это в уме при правках.
         let spriteSize = MainActor.assumeIsolated {
             SpriteSheetStore.shared.load(appState.skin)?
                 .drawingSize(targetHeight: SpriteScale.islandTargetHeight,
