@@ -19,6 +19,18 @@ struct LoadedSkin {
     var drawingSize: CGSize {
         CGSize(width: bounds.width * CGFloat(scale), height: bounds.height * CGFloat(scale))
     }
+
+    /// Размер отрисовки при другой нормировке — для острова, где строка меню
+    /// всего 32 pt. `scale` посчитан при загрузке под канву плавающего маскота,
+    /// поэтому здесь множитель пересчитывается из той же измеренной рамки.
+    func drawingSize(targetHeight: Int, maxWidth: Int) -> CGSize {
+        let factor = SpriteScale.factor(boundsWidth: Int(bounds.width),
+                                        boundsHeight: Int(bounds.height),
+                                        targetHeight: targetHeight,
+                                        maxWidth: maxWidth)
+        return CGSize(width: bounds.width * CGFloat(factor),
+                      height: bounds.height * CGFloat(factor))
+    }
 }
 
 /// Loads sprite sheets out of the app bundle and keeps them in memory. Everything
