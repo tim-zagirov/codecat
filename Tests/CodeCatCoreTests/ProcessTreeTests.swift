@@ -13,6 +13,61 @@ private func node(_ pid: pid_t, _ ppid: pid_t, _ path: String?, tty: String? = n
 
 final class ProcessTreeTests: XCTestCase {
 
+    // MARK: - Finding the session's own `claude` process
+
+    /// Цепочка, которую видит хук на самом деле: `codecat-hook` ← `sh -c` ← `claude`
+    /// ← `disclaimer` ← `Claude.app`. Нужен именно `claude`, а не приложение-владелец:
+    /// приложение переживает десяток сессий, и по нему нельзя понять, жива ли эта.
+    func testAgentFindsTheNearestClaudeAncestor() {
+        let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
+            node(100, 90, "/Applications/CodeCat.app/Contents/MacOS/codecat-hook"),
+            node(90, 80, "/bin/sh"),
+            node(80, 70, "/Users/me/Library/Application Support/Claude/claude-code/2.1.247/claude.app/Contents/MacOS/claude"),
+            node(70, 60, "/Applications/Claude.app/Contents/Helpers/disclaimer"),
+            node(60, 1, "/Applications/Claude.app/Contents/MacOS/Claude"),
+        ]))
+        XCTAssertEqual(ProcessTree.agent(startingAt: 100, provider: tree), 80)
+    }
+
+    /// Вложенные `claude` (агент запустил агента): сессия хука принадлежит
+    /// ближайшему — в отличие от `host`, которому нужен самый внешний бандл.
+    func testAgentPrefersTheNearestClaudeOverAnOuterOne() {
+        let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
+            node(10, 9, "/opt/hook"),
+            node(9, 8, "/usr/local/bin/claude"),
+            node(8, 1, "/usr/local/bin/claude"),
+        ]))
+        XCTAssertEqual(ProcessTree.agent(startingAt: 10, provider: tree), 9)
+    }
+
+    func testAgentReturnsNilWhenNoClaudeIsInTheChain() {
+        let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
+            node(10, 9, "/opt/hook"),
+            node(9, 1, "/bin/zsh"),
+        ]))
+        XCTAssertNil(ProcessTree.agent(startingAt: 10, provider: tree))
+    }
+
+    /// Хук исполняется внутри вызова, которого ждёт Claude Code: зацикленная цепочка
+    /// предков обязана завершиться, а не крутиться.
+    func testAgentTerminatesOnACyclicParentChain() {
+        let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
+            node(10, 11, "/opt/a"),
+            node(11, 10, "/opt/b"),
+        ]))
+        XCTAssertNil(ProcessTree.agent(startingAt: 10, provider: tree))
+    }
+
+    /// Имя сравнивается по последнему компоненту пути целиком: `claude-hook` и
+    /// `claude.app` — не процесс сессии.
+    func testAgentDoesNotMatchOnAPrefix() {
+        let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
+            node(10, 9, "/opt/hook"),
+            node(9, 1, "/usr/local/bin/claude-code"),
+        ]))
+        XCTAssertNil(ProcessTree.agent(startingAt: 10, provider: tree))
+    }
+
     // MARK: - Extracting a bundle path from an executable path
 
     func testOutermostBundlePathOfAPlainExecutableIsNil() {

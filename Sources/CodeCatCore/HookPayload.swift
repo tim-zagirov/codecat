@@ -9,12 +9,16 @@ public enum HookPayload {
         public let hostBundlePath: String?
         public let hostBundleID: String?
         public let tty: String?
+        /// PID процесса `claude` этой сессии — см. `Session.agentPID`.
+        public let agentPID: pid_t?
 
-        public init(hostPID: pid_t?, hostBundlePath: String?, hostBundleID: String?, tty: String?) {
+        public init(hostPID: pid_t?, hostBundlePath: String?, hostBundleID: String?,
+                    tty: String?, agentPID: pid_t? = nil) {
             self.hostPID = hostPID
             self.hostBundlePath = hostBundlePath
             self.hostBundleID = hostBundleID
             self.tty = tty
+            self.agentPID = agentPID
         }
     }
 
@@ -33,6 +37,7 @@ public enum HookPayload {
         // field Claude Code ships under that name, and a non-string value left in
         // place would fail `HookEvent` decoding — losing *every* event, not just this one.
         if let tty = fields.tty { object["host_tty"] = tty }
+        if let agentPID = fields.agentPID { object["agent_pid"] = Int(agentPID) }
 
         guard let encoded = try? JSONSerialization.data(withJSONObject: object) else { return data }
         return encoded

@@ -48,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for session in appState.store.ordered {
             let status: String
             switch session.status {
+            case .idle: status = "открыта"
             case .working: status = "работает"
             case .waitingForYou: status = "ждёт тебя"
             case .done: status = "закончил"

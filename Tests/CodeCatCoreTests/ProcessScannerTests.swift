@@ -2,36 +2,41 @@ import XCTest
 @testable import CodeCatCore
 
 final class ProcessScannerTests: XCTestCase {
-    func testCountProcessesParsesPgrepOutput() {
-        XCTAssertEqual(ProcessScanner.count(fromPgrepOutput: "123\n456\n789\n"), 3)
-        XCTAssertEqual(ProcessScanner.count(fromPgrepOutput: ""), 0)
-        XCTAssertEqual(ProcessScanner.count(fromPgrepOutput: "\n"), 0)
+    func testCountMatchesNamesExactly() {
+        let names = ["claude", "claude", "codecat-hook", "claude-code", "Claude"]
+        XCTAssertEqual(ProcessScanner.count(of: "claude", in: names), 2,
+                       "ни префиксы, ни другой регистр не считаются")
+        XCTAssertEqual(ProcessScanner.count(of: "claude", in: []), 0)
+    }
+
+    /// Перечисление процессов должно действительно перечислять процессы: пустой
+    /// массив из-за неверно посчитанного размера буфера выглядел бы как «во всей
+    /// системе не запущено ни одного `claude`» — а это тот самый сигнал, по которому
+    /// живые сессии помечаются оборвавшимися.
+    func testLiveProcessListIsPopulatedAndIncludesLaunchd() {
+        let names = ProcessScanner.runningProcessNames()
+        XCTAssertGreaterThan(names.count, 10, "на macOS всегда работают десятки процессов")
+        XCTAssertTrue(names.contains("launchd"), "pid 1 есть всегда")
     }
 
     func testLiveScanDoesNotCrash() {
         _ = ProcessScanner.claudeProcessCount() // просто не падает
     }
 
-    func testRunCommandHandlesLargeOutputWithoutDeadlock() {
-        // Test that output larger than the pipe buffer (64 KB on macOS) is read correctly
-        // without deadlock. This verifies that stdout is read before waitUntilExit().
-        // Generate 200 KB of output: "hello\n" repeated ~33k times.
-        // Run on background queue with timeout to fail fast on deadlock instead of hanging.
+    func testIsProcessChecksTheExecutableNameNotJustExistence() {
+        let tree = FakeTree(snapshots: [
+            7: ProcessSnapshot(pid: 7, ppid: 1, executablePath: "/Apps/x.app/MacOS/claude", tty: nil),
+            8: ProcessSnapshot(pid: 8, ppid: 1, executablePath: "/usr/bin/node", tty: nil),
+        ])
+        XCTAssertTrue(ProcessScanner.isProcess(7, provider: tree))
+        XCTAssertFalse(ProcessScanner.isProcess(8, provider: tree),
+                       "номер pid переиспользуется — по нему может отвечать чужой процесс")
+        XCTAssertFalse(ProcessScanner.isProcess(9, provider: tree), "процесса нет")
+        XCTAssertFalse(ProcessScanner.isProcess(0, provider: tree))
+    }
 
-        let expectation = XCTestExpectation(description: "runCommand completes without deadlock")
-        var resultOutput = ""
-
-        DispatchQueue.global(qos: .default).async {
-            resultOutput = ProcessScanner.runCommand(
-                executablePath: "/bin/sh",
-                arguments: ["-c", "yes hello | head -c 200000"]
-            )
-            expectation.fulfill()
-        }
-
-        wait(for: [expectation], timeout: 5.0)
-
-        XCTAssert(resultOutput.count > 64000, "Output should be larger than pipe buffer")
-        XCTAssertTrue(resultOutput.contains("hello"), "Output should contain expected content")
+    private struct FakeTree: ProcessTreeProviding {
+        let snapshots: [pid_t: ProcessSnapshot]
+        func snapshot(for pid: pid_t) -> ProcessSnapshot? { snapshots[pid] }
     }
 }

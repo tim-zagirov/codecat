@@ -87,6 +87,41 @@ public enum ProcessTree {
         return found
     }
 
+    /// PID ближайшего предка, чей исполняемый файл называется `executableName`
+    /// (по умолчанию — `claude`), то есть процесс той самой сессии, внутри которой
+    /// запустился хук.
+    ///
+    /// Ближайший, а не самый внешний — в отличие от `host`: когда один `claude`
+    /// запускает другого, сессия хука принадлежит внутреннему. Цепочка предков у
+    /// хука обычно такая: `codecat-hook` ← `sh -c` ← `claude`.
+    ///
+    /// Сравнивается последний компонент пути, а не имя процесса в ядре (`p_comm`):
+    /// оно обрезано до 16 символов и у бинарника, запущенного через симлинк,
+    /// показывает имя цели симлинка, а не то, чем процесс себя называет.
+    ///
+    /// Те же предохранители, что у `host`: ограничение глубины и множество
+    /// посещённых pid — код исполняется внутри `codecat-hook`, которого ждёт
+    /// Claude Code, поэтому испорченная или зацикленная цепочка предков обязана
+    /// завершиться, а не крутиться.
+    public static func agent(startingAt pid: pid_t,
+                             provider: ProcessTreeProviding,
+                             maxDepth: Int = 24,
+                             executableName: String = "claude") -> pid_t? {
+        var visited: Set<pid_t> = []
+        var current = pid
+        for _ in 0..<maxDepth {
+            guard !visited.contains(current), let snapshot = provider.snapshot(for: current) else { return nil }
+            visited.insert(current)
+            if let path = snapshot.executablePath,
+               (path as NSString).lastPathComponent == executableName {
+                return snapshot.pid
+            }
+            guard snapshot.ppid > 1 else { return nil }
+            current = snapshot.ppid
+        }
+        return nil
+    }
+
     /// The controlling terminal of the session, taken from the first ancestor that
     /// has one: a wrapper process may have no tty while the shell above it does.
     public static func tty(startingAt pid: pid_t,
