@@ -1,10 +1,13 @@
 import SwiftUI
 import CodeCatCore
 
-/// Picks between the hand-drawn cat and a sprite skin.
+/// Renders the current sprite skin, falling back to the hand-drawn `CatView` when it
+/// cannot be loaded.
 ///
-/// A sprite skin that fails to load falls back to the drawn cat right here, so the
-/// mascot is never missing — the user is told about it separately, once, by
+/// The hand-drawn cat is no longer something the user can choose in `SkinPickerView`
+/// — every `MascotSkin` in `MascotSkins.all` is sprite-backed. `CatView` survives
+/// only as this fallback, so the mascot is never missing even if a sprite sheet goes
+/// missing from the bundle; the user is told about it separately, once, by
 /// `AppState.reportSkinLoadFailure`.
 struct MascotView: View {
     let skin: MascotSkin
@@ -15,18 +18,18 @@ struct MascotView: View {
 
     var body: some View {
         content
-            // Deliberately NOT `.onAppear` on the drawn-cat branch below: the drawn
-            // cat and a sprite skin that failed to load both render `CatView` in the
-            // same `else` branch of `content`. A `ViewBuilder` if/else gives each
-            // branch a fixed structural identity, so switching skins while staying in
-            // that branch (e.g. drawn -> a broken sprite skin) updates the existing
-            // view in place instead of recreating it — `.onAppear` would silently
-            // never fire again. Keying `.task` on `skin.id` instead ties the check to
-            // the skin itself, so it re-runs on every skin change regardless of which
-            // branch renders. Do not "simplify" this back into `.onAppear` — that
+            // Deliberately NOT `.onAppear` on the fallback branch below: a skin that
+            // fails to load renders `CatView` in the same `else` branch of `content`
+            // regardless of which skin it was. A `ViewBuilder` if/else gives each
+            // branch a fixed structural identity, so switching from one broken skin
+            // to another while staying in that branch updates the existing view in
+            // place instead of recreating it — `.onAppear` would silently never fire
+            // again. Keying `.task` on `skin.id` instead ties the check to the skin
+            // itself, so it re-runs on every skin change regardless of which branch
+            // renders. Do not "simplify" this back into `.onAppear` — that
             // reintroduces the silent-failure bug.
             .task(id: skin.id) {
-                if skin.isSpriteBased && SpriteSheetStore.shared.load(skin) == nil {
+                if SpriteSheetStore.shared.load(skin) == nil {
                     onLoadFailure(skin)
                 }
             }
@@ -34,7 +37,7 @@ struct MascotView: View {
 
     @ViewBuilder
     private var content: some View {
-        if skin.isSpriteBased, let loaded = SpriteSheetStore.shared.load(skin) {
+        if let loaded = SpriteSheetStore.shared.load(skin) {
             SpriteMascotView(loaded: loaded, status: status, sessionCount: sessionCount)
         } else {
             CatView(status: status, sessionCount: sessionCount)
