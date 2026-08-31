@@ -363,6 +363,17 @@ extension SessionStoreTests {
         XCTAssertEqual(event.tty, "/dev/ttys001")
     }
 
+    /// The real payload captured from a live `claude -p` run (see
+    /// route-cache-report.md): `SessionStart` carries `source`, observed values
+    /// `"startup"` and `"resume"`.
+    func testHookEventDecodesTheSourceField() throws {
+        let json = #"""
+        {"hook_event_name":"SessionStart","session_id":"abc","cwd":"/tmp/p","source":"resume"}
+        """#.data(using: .utf8)!
+        let event = try JSONDecoder().decode(HookEvent.self, from: json)
+        XCTAssertEqual(event.source, "resume")
+    }
+
     /// Events from an older hook binary have none of the new fields; decoding must
     /// still succeed rather than dropping the event.
     func testHookEventDecodesWithoutTheRouteFields() throws {
@@ -662,5 +673,117 @@ extension SessionStoreTests {
         store.apply(activity: TranscriptActivity(
             sessionId: "s1", projectPath: "/proj", description: "думает", timestamp: t0))
         XCTAssertNil(store.sessions["s1"]?.hostPID)
+    }
+
+    // MARK: - Review item 1: a genuine SessionStart resets a stale cached startedAt
+    //
+    // Root cause: a session that ends *without* `SessionEnd` (terminal closed,
+    // SIGKILL) leaves its cache entry behind — `merged` freezes `startedAt` forever.
+    // If the user later runs `claude --resume` on that id, the empirically-observed
+    // real payload is `{"hook_event_name":"SessionStart", ..., "source":"resume"}`
+    // (captured from a live `claude -p` / `claude --resume` run against a listener
+    // bound to the hook socket — see route-cache-report.md). Without this fix,
+    // `newSession` took `startedAt` straight from the stale cache entry, so the row
+    // read "длится N ч" for a session that had just started.
+
+    /// The bug, pinned: a stale cache entry plus a real `SessionStart(source: resume)`
+    /// must produce a session whose `startedAt` is the event's own time, not the
+    /// cache's frozen one.
+    func testSessionStartWithSourceResumeResetsAStaleCachedStartedAt() {
+        let cache = SessionRouteCache()
+        let staleStart = t0.addingTimeInterval(-72 * 60 * 60) // «застряло» 72 часа назад
+        cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
+                    startedAt: staleStart, now: staleStart)
+
+        let store = SessionStore(routeCache: cache)
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1",
+                                    cwd: "/proj", message: nil, hostPID: 4242,
+                                    hostBundlePath: "/Applications/Claude.app",
+                                    hostBundleID: "com.anthropic.claudefordesktop",
+                                    tty: "/dev/ttys001", source: "resume"),
+                    now: t0)
+
+        XCTAssertEqual(store.sessions["s1"]?.startedAt, t0,
+                       "resume — это настоящий новый запуск, длительность должна отсчитываться заново")
+    }
+
+    /// A missing/unknown `source` must reset too — that is the safe default, since
+    /// `SessionStart` never fires merely because CodeCat restarted (only a real
+    /// Claude Code lifecycle event sends it at all).
+    func testSessionStartWithMissingSourceAlsoResetsAStaleCachedStartedAt() {
+        let cache = SessionRouteCache()
+        let staleStart = t0.addingTimeInterval(-72 * 60 * 60)
+        cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
+                    startedAt: staleStart, now: staleStart)
+
+        let store = SessionStore(routeCache: cache)
+        store.apply(hook: routedEvent("SessionStart"), now: t0) // no `source` at all
+        XCTAssertEqual(store.sessions["s1"]?.startedAt, t0)
+    }
+
+    /// The mirror case that must NOT reset: `SessionStart` also fires mid-session
+    /// after auto-compaction, with `source == "compact"`. Resetting there would
+    /// break the duration of a session that never stopped.
+    func testSessionStartWithSourceCompactPreservesTheCachedStartedAt() {
+        let cache = SessionRouteCache()
+        let realStart = t0.addingTimeInterval(-3600)
+        cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
+                    startedAt: realStart, now: realStart)
+
+        let store = SessionStore(routeCache: cache)
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1",
+                                    cwd: "/proj", message: nil, hostPID: 4242,
+                                    hostBundlePath: "/Applications/Claude.app",
+                                    hostBundleID: "com.anthropic.claudefordesktop",
+                                    tty: "/dev/ttys001", source: "compact"),
+                    now: t0)
+
+        XCTAssertEqual(store.sessions["s1"]?.startedAt, realStart,
+                       "автокомпакция не должна сбрасывать время начала ещё идущей сессии")
+    }
+
+    /// The core feature this cache exists for must be unaffected by the fix above:
+    /// a CodeCat restart fires no `SessionStart` at all, so a session the transcript
+    /// watcher rediscovers keeps the cache's `startedAt` exactly as before.
+    /// (Mirrors `testWatcherDiscoveredSessionGainsRouteAndStartedAtFromCache`, stated
+    /// explicitly here as the "preservation" half of the review's requested pin.)
+    func testSessionReappearingWithNoSessionStartAtAllPreservesTheCachedStartedAt() {
+        let cache = SessionRouteCache()
+        let realStart = t0.addingTimeInterval(-3600)
+        cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
+                    startedAt: realStart, now: realStart)
+
+        let store = SessionStore(routeCache: cache)
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "правит файл", timestamp: t0))
+
+        XCTAssertEqual(store.sessions["s1"]?.startedAt, realStart,
+                       "без SessionStart перезапуск CodeCat не должен сбрасывать время начала")
+    }
+
+    /// The reset must also reach the persisted cache entry itself — otherwise a
+    /// *second* silent crash-without-SessionEnd followed by another resume within
+    /// the 7-day window would restore the stale value all over again.
+    func testResetStartedAtIsPersistedBackIntoTheCache() {
+        let cache = SessionRouteCache()
+        let staleStart = t0.addingTimeInterval(-72 * 60 * 60)
+        cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
+                    startedAt: staleStart, now: staleStart)
+
+        let store = SessionStore(routeCache: cache)
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1",
+                                    cwd: "/proj", message: nil, hostPID: 4242,
+                                    hostBundlePath: "/Applications/Claude.app",
+                                    hostBundleID: "com.anthropic.claudefordesktop",
+                                    tty: "/dev/ttys001", source: "resume"),
+                    now: t0)
+
+        XCTAssertEqual(cache.route(for: "s1")?.startedAt, t0,
+                       "сброс должен попасть и в сам кэш, иначе следующий сбой без SessionEnd снова унаследует старое время")
     }
 }
