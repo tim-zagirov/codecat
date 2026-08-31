@@ -248,11 +248,22 @@ final class IslandController: NSObject, MascotPresenting {
 
     /// Экран с вырезом и вся производная геометрия. `nil` — острову негде жить.
     private func geometry() -> Geometry? {
-        guard let screen = NSScreen.screens.first(where: {
-            IslandLayout.hasNotch(safeAreaTop: $0.safeAreaInsets.top)
-        }), let notch = IslandLayout.notchRect(auxLeft: screen.auxiliaryTopLeftArea,
-                                               auxRight: screen.auxiliaryTopRightArea)
+        // Ищем сразу по тому, что нужно — по первому экрану, для которого
+        // строится вырез, а не по `safeAreaInsets.top > 0` (`IslandLayout.hasNotch`).
+        // Порядок `NSScreen.screens` нигде не документирован как «встроенный
+        // первым», и поведение `safeAreaInsets.top` на внешних дисплеях не
+        // проверено. Если бы фильтр стоял на инсете, а не на самом вырезе, экран
+        // без выреза, но с ненулевым инсетом, мог бы прокрасться первым и
+        // остановить поиск до того, как встроенный экран будет рассмотрен —
+        // остров молча не появился бы. `hasNotch` при этом не лишний: это
+        // самостоятельный документированный предикат со своим тестом, просто не
+        // единственный фильтр здесь.
+        guard let found = NSScreen.screens.lazy.compactMap({ screen in
+            IslandLayout.notchRect(auxLeft: screen.auxiliaryTopLeftArea,
+                                   auxRight: screen.auxiliaryTopRightArea).map { (screen, $0) }
+        }).first
         else { return nil }
+        let (screen, notch) = found
 
         // `SpriteSheetStore` изолирован `@MainActor` (см. его доккомментарий: все
         // вызывающие уже работают на главном потоке). Сам `IslandController` не
@@ -280,6 +291,11 @@ final class IslandController: NSObject, MascotPresenting {
         // `mouseUp`, которые AppKit всегда доставляет на главном потоке. Если
         // появится путь не с главного потока, `assumeIsolated` не предупредит об
         // этом, а уронит процесс — держи это в уме при правках.
+        // Есть и седьмой путь: `setVisible(false)` из `AppDelegate.syncPresenter()`
+        // (сам он выполняется на главном потоке). Сегодня он до `geometry()` не
+        // доходит — `guard visible` в `setVisible` отсекает его раньше. Если
+        // `setVisible(false)` когда-нибудь начнёт считать геометрию, этот путь
+        // придётся проверить отдельно.
         let spriteSize = MainActor.assumeIsolated {
             SpriteSheetStore.shared.load(appState.skin)?
                 .drawingSize(targetHeight: SpriteScale.islandTargetHeight,
