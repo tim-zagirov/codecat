@@ -786,4 +786,92 @@ extension SessionStoreTests {
         XCTAssertEqual(cache.route(for: "s1")?.startedAt, t0,
                        "сброс должен попасть и в сам кэш, иначе следующий сбой без SessionEnd снова унаследует старое время")
     }
+
+    // MARK: - Fix wave 2
+
+    /// Item 1: `upsert`'s `sessions[event.sessionId] ?? newSession(...)` only runs
+    /// `newSession` — and therefore only applies `resetStartedAt` — when the id is
+    /// absent from `sessions`. A session CodeCat still remembers (lingering `.done`
+    /// inside `expireFinished`'s TTL) is very much still present, so a real
+    /// `SessionStart(source: "resume")` for it must still reset `startedAt` to the
+    /// event's own time — that is exactly the reachable "длится 72 ч" case the
+    /// previous wave's fix silently failed to cover.
+    func testSessionStartResumeResetsStartedAtEvenWhenSessionStillLingersInStore() {
+        let store = SessionStore()
+        store.apply(hook: routedEvent("SessionStart"), now: t0)
+        store.apply(hook: hook("Stop"), now: t0.addingTimeInterval(10)) // done, but still in `sessions`
+        XCTAssertNotNil(store.sessions["s1"], "сессия должна ещё жить в сторе — TTL не истёк")
+
+        let muchLater = t0.addingTimeInterval(72 * 60 * 60)
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1",
+                                    cwd: "/proj", message: nil, hostPID: 4242,
+                                    hostBundlePath: "/Applications/Claude.app",
+                                    hostBundleID: "com.anthropic.claudefordesktop",
+                                    tty: "/dev/ttys001", source: "resume"),
+                    now: muchLater)
+
+        XCTAssertEqual(store.sessions["s1"]?.startedAt, muchLater,
+                       "resume сессии, всё ещё лежащей в сторе, должен сбросить время начала")
+    }
+
+    /// The mirror case: a session reappearing with no `SessionStart` at all (a plain
+    /// CodeCat restart while it kept running) must keep the cached `startedAt` even
+    /// when it goes through the hook path rather than the transcript watcher.
+    func testEventWithoutSessionStartNeverResetsStartedAtEvenWhenSessionStillLingersInStore() {
+        let store = SessionStore()
+        store.apply(hook: routedEvent("SessionStart"), now: t0)
+        let originalStart = store.sessions["s1"]?.startedAt
+        store.apply(hook: hook("Notification", message: "нужно разрешение"),
+                    now: t0.addingTimeInterval(5))
+        XCTAssertEqual(store.sessions["s1"]?.startedAt, originalStart,
+                       "не-SessionStart событие не должно трогать startedAt")
+    }
+
+    /// Item 2: the host triple must be replaced as a unit in `upsert`, not merged
+    /// field by field — otherwise an event carrying a fresh pid and path but no
+    /// bundle id (the hook's separate `Bundle(path:)?.bundleIdentifier` lookup can
+    /// independently return nil) leaves the *previous* host's bundle id in place,
+    /// pairing it with the *new* host's pid/path — a route that names two different
+    /// hosts at once and gets scripted wrong by `SessionRouter.route`.
+    func testEventWithFreshPidAndPathButNoBundleIdClearsThePreviousBundleId() {
+        let store = SessionStore()
+        store.apply(hook: routedEvent("SessionStart"), now: t0)
+        XCTAssertEqual(store.sessions["s1"]?.hostBundleID, "com.anthropic.claudefordesktop")
+
+        store.apply(hook: HookEvent(hookEventName: "Notification", sessionId: "s1",
+                                    cwd: "/proj", message: "permission",
+                                    hostPID: 4343, hostBundlePath: "/Applications/Utilities/Terminal.app",
+                                    hostBundleID: nil, tty: nil),
+                    now: t0.addingTimeInterval(5))
+
+        let session = store.sessions["s1"]
+        XCTAssertEqual(session?.hostPID, 4343)
+        XCTAssertEqual(session?.hostBundlePath, "/Applications/Utilities/Terminal.app")
+        XCTAssertNil(session?.hostBundleID,
+                     "новый хост без bundle id не должен унаследовать bundle id старого хоста")
+    }
+
+    /// Item 3: when `resetStartedAt` is true, `record` must be called even when the
+    /// event carries no route fields at all (non-interactive `claude -p` under tmux,
+    /// ssh or CI — no `.app` ancestor, no tty). Otherwise the in-memory session gets
+    /// the reset `startedAt` but the persisted cache entry keeps its stale
+    /// `startedAt`/`updatedAt`, and a CodeCat restart within seven days reintroduces
+    /// the stale duration.
+    func testResetStartedAtReachesTheCacheEvenWithNoRouteFieldsAtAll() {
+        let cache = SessionRouteCache()
+        let staleStart = t0.addingTimeInterval(-72 * 60 * 60)
+        cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
+                    hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
+                    startedAt: staleStart, now: staleStart)
+
+        let store = SessionStore(routeCache: cache)
+        // No host/tty fields at all — non-interactive claude -p under tmux/ssh/CI.
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1",
+                                    cwd: "/proj", message: nil, source: "resume"),
+                    now: t0)
+
+        XCTAssertEqual(store.sessions["s1"]?.startedAt, t0)
+        XCTAssertEqual(cache.route(for: "s1")?.startedAt, t0,
+                       "сброс должен попасть в кэш, даже если событие не несёт полей маршрута")
+    }
 }

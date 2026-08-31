@@ -111,6 +111,14 @@ public final class SessionRouteCache {
     /// `SessionEnd` accumulate forever. No timer needed — every `record` call
     /// is itself an opportunity to sweep.
     ///
+    /// This prunes against the caller-supplied `now`, and `pruned` compares the
+    /// *absolute* interval — so a system clock that jumps backwards by more than
+    /// `maxAge` wipes the whole cache right here, on the very next `Stop`, rather
+    /// than only at the next `load()`. That is a deliberate trade-off, not an
+    /// oversight: nothing distinguishes "clock jumped" from "file is a week old"
+    /// from inside `pruned`, and losing the cache is the same silent, non-fatal
+    /// degradation described under "Обработка ошибок" either way.
+    ///
     /// - Parameter resetStartedAt: true for a genuine `SessionStart` (any
     ///   `source` other than `"compact"`) — see `merged` for what this changes.
     public func record(sessionId: String, hostPID: pid_t?, hostBundlePath: String?,
