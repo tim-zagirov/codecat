@@ -17,6 +17,9 @@ public final class SessionStore: ObservableObject {
         sessions.values.sorted { $0.startedAt < $1.startedAt }
     }
 
+    /// Что показывает кот. `.idle`-сессии сюда не входят ни в каком виде: открытая
+    /// сессия, в которой никто ничего не запускал, — это `.sleeping`, спящий кот и
+    /// пустой бейдж, а не «работает 1».
     public var aggregate: AggregateStatus {
         let all = sessions.values
         let waiting = all.filter {
@@ -76,7 +79,10 @@ public final class SessionStore: ObservableObject {
             case .working: return true
             case .waitingForYou(.idle): return true
             case .waitingForYou: return false
-            case .done, .crashed: return false
+            // Открытая сессия без работы не повод не давать маку заснуть: держать
+            // ассершен ради вкладки, в которой никто ничего не запускал, значит
+            // сажать батарею за компанию с бейджем, который врал.
+            case .idle, .done, .crashed: return false
             }
         }
     }
@@ -84,18 +90,28 @@ public final class SessionStore: ObservableObject {
     public func apply(hook event: HookEvent, now: Date) {
         switch event.hookEventName {
         case "SessionStart":
-            // A genuine new run (source anything but "compact") resets a stale
-            // cached startedAt — see SessionRouteCache.merged's doc comment. Missing
-            // or unknown `source` also resets: that is the safe default, since
-            // SessionStart never fires merely because CodeCat restarted, so there is
-            // no legitimate case where an unrecognised source means "preserve this".
-            // SessionStart also fires mid-session after auto-compaction
-            // (source == "compact") — resetting there would break the duration of a
-            // session that never stopped, so that one case is excluded.
-            let resetStartedAt = event.source != "compact"
-            upsert(event: event, now: now, resetStartedAt: resetStartedAt) { s in
-                s.status = .working
-                s.activityDescription = "начинает работу"
+            // `source == "compact"` — единственный случай, когда SessionStart не
+            // означает появления сессии: он приходит посреди уже идущей работы, после
+            // авто-компакции. Поэтому для него не трогается ни статус (сбросить
+            // работающую сессию в `.idle` значило бы погасить кота ровно тогда, когда
+            // агент занят), ни `startedAt` (сессия не прерывалась, и её длительность
+            // не должна начинаться заново).
+            //
+            // Любой другой `source` — включая отсутствующий или незнакомый — считается
+            // настоящим стартом и сбрасывает возможно устаревший `startedAt` из кэша
+            // маршрутов (см. доккоммент `SessionRouteCache.merged`). Это безопасное
+            // умолчание: SessionStart не приходит просто оттого, что перезапустили
+            // CodeCat, так что случая «незнакомый source значит сохранить старое» нет.
+            let isCompact = event.source == "compact"
+            upsert(event: event, now: now, resetStartedAt: !isCompact) { s in
+                guard !isCompact else { return }
+                // Не `.working`: событие говорит «сессия появилась», а не «агент
+                // взялся за работу» — см. `SessionStatus.idle`. Работа начнётся,
+                // когда в транскрипте появится первая строка турна (её пишут в тот
+                // же момент, когда пользователь отправляет реплику), и `apply(activity:)`
+                // переведёт сессию в `.working`.
+                s.status = .idle
+                s.activityDescription = "открыта, ждёт задачу"
             }
         case "Notification":
             let text = (event.message ?? "").lowercased()
@@ -140,25 +156,50 @@ public final class SessionStore: ObservableObject {
         sessions[activity.sessionId] = s
     }
 
-    /// Marks a session `.crashed` once it has been `.working`/`.waitingForYou` with no
-    /// activity for too long, via two independent checks:
+    /// Убирает сессии, которых больше нет, двумя разными способами — точным и
+    /// приблизительным, и приблизительный применяется только там, где точный
+    /// недоступен.
     ///
-    /// - Fast path: if `pgrep -x claude` finds zero processes at all, any active session
-    ///   quiet for `staleAfter` (default 120s) is almost certainly dead — its process
-    ///   exited without ever sending `SessionEnd` (e.g. the terminal was closed).
-    /// - Slow path: regardless of the global process count, any active session quiet for
-    ///   `longStaleAfter` (default: hours, not minutes) is also marked crashed. This
-    ///   covers a SIGKILL'd session while *other* `claude` processes are still alive:
-    ///   `pgrep -x claude` stays nonzero, so the fast path never fires, and without this
-    ///   the dead session would wait forever — permanently red-badging the UI, and (via
-    ///   `anyWorking`) holding the sleep-prevention assertion forever if it died mid-work.
-    ///   `longStaleAfter` must stay well above any plausible legitimate idle wait, since a
-    ///   session a user genuinely left waiting must not be killed out from under them.
+    /// **Точный (`agentPID`).** У сессии, про которую приходил хук, известен pid её
+    /// собственного процесса `claude`. Пока он жив — сессия жива, сколько бы она ни
+    /// молчала: молчание идущей сессии не значит ничего (один длинный вызов
+    /// инструмента, открытая вкладка, в которую человек вернётся завтра). Как только
+    /// процесса не стало — сессии больше нет, и ждать нечего: работавшая помечается
+    /// `.crashed` («оборвалась» — работу прервали, об этом стоит сказать), любая
+    /// другая просто исчезает (её закрыли, а `SessionEnd` не дошёл — например,
+    /// приложение сняли по kill).
+    ///
+    /// **Приблизительный (пороги тишины).** Только для сессий без `agentPID` — тех,
+    /// что нашёл наблюдатель транскриптов, а хук по ним не приходил. Спросить не у
+    /// кого, поэтому остаются прежние два порога: `staleAfter` (по умолчанию 120с),
+    /// когда во всей системе не осталось ни одного процесса `claude`, и
+    /// `longStaleAfter` (часы) — как страховка на случай, когда другие процессы
+    /// `claude` живы и обнулить счётчик не выйдет. Порог в часах обязан оставаться
+    /// заметно выше любого правдоподобного ожидания: сессию, которую человек
+    /// действительно оставил ждать, нельзя убивать у него из-под рук.
+    ///
+    /// Раньше точного способа не было вовсе, и `.working`-призрак сессии, убитой
+    /// по kill, висел в бейдже до четырёх часов, пока рядом жил хоть один другой
+    /// `claude`.
     public func reconcile(claudeProcessCount: Int, now: Date,
                           staleAfter: TimeInterval = 120,
-                          longStaleAfter: TimeInterval = 4 * 60 * 60) {
+                          longStaleAfter: TimeInterval = 4 * 60 * 60,
+                          isAgentAlive: (pid_t) -> Bool = { ProcessScanner.isProcess($0) }) {
         let threshold = claudeProcessCount == 0 ? staleAfter : longStaleAfter
         for (id, var s) in sessions {
+            if let agentPID = s.agentPID {
+                guard !isAgentAlive(agentPID) else { continue }
+                if s.status == .working {
+                    s.status = .crashed
+                    s.activityDescription = "сессия оборвалась"
+                    s.finishedAt = now
+                    sessions[id] = s
+                } else {
+                    sessions.removeValue(forKey: id)
+                    routeCache?.remove(sessionId: id)
+                }
+                continue
+            }
             let active = s.status == .working || {
                 if case .waitingForYou = s.status { return true }
                 return false
@@ -180,11 +221,26 @@ public final class SessionStore: ObservableObject {
     /// crashed, otherwise it can be deleted in the same tick it first appears as a
     /// problem. Falls back to `lastActivity` only for the (currently unreachable)
     /// case of a terminal session with no `finishedAt`.
+    ///
+    /// `.idle` тоже истекает — но только у сессий без `agentPID`. Открытая сессия
+    /// ничего не делает и ничего не показывает (в бейдж она не попадает), так что
+    /// вечно держать её строку не за чем; а у той, чей процесс мы умеем спросить,
+    /// сроком жизни распоряжается `reconcile` — она останется в панели ровно пока
+    /// её `claude` жив, и по ней можно будет кликнуть, чтобы вернуться.
     public func expireFinished(now: Date, ttl: TimeInterval = 600) {
-        for (id, s) in sessions where s.status == .done || s.status == .crashed {
-            let finishedReference = s.finishedAt ?? s.lastActivity
-            if now.timeIntervalSince(finishedReference) > ttl {
-                sessions.removeValue(forKey: id)
+        for (id, s) in sessions {
+            switch s.status {
+            case .done, .crashed:
+                let finishedReference = s.finishedAt ?? s.lastActivity
+                if now.timeIntervalSince(finishedReference) > ttl {
+                    sessions.removeValue(forKey: id)
+                }
+            case .idle:
+                if s.agentPID == nil, now.timeIntervalSince(s.lastActivity) > ttl {
+                    sessions.removeValue(forKey: id)
+                }
+            case .working, .waitingForYou:
+                break
             }
         }
     }
@@ -237,6 +293,11 @@ public final class SessionStore: ObservableObject {
         // bundle id for the new host", not as the *previous* host's bundle id — that
         // would describe a route naming two different hosts at once and route the
         // jump to the wrong application.
+        // Пришёл вместе с событием — значит, процесс сессии жив прямо сейчас и это
+        // его номер. Никогда не затираем известное значение отсутствующим: событие
+        // от старой версии хука не должно лишать сессию единственного точного
+        // признака жизни.
+        if let agentPID = event.agentPID { s.agentPID = agentPID }
         if let pid = event.hostPID {
             s.hostPID = pid
             s.hostBundlePath = nonEmpty(event.hostBundlePath)
@@ -247,7 +308,7 @@ public final class SessionStore: ObservableObject {
         switch s.status {
         case .done, .crashed:
             if s.finishedAt == nil { s.finishedAt = now }
-        case .working, .waitingForYou:
+        case .idle, .working, .waitingForYou:
             s.finishedAt = nil
         }
         sessions[event.sessionId] = s

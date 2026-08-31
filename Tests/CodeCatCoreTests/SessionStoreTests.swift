@@ -9,13 +9,54 @@ final class SessionStoreTests: XCTestCase {
         HookEvent(hookEventName: name, sessionId: id, cwd: cwd, message: message)
     }
 
-    func testSessionStartCreatesWorkingSession() {
+    /// Сессия, в которой агент действительно работает: строка в транскрипте, а не
+    /// просто открытая вкладка. `SessionStart` даёт `.idle` — см. `SessionStatus.idle`,
+    /// поэтому тесты, которым нужна именно работающая сессия, заводят её так.
+    @discardableResult
+    func startWorking(_ store: SessionStore, id: String = "s1", cwd: String = "/proj",
+                      at time: Date) -> SessionStore {
+        store.apply(activity: TranscriptActivity(sessionId: id, projectPath: cwd,
+                                                 description: "работает над задачей",
+                                                 timestamp: time))
+        return store
+    }
+
+    /// Жалоба, с которой всё началось: «ни один агент не запущен, а он показывает 1».
+    /// `SessionStart` приходит, когда сессию открыли или возобновили, — работы в ней
+    /// ещё нет, и в бейдже ей делать нечего.
+    func testSessionStartCreatesIdleSessionThatIsNotCountedAnywhere() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
-        XCTAssertEqual(store.ordered.count, 1)
-        XCTAssertEqual(store.ordered[0].status, .working)
+        XCTAssertEqual(store.ordered.count, 1, "сессию всё равно отслеживаем")
+        XCTAssertEqual(store.ordered[0].status, .idle)
         XCTAssertEqual(store.ordered[0].projectPath, "/proj")
+        XCTAssertEqual(store.aggregate, .sleeping)
+        XCTAssertEqual(store.badgeCount, 0)
+        XCTAssertFalse(store.anyWorking, "открытая вкладка не повод не давать маку заснуть")
+    }
+
+    /// И зеркальный случай: как только в сессии действительно началась работа
+    /// (первая строка турна в транскрипте), она немедленно считается работающей.
+    func testFirstTranscriptLineTurnsAnIdleSessionIntoAWorkingOne() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0.addingTimeInterval(30))
+        XCTAssertEqual(store.ordered[0].status, .working)
         XCTAssertEqual(store.aggregate, .working(1))
+        XCTAssertEqual(store.badgeCount, 1)
+        XCTAssertTrue(store.anyWorking)
+    }
+
+    /// `SessionStart` с `source == "compact"` — это авто-компакция посреди работы,
+    /// а не открытие сессии: сбросить работающую сессию в `.idle` значило бы гасить
+    /// кота ровно в тот момент, когда агент занят.
+    func testCompactSessionStartDoesNotResetAWorkingSessionToIdle() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        let compact = HookEvent(hookEventName: "SessionStart", sessionId: "s1", cwd: "/proj",
+                                message: nil, source: "compact")
+        store.apply(hook: compact, now: t0.addingTimeInterval(60))
+        XCTAssertEqual(store.ordered[0].status, .working)
     }
 
     func testNotificationWithPermissionMessageSetsWaitingPermission() {
@@ -114,7 +155,7 @@ final class SessionStoreTests: XCTestCase {
 
     func testAggregateWaitingBeatsProblem() {
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart", id: "a", cwd: "/a"), now: t0)
+        startWorking(store, id: "a", cwd: "/a", at: t0)
         store.apply(hook: hook("SessionStart", id: "c", cwd: "/c"), now: t0)
         store.apply(hook: hook("Notification", id: "c", message: "permission"),
                     now: t0.addingTimeInterval(299))
@@ -126,7 +167,7 @@ final class SessionStoreTests: XCTestCase {
 
     func testReconcileMarksStaleSessionsCrashedWhenNoProcesses() {
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         // активность была давно, процессов claude нет → сессия упала
         store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300))
         XCTAssertEqual(store.ordered[0].status, .crashed)
@@ -135,7 +176,7 @@ final class SessionStoreTests: XCTestCase {
 
     func testReconcileKeepsFreshSessionsEvenWithZeroProcesses() {
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         // активность недавняя (< 120 c) → не трогаем, даже если pgrep никого не нашёл
         store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(60))
         XCTAssertEqual(store.ordered[0].status, .working)
@@ -151,7 +192,7 @@ final class SessionStoreTests: XCTestCase {
 
     func testIdleHeuristicMarksQuietWorkingSessionAsWaitingIdle() {
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         store.applyIdleHeuristic(now: t0.addingTimeInterval(120), threshold: 60)
         XCTAssertEqual(store.ordered[0].status, .waitingForYou(.idle))
     }
@@ -164,7 +205,7 @@ final class SessionStoreTests: XCTestCase {
         // waiting on the user must never cancel sleep-prevention for another agent that
         // is still actively working.
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart", id: "a", cwd: "/a"), now: t0)
+        startWorking(store, id: "a", cwd: "/a", at: t0)
         store.apply(hook: hook("SessionStart", id: "b", cwd: "/b"), now: t0)
         store.apply(hook: hook("Notification", id: "b", message: "permission"),
                     now: t0.addingTimeInterval(5))
@@ -186,7 +227,7 @@ final class SessionStoreTests: XCTestCase {
         // `.waitingForYou(.permission)`/`.waitingForYou(.question)` from an actual
         // Notification hook.
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         store.applyIdleHeuristic(now: t0.addingTimeInterval(120), threshold: 60)
         XCTAssertEqual(store.ordered[0].status, .waitingForYou(.idle))
         XCTAssertTrue(store.anyWorking, ".idle — это догадка, а не реальный сигнал")
@@ -214,7 +255,7 @@ final class SessionStoreTests: XCTestCase {
         // otherwise a `.working` session (and, via `anyWorking`, the sleep-prevention
         // assertion) would be held forever.
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         store.reconcile(claudeProcessCount: 1, now: t0.addingTimeInterval(3 * 60 * 60),
                         longStaleAfter: 3 * 60 * 60)
         XCTAssertEqual(store.ordered[0].status, .crashed)
@@ -225,7 +266,7 @@ final class SessionStoreTests: XCTestCase {
         // waiting) must not be killed out from under the user just because some other
         // `claude` process happens to be running elsewhere.
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         store.reconcile(claudeProcessCount: 1, now: t0.addingTimeInterval(60 * 60),
                         longStaleAfter: 3 * 60 * 60)
         XCTAssertEqual(store.ordered[0].status, .working)
@@ -248,7 +289,7 @@ final class SessionStoreTests: XCTestCase {
         // something that would kill a legitimately idle session: default must be well
         // above the old 120s fast-path threshold and expressed in hours, not minutes.
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         store.reconcile(claudeProcessCount: 1, now: t0.addingTimeInterval(30 * 60))
         XCTAssertEqual(store.ordered[0].status, .working,
                        "30 минут не должно быть достаточно для default long-stale timeout")
@@ -270,7 +311,7 @@ final class SessionStoreTests: XCTestCase {
         // and by the time longStaleAfter elapses, way more than ttl (600s) has already
         // passed since lastActivity — exactly the scenario that used to vanish silently.
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         let crashTime = t0.addingTimeInterval(4 * 60 * 60) // longStaleAfter default
         store.reconcile(claudeProcessCount: 1, now: crashTime)
         store.expireFinished(now: crashTime)
@@ -284,7 +325,7 @@ final class SessionStoreTests: XCTestCase {
         // clock for that should start at finishedAt (when reconcile marked it crashed),
         // not at lastActivity (which by then is old news).
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         let crashTime = t0.addingTimeInterval(4 * 60 * 60)
         store.reconcile(claudeProcessCount: 1, now: crashTime)
         // Just under ttl since it crashed: still present, even though it's been quiet
@@ -301,7 +342,7 @@ final class SessionStoreTests: XCTestCase {
         // stays correct under the fix: a session should still be visible as crashed for
         // the full ttl window after crashing, not just for a few seconds.
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart"), now: t0)
+        startWorking(store, at: t0)
         let crashTime = t0.addingTimeInterval(120) // staleAfter default, no processes
         store.reconcile(claudeProcessCount: 0, now: crashTime)
         store.expireFinished(now: crashTime)
@@ -339,6 +380,109 @@ final class SessionStoreTests: XCTestCase {
         // 601s after it finished: expired.
         store.expireFinished(now: doneTime.addingTimeInterval(601))
         XCTAssertTrue(store.ordered.isEmpty)
+    }
+}
+
+// MARK: - Жива ли сессия: точный ответ по её собственному процессу
+
+extension SessionStoreTests {
+
+    private func agentEvent(_ name: String, id: String = "s1", agentPID: pid_t) -> HookEvent {
+        HookEvent(hookEventName: name, sessionId: id, cwd: "/proj", message: nil,
+                  agentPID: agentPID)
+    }
+
+    /// Тот самый призрак: сессию убили (kill, force quit — `SessionEnd` не дошёл),
+    /// но рядом живы другие процессы `claude`, поэтому обнулить общий счётчик
+    /// нечем. Раньше такая сессия висела в бейдже как работающая до четырёх часов.
+    /// Со своим pid ответ известен сразу.
+    func testDeadAgentProcessCrashesAWorkingSessionAtOnceEvenWithOtherClaudesAlive() {
+        let store = SessionStore()
+        store.apply(hook: agentEvent("SessionStart", agentPID: 4242), now: t0)
+        startWorking(store, at: t0.addingTimeInterval(1))
+        store.reconcile(claudeProcessCount: 3, now: t0.addingTimeInterval(30),
+                        isAgentAlive: { _ in false })
+        XCTAssertEqual(store.ordered[0].status, .crashed)
+        XCTAssertEqual(store.ordered[0].finishedAt, t0.addingTimeInterval(30),
+                       "TTL показа отсчитывается от момента, когда сессия оборвалась")
+    }
+
+    /// Сессию просто закрыли, ничего не запуская. Это не авария — показывать
+    /// «оборвалась» не за что, строку надо убрать.
+    func testDeadAgentProcessRemovesASessionThatWasNotWorking() {
+        for (name, message) in [("SessionStart", nil), ("Notification", "permission"),
+                                ("Stop", nil)] as [(String, String?)] {
+            let store = SessionStore()
+            store.apply(hook: HookEvent(hookEventName: name, sessionId: "s1", cwd: "/proj",
+                                        message: message, agentPID: 4242), now: t0)
+            store.reconcile(claudeProcessCount: 3, now: t0.addingTimeInterval(30),
+                            isAgentAlive: { _ in false })
+            XCTAssertTrue(store.ordered.isEmpty, "\(name): сессии больше нет")
+            XCTAssertEqual(store.aggregate, .sleeping)
+        }
+    }
+
+    /// Зеркало: молчание живой сессии не значит ничего. Один длинный вызов
+    /// инструмента, открытая вкладка, к которой вернутся завтра — пока её процесс
+    /// жив, убивать её нельзя, сколько бы ни прошло времени.
+    func testLiveAgentProcessKeepsAQuietSessionEvenPastTheLongStaleThreshold() {
+        let store = SessionStore()
+        store.apply(hook: agentEvent("SessionStart", agentPID: 4242), now: t0)
+        startWorking(store, at: t0.addingTimeInterval(1))
+        store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(9 * 60 * 60),
+                        isAgentAlive: { $0 == 4242 })
+        XCTAssertEqual(store.ordered[0].status, .working)
+    }
+
+    /// У сессии, найденной только по транскрипту, своего pid нет — спрашивать не у
+    /// кого, и для неё остаются прежние пороги тишины.
+    func testSessionWithoutAgentPIDStillFallsBackToTheStalenessThresholds() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300),
+                        isAgentAlive: { _ in XCTFail("спрашивать не про кого"); return true })
+        XCTAssertEqual(store.ordered[0].status, .crashed)
+    }
+
+    /// Событие от старой версии хука (без `agent_pid`) не должно стирать уже
+    /// известный pid: иначе сессия теряла бы единственный точный признак жизни
+    /// ровно в тот момент, когда о ней пришла новость.
+    func testAnEventWithoutAgentPIDDoesNotClearAKnownOne() {
+        let store = SessionStore()
+        store.apply(hook: agentEvent("SessionStart", agentPID: 4242), now: t0)
+        store.apply(hook: hook("Stop"), now: t0.addingTimeInterval(10))
+        XCTAssertEqual(store.sessions["s1"]?.agentPID, 4242)
+    }
+
+    func testHookEventDecodesTheAgentPID() throws {
+        let json = #"""
+        {"hook_event_name":"Stop","session_id":"abc","cwd":"/tmp/p","agent_pid":4242}
+        """#.data(using: .utf8)!
+        XCTAssertEqual(try JSONDecoder().decode(HookEvent.self, from: json).agentPID, 4242)
+    }
+
+    // MARK: - Сколько живёт открытая, но неработающая сессия
+
+    /// Без своего pid судьбу открытой сессии определяет тот же TTL, что и у
+    /// законченной: держать её строку вечно не за чем.
+    func testIdleSessionWithoutAgentPIDExpiresOnTheUsualTTL() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        store.expireFinished(now: t0.addingTimeInterval(599))
+        XCTAssertEqual(store.ordered.count, 1)
+        store.expireFinished(now: t0.addingTimeInterval(601))
+        XCTAssertTrue(store.ordered.isEmpty)
+    }
+
+    /// А если её процесс можно спросить — строка остаётся, пока сессия жива: по ней
+    /// можно кликнуть и вернуться в свою вкладку. В бейдж она при этом не попадает.
+    func testIdleSessionWithAKnownAgentSurvivesTheTTL() {
+        let store = SessionStore()
+        store.apply(hook: agentEvent("SessionStart", agentPID: 4242), now: t0)
+        store.expireFinished(now: t0.addingTimeInterval(6000))
+        XCTAssertEqual(store.ordered.count, 1)
+        XCTAssertEqual(store.badgeCount, 0)
+        XCTAssertEqual(store.aggregate, .sleeping)
     }
 }
 
@@ -459,8 +603,8 @@ extension SessionStoreTests {
     /// so the number and the colour always describe the same population.
     func testBadgeCountRegressionTwoWorkingThreeDoneReportsTwoNotFive() {
         let store = SessionStore()
-        store.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
-        store.apply(hook: hook("SessionStart", id: "w2", cwd: "/w2"), now: t0)
+        startWorking(store, id: "w1", cwd: "/w1", at: t0)
+        startWorking(store, id: "w2", cwd: "/w2", at: t0)
         for id in ["d1", "d2", "d3"] {
             store.apply(hook: hook("SessionStart", id: id, cwd: "/\(id)"), now: t0)
             store.apply(hook: hook("Stop", id: id), now: t0.addingTimeInterval(1))
@@ -475,8 +619,8 @@ extension SessionStoreTests {
         store.apply(hook: hook("SessionStart", id: "n", cwd: "/n"), now: t0)
         store.apply(hook: hook("Notification", id: "n", message: "нужно разрешение"),
                     now: t0.addingTimeInterval(10))
-        store.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
-        store.apply(hook: hook("SessionStart", id: "w2", cwd: "/w2"), now: t0)
+        startWorking(store, id: "w1", cwd: "/w1", at: t0)
+        startWorking(store, id: "w2", cwd: "/w2", at: t0)
         XCTAssertEqual(store.aggregate, .waiting(1))
         XCTAssertEqual(store.badgeCount, 1)
     }
@@ -488,8 +632,8 @@ extension SessionStoreTests {
             store.apply(hook: hook("Notification", id: id, message: "нужно разрешение"),
                         now: t0.addingTimeInterval(10))
         }
-        store.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
-        store.apply(hook: hook("SessionStart", id: "w2", cwd: "/w2"), now: t0)
+        startWorking(store, id: "w1", cwd: "/w1", at: t0)
+        startWorking(store, id: "w2", cwd: "/w2", at: t0)
         XCTAssertEqual(store.aggregate, .waiting(3))
         XCTAssertEqual(store.badgeCount, 3)
     }
@@ -497,7 +641,7 @@ extension SessionStoreTests {
     func testBadgeCountForProblemCountsOnlyCrashedSessions() {
         let store = SessionStore()
         // c1 works, then goes stale with no claude processes alive -> crashed.
-        store.apply(hook: hook("SessionStart", id: "c1", cwd: "/c1"), now: t0)
+        startWorking(store, id: "c1", cwd: "/c1", at: t0)
         store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300))
         // d1 finishes normally -> done.
         store.apply(hook: hook("SessionStart", id: "d1", cwd: "/d1"), now: t0)
