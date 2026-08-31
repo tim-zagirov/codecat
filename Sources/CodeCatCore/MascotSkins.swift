@@ -9,11 +9,15 @@ import Foundation
 /// to load. It has no entry here because it has no sprite data to register.
 public enum MascotSkins {
 
-    public static let all: [MascotSkin] = luizMeloCats + [elthen, mxmaze]
+    public static let all: [MascotSkin] = (1...6).map(luizMeloCat) + [elthen, mxmaze]
 
     /// `luizmelo-cat-1` ("Рыжий"): the warm ginger cat, closest in spirit to the
     /// retired hand-drawn default, and the only LuizMelo cat in a warm palette.
-    public static let `default` = all.first { $0.id == "luizmelo-cat-1" }!
+    ///
+    /// Built directly rather than looked up in `all`, so this can never fail: a
+    /// lookup-based default (`all.first { $0.id == "luizmelo-cat-1" }!`) would trap
+    /// at launch if that id were ever renamed or removed from `all`.
+    public static let `default` = luizMeloCat(1)
 
     /// Falls back to `default` rather than failing: an id that is not in the
     /// registry means a corrupted or downgraded `UserDefaults` (including a stored
@@ -26,24 +30,31 @@ public enum MascotSkins {
     // MARK: - LuizMelo
 
     /// Colours read off each cat's `Idle` frame; that is all that distinguishes
-    /// `Cat-1`…`Cat-6` in the archive, where they are only numbered.
-    private static let luizMeloNames = [
-        1: "Рыжий", 2: "Чёрный", 3: "Сиамский",
-        4: "Дымчатый", 5: "Белый", 6: "Полосатый",
-    ]
-
-    private static var luizMeloCats: [MascotSkin] {
-        (1...6).map { n in
-            MascotSkin(
-                id: "luizmelo-cat-\(n)",
-                name: luizMeloNames[n]!,
-                author: "LuizMelo",
-                license: .cc0,
-                sourceURL: "https://luizmelo.itch.io/pet-cat-pack",
-                directory: "luizmelo/Cat-\(n)",
-                frameSize: 50,
-                animations: luizMeloAnimations(n))
+    /// `Cat-1`…`Cat-6` in the archive, where they are only numbered. A `switch`
+    /// rather than a dictionary lookup: the compiler proves every `1...6` case is
+    /// covered, so there is no force-unwrap that could trap on a typo'd number.
+    private static func luizMeloName(_ n: Int) -> String {
+        switch n {
+        case 1: return "Рыжий"
+        case 2: return "Чёрный"
+        case 3: return "Сиамский"
+        case 4: return "Дымчатый"
+        case 5: return "Белый"
+        case 6: return "Полосатый"
+        default: return "Кот \(n)"
         }
+    }
+
+    private static func luizMeloCat(_ n: Int) -> MascotSkin {
+        MascotSkin(
+            id: "luizmelo-cat-\(n)",
+            name: luizMeloName(n),
+            author: "LuizMelo",
+            license: .cc0,
+            sourceURL: "https://luizmelo.itch.io/pet-cat-pack",
+            directory: "luizmelo/Cat-\(n)",
+            frameSize: 50,
+            animations: luizMeloAnimations(n))
     }
 
     private static func luizMeloAnimations(_ n: Int) -> [AggregateStatusKey: SpriteAnimation] {
