@@ -3,7 +3,15 @@ import Foundation
 public final class SessionStore: ObservableObject {
     @Published public private(set) var sessions: [String: Session] = [:]
 
-    public init() {}
+    /// Optional persisted route memory — see `SessionRouteCache`. `nil` by
+    /// default so every existing call site (and every existing test) that
+    /// constructs a bare `SessionStore()` keeps working unchanged; a route
+    /// cache is something a caller opts into, not something the store requires.
+    private let routeCache: SessionRouteCache?
+
+    public init(routeCache: SessionRouteCache? = nil) {
+        self.routeCache = routeCache
+    }
 
     public var ordered: [Session] {
         sessions.values.sorted { $0.startedAt < $1.startedAt }
@@ -94,20 +102,21 @@ public final class SessionStore: ObservableObject {
             }
         case "SessionEnd":
             sessions.removeValue(forKey: event.sessionId)
+            // Сессия закончилась — маршрут для неё больше не нужен (см. спеку,
+            // «Кэшируются маршруты, а не сессии»).
+            routeCache?.remove(sessionId: event.sessionId)
         default:
             break // неизвестные события игнорируем
         }
     }
 
     public func apply(activity: TranscriptActivity) {
-        var s = sessions[activity.sessionId] ?? Session(
-            id: activity.sessionId,
-            projectPath: activity.projectPath,
-            status: .working,
-            activityDescription: activity.description,
-            startedAt: activity.timestamp,
+        let isNew = sessions[activity.sessionId] == nil
+        var s = sessions[activity.sessionId] ?? newSession(
+            id: activity.sessionId, projectPath: activity.projectPath,
+            activityDescription: activity.description, fallbackStartedAt: activity.timestamp,
             lastActivity: activity.timestamp)
-        guard activity.timestamp > s.lastActivity || sessions[activity.sessionId] == nil else { return }
+        guard activity.timestamp > s.lastActivity || isNew else { return }
         guard s.status != .crashed else { return }
         s.status = .working
         // Работа субагента — это работа сессии (см. `isSubagent` на `TranscriptActivity`):
@@ -192,13 +201,9 @@ public final class SessionStore: ObservableObject {
 
     private func upsert(event: HookEvent, now: Date,
                         _ mutate: (inout Session) -> Void) {
-        var s = sessions[event.sessionId] ?? Session(
-            id: event.sessionId,
-            projectPath: event.cwd ?? "",
-            status: .working,
-            activityDescription: "",
-            startedAt: now,
-            lastActivity: now)
+        var s = sessions[event.sessionId] ?? newSession(
+            id: event.sessionId, projectPath: event.cwd ?? "",
+            activityDescription: "", fallbackStartedAt: now, lastActivity: now)
         if let cwd = event.cwd, !cwd.isEmpty { s.projectPath = cwd }
         s.lastActivity = now
         // Only ever fill the route in, never clear it: a `Notification` from an older
@@ -216,5 +221,48 @@ public final class SessionStore: ObservableObject {
             s.finishedAt = nil
         }
         sessions[event.sessionId] = s
+
+        // Route fields only ever arrive from a hook — record them into the cache
+        // whenever this event carried any, so a future restart can restore them
+        // for this session. `routeCache.record` does its own never-clobber merge
+        // against whatever it already has, so a partial payload here (some
+        // fields present, some not) still cannot blank out a field the cache
+        // already knows.
+        if event.hostPID != nil || event.hostBundlePath != nil
+            || event.hostBundleID != nil || event.tty != nil {
+            routeCache?.record(
+                sessionId: event.sessionId, hostPID: s.hostPID, hostBundlePath: s.hostBundlePath,
+                hostBundleID: s.hostBundleID, tty: s.tty, startedAt: s.startedAt, now: now)
+        }
+    }
+
+    /// Builds a brand-new `Session` for an id neither `sessions` nor (via the
+    /// caller passing it through) anything else yet knows about, consulting the
+    /// route cache first: a cached `SessionRoute` for this id supplies the
+    /// missing `hostPID`/`hostBundlePath`/`hostBundleID`/`tty` *and* the real
+    /// `startedAt`, so a session restored after a CodeCat restart is clickable
+    /// immediately and its "длится N мин" counts from when it actually began —
+    /// not from the moment this process happened to notice it (`fallbackStartedAt`).
+    ///
+    /// Shared by both `upsert` (hook path) and `apply(activity:)` (transcript
+    /// watcher path): whichever one sees a session first, the substitution is
+    /// identical, per the design spec's «Подстановка» test list.
+    private func newSession(id: String, projectPath: String, activityDescription: String,
+                            fallbackStartedAt: Date, lastActivity: Date) -> Session {
+        let cached = routeCache?.route(for: id)
+        var s = Session(
+            id: id,
+            projectPath: projectPath,
+            status: .working,
+            activityDescription: activityDescription,
+            startedAt: cached?.startedAt ?? fallbackStartedAt,
+            lastActivity: lastActivity)
+        if let cached {
+            s.hostPID = cached.hostPID
+            s.hostBundlePath = cached.hostBundlePath
+            s.hostBundleID = cached.hostBundleID
+            s.tty = cached.tty
+        }
+        return s
     }
 }
