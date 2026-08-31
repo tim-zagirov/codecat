@@ -23,6 +23,33 @@ public final class SessionStore: ObservableObject {
         return .sleeping
     }
 
+    /// How many sessions are in the state the mascot is *currently displaying* — the
+    /// number that belongs next to the badge's colour, because they must describe the
+    /// same population and previously didn't.
+    ///
+    /// The bug this fixes: `OverlayPanel` used to pass `ordered.count` — every tracked
+    /// session, including `.done`/`.crashed` ones still lingering inside
+    /// `expireFinished`'s TTL (up to 600s) — as the badge's number, while the badge's
+    /// *colour* came from `aggregate`, which only counts the sessions in the state
+    /// being shown. Two agents genuinely working could badge "5" because three
+    /// finished sessions hadn't expired yet. The design spec calls the badge
+    /// «бейдж с числом активных сессий» (`docs/superpowers/specs/2026-08-28-codecat-design.md:83`)
+    /// — the number of *active* sessions, not of everything this process still
+    /// happens to remember.
+    ///
+    /// Deliberately derived from `aggregate` rather than recomputing "which state is
+    /// the mascot in" a second time: two places independently deciding that question
+    /// is exactly how the number and the colour drifted apart in the first place.
+    public var badgeCount: Int {
+        switch aggregate {
+        case .waiting(let n): return n
+        case .working(let n): return n
+        case .problem: return sessions.values.filter { $0.status == .crashed }.count
+        case .done: return sessions.values.filter { $0.status == .done }.count
+        case .sleeping: return 0
+        }
+    }
+
     /// True when at least one session's *own* status counts as work in progress —
     /// unlike `aggregate`, which is a display-priority value (waiting outranks working
     /// so the UI surfaces the thing that needs the user's attention) and therefore must

@@ -403,4 +403,120 @@ extension SessionStoreTests {
         XCTAssertNil(store.sessions["only-transcript"]?.hostPID)
         XCTAssertNil(store.sessions["only-transcript"]?.tty)
     }
+
+    // MARK: - badgeCount
+
+    /// Regression test for the reported bug: two agents genuinely working, but the
+    /// badge said 5. Root cause was `OverlayPanel` passing `ordered.count` — every
+    /// tracked session, including three `.done` ones still lingering inside
+    /// `expireFinished`'s TTL — while the badge's colour came from `aggregate`, which
+    /// only counts the two `.working` sessions. `badgeCount` must track `aggregate`,
+    /// so the number and the colour always describe the same population.
+    func testBadgeCountRegressionTwoWorkingThreeDoneReportsTwoNotFive() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
+        store.apply(hook: hook("SessionStart", id: "w2", cwd: "/w2"), now: t0)
+        for id in ["d1", "d2", "d3"] {
+            store.apply(hook: hook("SessionStart", id: id, cwd: "/\(id)"), now: t0)
+            store.apply(hook: hook("Stop", id: id), now: t0.addingTimeInterval(1))
+        }
+        XCTAssertEqual(store.ordered.count, 5)
+        XCTAssertEqual(store.aggregate, .working(2))
+        XCTAssertEqual(store.badgeCount, 2)
+    }
+
+    func testBadgeCountWaitingOutranksWorking() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart", id: "n", cwd: "/n"), now: t0)
+        store.apply(hook: hook("Notification", id: "n", message: "нужно разрешение"),
+                    now: t0.addingTimeInterval(10))
+        store.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
+        store.apply(hook: hook("SessionStart", id: "w2", cwd: "/w2"), now: t0)
+        XCTAssertEqual(store.aggregate, .waiting(1))
+        XCTAssertEqual(store.badgeCount, 1)
+    }
+
+    func testBadgeCountReportsAllWaitingSessionsNotJustOne() {
+        let store = SessionStore()
+        for id in ["n1", "n2", "n3"] {
+            store.apply(hook: hook("SessionStart", id: id, cwd: "/\(id)"), now: t0)
+            store.apply(hook: hook("Notification", id: id, message: "нужно разрешение"),
+                        now: t0.addingTimeInterval(10))
+        }
+        store.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
+        store.apply(hook: hook("SessionStart", id: "w2", cwd: "/w2"), now: t0)
+        XCTAssertEqual(store.aggregate, .waiting(3))
+        XCTAssertEqual(store.badgeCount, 3)
+    }
+
+    func testBadgeCountForProblemCountsOnlyCrashedSessions() {
+        let store = SessionStore()
+        // c1 works, then goes stale with no claude processes alive -> crashed.
+        store.apply(hook: hook("SessionStart", id: "c1", cwd: "/c1"), now: t0)
+        store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300))
+        // d1 finishes normally -> done.
+        store.apply(hook: hook("SessionStart", id: "d1", cwd: "/d1"), now: t0)
+        store.apply(hook: hook("Stop", id: "d1"), now: t0.addingTimeInterval(10))
+        XCTAssertEqual(store.aggregate, .problem)
+        XCTAssertEqual(store.badgeCount, 1)
+    }
+
+    func testBadgeCountForDoneCountsAllDoneSessions() {
+        let store = SessionStore()
+        for id in ["d1", "d2"] {
+            store.apply(hook: hook("SessionStart", id: id, cwd: "/\(id)"), now: t0)
+            store.apply(hook: hook("Stop", id: id), now: t0.addingTimeInterval(10))
+        }
+        XCTAssertEqual(store.aggregate, .done)
+        XCTAssertEqual(store.badgeCount, 2)
+    }
+
+    func testBadgeCountIsZeroForEmptySleepingStore() {
+        let store = SessionStore()
+        XCTAssertEqual(store.aggregate, .sleeping)
+        XCTAssertEqual(store.badgeCount, 0)
+    }
+
+    /// Pins the invariant itself, across every store shape built above: the badge can
+    /// never claim more sessions are active than the store actually holds, and it is
+    /// zero exactly when the mascot is asleep — never zero while there's something to
+    /// show, never nonzero while there isn't.
+    func testBadgeCountInvariantNeverExceedsOrderedCountAndIsZeroOnlyWhenSleeping() {
+        func assertInvariant(_ store: SessionStore, file: StaticString = #filePath,
+                             line: UInt = #line) {
+            XCTAssertLessThanOrEqual(store.badgeCount, store.ordered.count, file: file, line: line)
+            XCTAssertEqual(store.badgeCount == 0, store.aggregate == .sleeping, file: file, line: line)
+        }
+
+        let empty = SessionStore()
+        assertInvariant(empty)
+
+        let working = SessionStore()
+        working.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
+        working.apply(hook: hook("SessionStart", id: "w2", cwd: "/w2"), now: t0)
+        assertInvariant(working)
+
+        let waiting = SessionStore()
+        waiting.apply(hook: hook("SessionStart", id: "n1", cwd: "/n1"), now: t0)
+        waiting.apply(hook: hook("Notification", id: "n1", message: "нужно разрешение"),
+                     now: t0.addingTimeInterval(10))
+        waiting.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
+        assertInvariant(waiting)
+
+        let done = SessionStore()
+        done.apply(hook: hook("SessionStart", id: "d1", cwd: "/d1"), now: t0)
+        done.apply(hook: hook("Stop", id: "d1"), now: t0.addingTimeInterval(10))
+        assertInvariant(done)
+
+        let problem = SessionStore()
+        problem.apply(hook: hook("SessionStart", id: "c1", cwd: "/c1"), now: t0)
+        problem.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300))
+        assertInvariant(problem)
+
+        let mixedWorkingAndDone = SessionStore()
+        mixedWorkingAndDone.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
+        mixedWorkingAndDone.apply(hook: hook("SessionStart", id: "d1", cwd: "/d1"), now: t0)
+        mixedWorkingAndDone.apply(hook: hook("Stop", id: "d1"), now: t0.addingTimeInterval(10))
+        assertInvariant(mixedWorkingAndDone)
+    }
 }
