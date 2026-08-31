@@ -15,6 +15,12 @@ public enum CodeCatPaths {
         appSupport.appendingPathComponent("codecat.sock")
     }
 
+    /// Persisted `SessionRoute` map — see `SessionRouteCache`. Lives next to the
+    /// socket in Application Support, per the design spec.
+    public static var routeCacheURL: URL {
+        appSupport.appendingPathComponent("routes.json")
+    }
+
     public static var claudeSettings: URL {
         home.appendingPathComponent(".claude/settings.json")
     }
