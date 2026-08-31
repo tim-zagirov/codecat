@@ -50,6 +50,26 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(skinID, forKey: "mascotSkin") }
     }
 
+    /// Как показывать маскота. Персистится, чтобы выбор пережил перезапуск;
+    /// читается через `MascotDisplayMode.mode(withID:)`, который откатывает
+    /// незнакомую строку к режиму по умолчанию.
+    @Published var displayMode: MascotDisplayMode {
+        didSet { UserDefaults.standard.set(displayMode.rawValue, forKey: "mascotDisplayMode") }
+    }
+
+    /// Прятать остров, когда сессий нет вовсе. По умолчанию выключено: остров
+    /// стоит на одном месте, и на него всегда можно навести мышь.
+    @Published var islandHidesWhenIdle: Bool {
+        didSet { UserDefaults.standard.set(islandHidesWhenIdle, forKey: "islandHidesWhenIdle") }
+    }
+
+    /// Должен ли остров прямо сейчас быть скрыт по настройке «прятать в покое».
+    var islandShouldHideNow: Bool {
+        guard islandHidesWhenIdle else { return false }
+        if case .sleeping = store.aggregate { return true }
+        return false
+    }
+
     /// Whether the "Об ассетах" credits disclosure in `SkinPickerView` is expanded.
     /// Lives here rather than as local `@State` on that view so toggling it
     /// publishes through `objectWillChange` like every other piece of visible
@@ -77,11 +97,15 @@ final class AppState: ObservableObject {
         defaults.register(defaults: [
             "keepAwake": true, "lidMode": false, "sounds": false, "showMascot": true,
             "mascotSkin": MascotSkins.default.id,
+            "mascotDisplayMode": MascotDisplayMode.default.rawValue,
+            "islandHidesWhenIdle": false,
         ])
         keepAwakeEnabled = defaults.bool(forKey: "keepAwake")
         lidModeEnabled = defaults.bool(forKey: "lidMode")
         soundsEnabled = defaults.bool(forKey: "sounds")
         showMascot = defaults.bool(forKey: "showMascot")
+        displayMode = MascotDisplayMode.mode(withID: defaults.string(forKey: "mascotDisplayMode"))
+        islandHidesWhenIdle = defaults.bool(forKey: "islandHidesWhenIdle")
         // Resolve through `MascotSkins.skin(withID:)` rather than trusting the raw
         // stored string: an id from an older build (e.g. the retired `"drawn"`) must
         // migrate to the default skin here, at read time, so `skinID` and `skin.id`
