@@ -12,6 +12,11 @@ struct SpriteMascotView: View {
     /// Previews in the details panel cap this: nine animations run at once there.
     var maxFPS: Double = 8
     var showsBadge: Bool = true
+    /// Размер спрайта на экране. Не задан — берётся размер из `LoadedSkin`,
+    /// то есть нормировка плавающего маскота.
+    var drawingSize: CGSize?
+    /// Размер холста вокруг спрайта. Не задан — канва плавающего маскота.
+    var canvasSize: CGSize?
 
     private var animation: SpriteAnimation? {
         loaded.skin.animation(for: AggregateStatusKey(status))
@@ -32,7 +37,8 @@ struct SpriteMascotView: View {
                 MascotBadge(sessionCount: sessionCount, status: status)
             }
         }
-        .frame(width: MascotLayout.canvasSize, height: MascotLayout.canvasSize)
+        .frame(width: canvasSize?.width ?? MascotLayout.canvasSize,
+               height: canvasSize?.height ?? MascotLayout.canvasSize)
     }
 
     /// Frame number from wall-clock time rather than a stored counter: `TimelineView`
@@ -46,13 +52,14 @@ struct SpriteMascotView: View {
 
     @ViewBuilder
     private func frameImage(at index: Int, in animation: SpriteAnimation) -> some View {
+        let size = drawingSize ?? loaded.drawingSize
         if let cgImage = SpriteSheetStore.shared.image(
             for: animation.frames[index], of: loaded.skin, cropping: loaded.bounds) {
             Image(decorative: cgImage, scale: 1)
                 .interpolation(.none)
                 .antialiased(false)
                 .resizable()
-                .frame(width: loaded.drawingSize.width, height: loaded.drawingSize.height)
+                .frame(width: size.width, height: size.height)
         }
     }
 }

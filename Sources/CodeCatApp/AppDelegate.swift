@@ -6,7 +6,8 @@ import ServiceManagement
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
     private var statusItem: NSStatusItem!
-    private var overlay: OverlayController?
+    private var presenter: MascotPresenting?
+    private var presentedMode: MascotDisplayMode?
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -18,11 +19,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateStatusIcon()
+                self?.syncPresenter()
             }
             .store(in: &cancellables)
         updateStatusIcon()
 
-        overlay = OverlayController(appState: appState)
+        syncPresenter()
+    }
+
+    /// Держит на экране ровно один режим. Смена режима — это уничтожение старого
+    /// контроллера и создание нового: у них разные окна, разная геометрия и разная
+    /// модель ввода, и жить одновременно им незачем. Старый обязательно уводится с
+    /// экрана до обнуления ссылки — иначе его окно осталось бы висеть.
+    ///
+    /// `.receive(on: DispatchQueue.main)` в подписке на `appState.objectWillChange`
+    /// выше — не оптимизация, а условие корректности этого метода, по двум
+    /// причинам:
+    ///  1. `@Published` шлёт `objectWillChange` из `willSet`, то есть до того, как
+    ///     новое значение записано. Без перехода на отдельный проход очереди
+    ///     `syncPresenter()` читал бы `appState.displayMode` ещё старым,
+    ///     `guard presentedMode != appState.displayMode` был бы всегда истинным
+    ///     для «пока не записанного» значения, и режим не переключился бы вовсе.
+    ///  2. Уничтожение старого контроллера здесь может уничтожить и панель меню,
+    ///     из которой только что кликнули по `Picker` виду — переключить режим
+    ///     можно прямо из меню острова. `.receive(on:)` откладывает это на
+    ///     следующий проход `RunLoop`, когда стек обработки клика уже размотался,
+    ///     а не рвёт из-под ног view, которая всё ещё обрабатывает событие.
+    private func syncPresenter() {
+        guard presentedMode != appState.displayMode else { return }
+        presenter?.setVisible(false)
+        presenter = nil
+        presentedMode = appState.displayMode
+        switch appState.displayMode {
+        case .floating: presenter = OverlayController(appState: appState)
+        case .island: presenter = IslandController(appState: appState)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -62,6 +93,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if !appState.store.ordered.isEmpty { menu.addItem(.separator()) }
 
+        for mode in MascotDisplayMode.allCases {
+            let item = NSMenuItem(title: "Вид: \(mode.title)",
+                                  action: #selector(selectDisplayMode(_:)), keyEquivalent: "")
+            item.state = (appState.displayMode == mode) ? .on : .off
+            item.representedObject = mode.rawValue
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+
         menu.addItem(toggle("Не давать маку спать", appState.keepAwakeEnabled,
                             #selector(toggleKeepAwake)))
         menu.addItem(toggle("Режим закрытой крышки", appState.lidModeEnabled,
@@ -94,6 +134,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleLidMode() {
         appState.requestLidModeChange(to: !appState.lidModeEnabled)
+    }
+
+    /// Переключение вида живёт и здесь, а не только в панели: если остров окажется
+    /// негде показать (встроенный экран отключён), маскота не будет видно вовсе, и
+    /// вернуться к плавающему коту надо откуда-то ещё.
+    @objc private func selectDisplayMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String else { return }
+        appState.displayMode = MascotDisplayMode.mode(withID: raw)
     }
 
     @objc private func installHooks() { appState.installHooksIfNeeded() }
