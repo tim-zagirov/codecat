@@ -24,11 +24,10 @@ final class IslandController: NSObject, MascotPresenting {
     private var menuLevel: IslandMenuLevel?
     private var pendingClose: DispatchWorkItem?
     private var cancellables: Set<AnyCancellable> = []
-    /// Последняя запрошенная видимость острова. Сегодня её никто не читает —
-    /// читатель появится в задаче 8: `screensChanged()` будет звать
-    /// `setVisible(isVisible)`, чтобы перепоказать остров после смены
-    /// конфигурации дисплеев, не спрашивая заново `AppState.showMascot`
-    /// (который к этому моменту мог и не измениться).
+    /// Последняя запрошенная видимость острова. Читает её `screensChanged()`: она
+    /// зовёт `setVisible(isVisible)`, чтобы перепоказать остров после смены
+    /// конфигурации дисплеев, не спрашивая заново `AppState.showMascot` (который к
+    /// этому моменту мог и не измениться).
     private var isVisible = false
 
     /// Всё, что нужно знать о геометрии в текущий момент. Пересчитывается на
@@ -55,6 +54,12 @@ final class IslandController: NSObject, MascotPresenting {
             self, selector: #selector(menuDidResignKey(_:)),
             name: NSWindow.didResignKeyNotification, object: nil)
 
+        // Встроенный экран могли отключить или подключить обратно — вырез при этом
+        // появляется и исчезает, а вместе с ним и место для острова.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screensChanged),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
         setVisible(appState.showMascot)
     }
 
@@ -68,7 +73,9 @@ final class IslandController: NSObject, MascotPresenting {
 
     func setVisible(_ visible: Bool) {
         isVisible = visible
-        guard visible, let geometry = geometry() else {
+        // `islandShouldHideNow` — настройка «прятать, когда сессий нет». Меню при
+        // этом тоже уходит: его не к чему было бы привязать.
+        guard visible, !appState.islandShouldHideNow, let geometry = geometry() else {
             hideMenu()
             islandPanel?.orderOut(nil)
             return
@@ -207,6 +214,22 @@ final class IslandController: NSObject, MascotPresenting {
         hideMenu()
     }
 
+    /// Экран сменил конфигурацию — вырез мог появиться или исчезнуть вместе с ним.
+    /// `didChangeScreenParametersNotification` нигде не документирован как
+    /// гарантированно приходящий на главном потоке (Apple подтверждает только сам
+    /// факт отправки уведомления, не поток), а `geometry()` — через
+    /// `assumeIsolated` — не прощает ошибку: не предупреждает о нарушении, а
+    /// роняет процесс. Поэтому переход на главный поток здесь сделан явно, а не
+    /// просто предположен.
+    @objc private func screensChanged() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.screensChanged() }
+            return
+        }
+        hideMenu()
+        setVisible(isVisible)
+    }
+
     private func makePanel() -> OverlayPanel {
         let panel = OverlayPanel(contentRect: .zero, allowsKey: false)
         panel.level = Self.islandLevel
@@ -241,14 +264,16 @@ final class IslandController: NSObject, MascotPresenting {
         // этот факт, а не меняет архитектуру.
         //
         // Инвариант: всякий путь сюда приходит на главном потоке. Сегодня в
-        // `geometry()` ведут пять вызовов:
+        // `geometry()` ведут шесть вызовов:
         //  - из `init` (через `setVisible(appState.showMascot)`);
         //  - из `handleStateChange()` дважды — через `setVisible(...)` и напрямую,
         //    при перекладке уже открытого меню под новую геометрию;
         //  - из `pointerEnteredRegion()` (через `showMenu(.short)`) — вызывается из
         //    `mouseEntered` хоста острова и хоста меню;
         //  - из `islandClicked()` (через `showMenu(.full)`) — вызывается из
-        //    `mouseUp` хоста острова.
+        //    `mouseUp` хоста острова;
+        //  - из `screensChanged()` (через `setVisible(isVisible)`) — сама явно
+        //    переходит на главный поток перед вызовом, см. её комментарий.
         // `handleStateChange()` доходит сюда через `Combine`-сток с
         // `.receive(on: DispatchQueue.main)`, а `pointerEnteredRegion()` и
         // `islandClicked()` — из переопределений `NSResponder.mouseEntered` /
