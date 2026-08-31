@@ -238,6 +238,7 @@ private struct CatClickContent: View {
         MascotView(skin: appState.skin,
                    status: appState.store.aggregate,
                    sessionCount: appState.store.badgeCount,
+                   since: appState.statusSince,
                    onLoadFailure: { [appState] skin in appState.reportSkinLoadFailure(skin) })
             .contentShape(Rectangle())
     }

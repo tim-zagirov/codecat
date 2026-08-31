@@ -54,6 +54,7 @@ struct IslandView: View {
                    drawingSize: spriteSize,
                    canvasSize: CGSize(width: spriteSize.width, height: height),
                    showsBadge: false,
+                   since: appState.statusSince,
                    onLoadFailure: { [appState] skin in appState.reportSkinLoadFailure(skin) })
     }
 
