@@ -100,4 +100,56 @@ final class TranscriptParserTests: XCTestCase {
         """
         XCTAssertEqual(TranscriptParser.parseLine(l)?.isSubagent, false)
     }
+
+    // MARK: - Конец турна
+
+    private func assistant(stopReason: String?, tool: String? = nil, agentId: String? = nil) -> String {
+        var message: [String: Any] = ["content": tool.map { [["type": "tool_use", "name": $0, "input": [:]]] } ?? []]
+        if let stopReason { message["stop_reason"] = stopReason }
+        var obj: [String: Any] = [
+            "type": "assistant", "sessionId": "s1", "cwd": "/proj",
+            "timestamp": "2026-09-01T00:00:00.000Z", "message": message,
+        ]
+        if let agentId { obj["agentId"] = agentId }
+        return String(data: try! JSONSerialization.data(withJSONObject: obj), encoding: .utf8)!
+    }
+
+    /// `stop_reason == "end_turn"` — модель вернула управление человеку. Единственный
+    /// признак конца работы, который лежит в самом транскрипте; на хук `Stop`
+    /// полагаться нельзя, он приходит не всегда.
+    func testAssistantEndTurnIsRecognisedAsTheEndOfWork() {
+        let activity = TranscriptParser.parseLine(assistant(stopReason: "end_turn"))
+        XCTAssertEqual(activity?.endsTurn, true)
+        XCTAssertEqual(activity?.description, "закончил")
+    }
+
+    /// Противоположность: вызов инструмента. Таких записей в реальной сессии в
+    /// двадцать раз больше, так что спутать их с концом турна нельзя.
+    func testAssistantToolUseIsNotTheEndOfWork() {
+        let activity = TranscriptParser.parseLine(assistant(stopReason: "tool_use", tool: "Bash"))
+        XCTAssertEqual(activity?.endsTurn, false)
+        XCTAssertEqual(activity?.description, "выполняет команду")
+    }
+
+    /// Запись без `stop_reason` (старая версия формата, промежуточный кусок) — это не
+    /// конец: молчание не считается утверждением.
+    func testAssistantWithoutAStopReasonIsNotTheEndOfWork() {
+        XCTAssertEqual(TranscriptParser.parseLine(assistant(stopReason: nil, tool: "Read"))?.endsTurn, false)
+    }
+
+    /// У записей пользователя (включая результаты инструментов) `stop_reason` не
+    /// бывает — и подавно не бывает конца турна.
+    func testUserRecordNeverEndsTheTurn() {
+        let line = #"{"type":"user","sessionId":"s1","cwd":"/proj","timestamp":"2026-09-01T00:00:00.000Z"}"#
+        XCTAssertEqual(TranscriptParser.parseLine(line)?.endsTurn, false)
+    }
+
+    /// Конец турна субагента остаётся концом турна *записи*; отличать его от конца
+    /// работы сессии — дело стора (см. `SessionStoreTests`), но флаг субагента при
+    /// этом обязан сохраниться.
+    func testSubagentEndTurnKeepsTheSubagentMarker() {
+        let activity = TranscriptParser.parseLine(assistant(stopReason: "end_turn", agentId: "a1"))
+        XCTAssertEqual(activity?.endsTurn, true)
+        XCTAssertEqual(activity?.isSubagent, true)
+    }
 }

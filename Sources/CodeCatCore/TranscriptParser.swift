@@ -23,9 +23,16 @@ public enum TranscriptParser {
         else { return nil }
 
         let cwd = obj["cwd"] as? String ?? ""
+        // Конец турна: модель вернула управление человеку. См. `TranscriptActivity.endsTurn`.
+        // Только у ассистента: у записей пользователя (включая результаты инструментов)
+        // такого поля нет и быть не может.
+        let endsTurn = type == "assistant"
+            && (obj["message"] as? [String: Any])?["stop_reason"] as? String == "end_turn"
         let description: String
         if type == "user" {
             description = "работает над задачей"
+        } else if endsTurn {
+            description = "закончил"
         } else {
             description = describeAssistant(obj)
         }
@@ -36,7 +43,7 @@ public enum TranscriptParser {
         let isSubagent = !((obj["agentId"] as? String ?? "").isEmpty)
         return TranscriptActivity(sessionId: sessionId, projectPath: cwd,
                                   description: description, timestamp: ts,
-                                  isSubagent: isSubagent)
+                                  isSubagent: isSubagent, endsTurn: endsTurn)
     }
 
     private static func describeAssistant(_ obj: [String: Any]) -> String {

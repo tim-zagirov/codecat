@@ -144,12 +144,25 @@ public struct TranscriptActivity: Equatable, Sendable {
     /// способ отличить одно от другого, ничего не меняя в том, кому активность засчитана.
     public let isSubagent: Bool
 
+    /// Запись ассистента закрыла турн: `message.stop_reason == "end_turn"` — модель
+    /// вернула управление человеку. Это единственный признак конца работы, который
+    /// живёт в самом транскрипте, и он оказался нужен: хук `Stop` приходит не всегда.
+    /// Замерено на живой машине — сессия закончила турн в 01:02 (последняя запись
+    /// ассистента с `end_turn`, процесс без нагрузки и без детей), а хука приложение
+    /// так и не увидело, и сессия навсегда осталась «работает».
+    ///
+    /// Противоположность — `stop_reason == "tool_use"`: модель вызвала инструмент,
+    /// работа продолжается. В разобранной сессии таких записей 426 против 19
+    /// `end_turn`, так что путать их нельзя ни в коем случае.
+    public let endsTurn: Bool
+
     public init(sessionId: String, projectPath: String, description: String, timestamp: Date,
-                isSubagent: Bool = false) {
+                isSubagent: Bool = false, endsTurn: Bool = false) {
         self.sessionId = sessionId
         self.projectPath = projectPath
         self.description = description
         self.timestamp = timestamp
         self.isSubagent = isSubagent
+        self.endsTurn = endsTurn
     }
 }
