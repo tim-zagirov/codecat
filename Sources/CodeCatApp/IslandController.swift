@@ -36,8 +36,6 @@ final class IslandController: NSObject, MascotPresenting {
         let screen: NSScreen
         let notch: CGRect
         let island: CGRect
-        let leftWingWidth: CGFloat
-        let rightWingWidth: CGFloat
         let spriteSize: CGSize
     }
 
@@ -144,27 +142,49 @@ final class IslandController: NSObject, MascotPresenting {
     }
 
     private func islandClicked() {
-        if menuLevel == .full {
-            hideMenu()
-        } else {
-            showMenu(.full)
+        switch menuLevel {
+        case .full: hideMenu()
+        case .short: expandMenu()
+        case nil: showMenu(.full)
         }
+    }
+
+    /// Переход «короткое → полное» происходит **в той же панели**, а не через
+    /// закрытие и открытие новой. Пересоздание схлопнуло бы меню и собрало заново,
+    /// то есть список сессий мигнул бы и переехал; а обещание раскрытия ровно
+    /// обратное — при переходе не должен сдвинуться ни один пиксель уже
+    /// показанного, меняется только высота. Поэтому панель меню всегда создаётся с
+    /// правом становиться key, хотя короткому уровню это право не нужно: сменить
+    /// его у живого окна нельзя, оно задаётся при создании.
+    private func expandMenu() {
+        guard let panel = menuPanel, let geometry = geometry(),
+              let hosting = panel.contentView as? HoverHostingView<IslandMenuView> else { return }
+        menuLevel = .full
+        hosting.rootView = menuContent(.full, geometry: geometry)
+        layoutMenu(geometry: geometry)
+        // Полное меню обязано становиться key, иначе тумблеры, переключатель вида
+        // и кнопка хуков внутри него не получают кликов.
+        panel.makeKeyAndOrderFront(nil)
+        refreshIsland()
+    }
+
+    private func menuContent(_ level: IslandMenuLevel, geometry: Geometry) -> IslandMenuView {
+        IslandMenuView(appState: appState,
+                       level: level,
+                       width: geometry.island.width,
+                       onJump: { [weak self] in self?.hideMenu() })
     }
 
     private func showMenu(_ level: IslandMenuLevel) {
         guard let geometry = geometry() else { return }
         hideMenu()
 
-        // Полное меню обязано становиться key, иначе тумблеры и кнопки внутри не
-        // получают кликов; короткому это не нужно, и ему незачем трогать фокус.
-        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 290, height: 200),
-                                 allowsKey: level == .full)
+        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0,
+                                                     width: geometry.island.width, height: 200),
+                                 allowsKey: true)
         panel.level = Self.islandLevel
         panel.acceptsMouseMovedEvents = true
-        let hosting = HoverHostingView(rootView: IslandMenuView(
-            appState: appState,
-            level: level,
-            onJump: { [weak self] in self?.hideMenu() }))
+        let hosting = HoverHostingView(rootView: menuContent(level, geometry: geometry))
         hosting.onEnter = { [weak self] in self?.pointerEnteredRegion() }
         hosting.onExit = { [weak self] in self?.pointerLeftRegion() }
         panel.contentView = hosting
@@ -172,6 +192,7 @@ final class IslandController: NSObject, MascotPresenting {
         menuPanel = panel
         menuLevel = level
         layoutMenu(geometry: geometry)
+        refreshIsland()
 
         if level == .full {
             panel.makeKeyAndOrderFront(nil)
@@ -191,17 +212,27 @@ final class IslandController: NSObject, MascotPresenting {
         menuPanel?.orderOut(nil)
         menuPanel = nil
         menuLevel = nil
+        refreshIsland()
+    }
+
+    /// Пересобирает содержимое острова, не трогая окно. Нужно потому, что остров
+    /// показывает состояние, которого нет в `AppState`: открыто ли меню. Пока оно
+    /// открыто, нижние углы острова распрямлены, и скругляет их уже меню — иначе
+    /// на стыке двух чёрных форм в углах проступают обои.
+    private func refreshIsland() {
+        guard let panel = islandPanel,
+              let hosting = panel.contentView as? IslandHostingView,
+              let geometry = geometry() else { return }
+        hosting.rootView = content(for: geometry)
     }
 
     private func layoutMenu(geometry: Geometry) {
         guard let panel = menuPanel,
               let hosting = panel.contentView else { return }
         let fitting = hosting.fittingSize
-        let size = (fitting.width > 0 && fitting.height > 0)
-            ? fitting : CGSize(width: 290, height: 200)
-        panel.setContentSize(size)
+        let height = fitting.height > 0 ? fitting.height : 200
         panel.setFrame(IslandLayout.menuFrame(island: geometry.island,
-                                              size: size,
+                                              height: height,
                                               screenFrame: geometry.screen.frame),
                        display: true)
     }
@@ -240,10 +271,10 @@ final class IslandController: NSObject, MascotPresenting {
     private func content(for geometry: Geometry) -> IslandView {
         IslandView(appState: appState,
                    notchWidth: geometry.notch.width,
-                   leftWingWidth: geometry.leftWingWidth,
-                   rightWingWidth: geometry.rightWingWidth,
+                   wingWidth: IslandLayout.wingWidth,
                    spriteSize: geometry.spriteSize,
-                   height: geometry.island.height)
+                   height: geometry.island.height,
+                   menuIsOpen: menuLevel != nil)
     }
 
     /// Экран с вырезом и вся производная геометрия. `nil` — острову негде жить.
@@ -301,15 +332,9 @@ final class IslandController: NSObject, MascotPresenting {
                 .drawingSize(targetHeight: SpriteScale.islandTargetHeight,
                              maxWidth: SpriteScale.islandMaxWidth)
         } ?? CGSize(width: 24, height: 24)
-        let left = IslandLayout.wingWidth(spriteWidth: spriteSize.width)
-        let right = IslandLayout.counterWingWidth
         return Geometry(screen: screen,
                         notch: notch,
-                        island: IslandLayout.islandFrame(notch: notch,
-                                                         leftWingWidth: left,
-                                                         rightWingWidth: right),
-                        leftWingWidth: left,
-                        rightWingWidth: right,
+                        island: IslandLayout.islandFrame(notch: notch),
                         spriteSize: spriteSize)
     }
 }
