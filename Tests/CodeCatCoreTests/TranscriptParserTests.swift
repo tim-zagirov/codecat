@@ -68,4 +68,36 @@ final class TranscriptParserTests: XCTestCase {
         XCTAssertNil(TranscriptParser.parseLine(
             #"{"type":"assistant","timestamp":"2026-08-28T10:00:00.123Z"}"#))
     }
+
+    // Реальная строка субагента, взятая из архива этой же машины:
+    // ~/.claude/projects/-Users-dev-Projects-example--claude-worktrees-example-branch/
+    //   bbbbbbbb-cccc-dddd-eeee-ffffffffffff/subagents/agent-a1b2c3d4e5f60718.jsonl
+    // sessionId в ней — это UUID родительской сессии, а не отдельная сессия субагента.
+    func testRealSubagentLineParsesAsSubagentWithParentSessionId() {
+        let l = """
+        {"parentUuid":"11111111-2222-3333-4444-555555555555","isSidechain":true,"agentId":"a1b2c3d4e5f60718","message":{"model":"claude-sonnet-5","id":"msg_01ExampleExampleExample","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01ExampleExampleExampl","name":"Bash","input":{"command":"cd /Users/dev/Projects/example/.claude/worktrees/example-branch\\nswift build 2>&1 | tail -80"},"caller":{"type":"direct"}}],"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":2,"cache_creation_input_tokens":465,"cache_read_input_tokens":91762,"cache_creation":{"ephemeral_5m_input_tokens":465,"ephemeral_1h_input_tokens":0},"output_tokens":3,"service_tier":"standard","inference_geo":"not_available"},"diagnostics":null},"requestId":"req_01ExampleExampleExample","attributionAgent":"general-purpose","type":"assistant","uuid":"66666666-7777-8888-9999-aaaaaaaaaaaa","timestamp":"2026-08-30T20:50:24.858Z","effort":"high","userType":"external","entrypoint":"claude-desktop","cwd":"/Users/dev/Projects/example/.claude/worktrees/example-branch","sessionId":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","version":"2.1.0","gitBranch":"claude/example-branch"}
+        """
+        let a = TranscriptParser.parseLine(l)
+        XCTAssertEqual(a?.isSubagent, true)
+        XCTAssertEqual(a?.sessionId, "bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
+    }
+
+    func testOrdinaryAssistantLineIsNotASubagent() {
+        let l = line("assistant", content: #"{"type":"text","text":"hello"}"#)
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.isSubagent, false)
+    }
+
+    func testOrdinaryUserLineIsNotASubagent() {
+        let l = line("user", content: #"{"type":"text","text":"do it"}"#)
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.isSubagent, false)
+    }
+
+    func testEmptyAgentIdIsNotTreatedAsSubagent() {
+        let l = """
+        {"type":"assistant","agentId":"","sessionId":"s1",\
+        "cwd":"/Users/x/proj","timestamp":"2026-08-28T10:00:00.123Z",\
+        "message":{"content":[{"type":"text","text":"hello"}]}}
+        """
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.isSubagent, false)
+    }
 }

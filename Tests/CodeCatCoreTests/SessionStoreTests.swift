@@ -69,6 +69,40 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.ordered[0].status, .waitingForYou(.permission))
     }
 
+    func testSubagentActivityMarksDescriptionAsSubagentWork() {
+        let store = SessionStore()
+        let act = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
+                                     description: "выполняет команду",
+                                     timestamp: t0, isSubagent: true)
+        store.apply(activity: act)
+        XCTAssertEqual(store.ordered[0].activityDescription, "субагент выполняет команду")
+    }
+
+    func testOrdinaryActivityDoesNotCarryTheSubagentMarker() {
+        let store = SessionStore()
+        let act = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
+                                     description: "выполняет команду",
+                                     timestamp: t0, isSubagent: false)
+        store.apply(activity: act)
+        XCTAssertEqual(store.ordered[0].activityDescription, "выполняет команду")
+    }
+
+    /// Пин требования 3 из спеки: субагент, работающий внутри сессии, — это работа
+    /// самой сессии. Если единственная активность, которую видел стор, пришла из
+    /// транскрипта субагента, сессия всё равно должна агрегироваться, считаться в
+    /// бейдже и удерживать мак от сна — иначе «работает 2» на экране разойдётся с
+    /// тем, что мак реально не спит.
+    func testSessionWithOnlySubagentActivityStillCountsAsWorking() {
+        let store = SessionStore()
+        let act = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
+                                     description: "выполняет команду",
+                                     timestamp: t0, isSubagent: true)
+        store.apply(activity: act)
+        XCTAssertEqual(store.aggregate, .working(1))
+        XCTAssertEqual(store.badgeCount, 1)
+        XCTAssertTrue(store.anyWorking)
+    }
+
     func testActivityForUnknownSessionCreatesSession() {
         let store = SessionStore()
         let act = TranscriptActivity(sessionId: "s9", projectPath: "/p9",
