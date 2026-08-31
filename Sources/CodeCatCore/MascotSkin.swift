@@ -19,14 +19,46 @@ public struct SpriteFrame: Equatable, Sendable {
     }
 }
 
-/// A looping animation for one state.
-public struct SpriteAnimation: Equatable, Sendable {
+/// Один отрезок движения: кадры, скорость и сколько раз его проиграть.
+public struct SpritePhase: Equatable, Sendable {
     public let frames: [SpriteFrame]
     public let framesPerSecond: Double
+    /// Сколько раз проиграть фазу, прежде чем уступить следующей. `nil` — крутиться
+    /// бесконечно; так может быть помечена только последняя фаза, иначе всё, что за
+    /// ней, недостижимо.
+    public let repeats: Int?
 
-    public init(frames: [SpriteFrame], framesPerSecond: Double) {
+    public init(frames: [SpriteFrame], framesPerSecond: Double, repeats: Int? = nil) {
         self.frames = frames
         self.framesPerSecond = framesPerSecond
+        self.repeats = repeats
+    }
+}
+
+/// Движение для одного состояния — последовательность фаз, последняя из которых
+/// крутится бесконечно.
+///
+/// Одной петли мало: часть движений в наборах спрайтов одноразовые по своей природе.
+/// Потягивание — это потягивание, а не то, что кот делает без остановки десять минут;
+/// у LuizMelo для этого есть отдельный лист `Laying` — переход «сесть и лечь»,
+/// который в петле выглядел бы как бесконечное вставание и укладывание. Поэтому
+/// «закончил» описывается как «потянулся пару раз → улёгся → дышит во сне»: пара
+/// кадров действия, переход, покой.
+public struct SpriteAnimation: Equatable, Sendable {
+    public let phases: [SpritePhase]
+
+    /// Кадры первой фазы. Оставлено ради вызывающих, которым нужна не хронология, а
+    /// «как это выглядит» — превью в панели, проверки реестра.
+    public var frames: [SpriteFrame] { phases.first?.frames ?? [] }
+    public var framesPerSecond: Double { phases.first?.framesPerSecond ?? 1 }
+
+    public init(phases: [SpritePhase]) {
+        self.phases = phases
+    }
+
+    /// Обычная бесконечная петля — как было до появления фаз.
+    public init(frames: [SpriteFrame], framesPerSecond: Double) {
+        self.phases = [SpritePhase(frames: frames, framesPerSecond: framesPerSecond)]
     }
 }
 

@@ -43,6 +43,16 @@ final class AppState: ObservableObject {
     }
     @Published var hooksInstalled = false
 
+    /// Когда маскот вошёл в то состояние, которое показывает сейчас. Движение из
+    /// нескольких фаз («потянулся — улёгся — спит») без этой точки отсчёта не знает,
+    /// отыграна ли уже одноразовая часть, а хранить счётчик в самом виде нельзя: он
+    /// пересоздаётся при каждом открытии панели и смене облика.
+    ///
+    /// Считается по `AggregateStatusKey`, а не по `AggregateStatus`: число сессий на
+    /// движение не влияет, и переход «работает 1» → «работает 2» не должен дёргать
+    /// анимацию с начала.
+    @Published private(set) var statusSince = Date()
+
     /// Id of the selected skin. Persisted so the choice survives a restart; read
     /// back through `MascotSkins.skin(withID:)`, which falls back to
     /// `MascotSkins.default` for anything it does not recognise.
@@ -198,6 +208,7 @@ final class AppState: ObservableObject {
         powerManager.update(anyWorking: store.anyWorking, now: Date())
         lidController.update(shouldPreventSleep: powerManager.isHolding)
         notifyTransition(to: agg)
+        if AggregateStatusKey(agg) != AggregateStatusKey(lastAggregate) { statusSince = Date() }
         lastAggregate = agg
         objectWillChange.send()
     }

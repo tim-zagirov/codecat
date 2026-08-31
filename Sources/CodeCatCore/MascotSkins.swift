@@ -58,11 +58,14 @@ public enum MascotSkins {
     }
 
     private static func luizMeloAnimations(_ n: Int) -> [AggregateStatusKey: SpriteAnimation] {
-        func strip(_ name: String, count: Int, fps: Double) -> SpriteAnimation {
-            SpriteAnimation(
-                frames: (0..<count).map { SpriteFrame(sheet: "Cat-\(n)-\(name).png", index: $0) },
-                framesPerSecond: fps)
+        func stripFrames(_ name: String, count: Int) -> [SpriteFrame] {
+            (0..<count).map { SpriteFrame(sheet: "Cat-\(n)-\(name).png", index: $0) }
         }
+        func strip(_ name: String, count: Int, fps: Double) -> SpriteAnimation {
+            SpriteAnimation(frames: stripFrames(name, count: count), framesPerSecond: fps)
+        }
+        let sleepingFrames = [SpriteFrame(sheet: "Cat-\(n)-Sleeping1.png", index: 0),
+                              SpriteFrame(sheet: "Cat-\(n)-Sleeping2.png", index: 0)]
         // `Cat-3` is the only cat without an `Itch` sheet. `Licking 2` is the nearest
         // "something is off" motion it does have — and it must come from the same
         // pack, because styles are never mixed.
@@ -73,15 +76,22 @@ public enum MascotSkins {
             // Two single-frame files looped slowly read as breathing. `Laying` is not
             // usable here: it is a sit-down-then-lie-down *transition*, so looping it
             // would have the cat standing up and lying down forever.
-            .sleeping: SpriteAnimation(
-                frames: [SpriteFrame(sheet: "Cat-\(n)-Sleeping1.png", index: 0),
-                         SpriteFrame(sheet: "Cat-\(n)-Sleeping2.png", index: 0)],
-                framesPerSecond: 0.6),
+            .sleeping: SpriteAnimation(frames: sleepingFrames, framesPerSecond: 0.6),
             .working: strip("Idle", count: 10, fps: 8),
             // The cat opens its mouth and calls — the closest thing in the pack to
             // "your agent is asking you something".
             .waiting: strip("Meow", count: 4, fps: 5),
-            .done: strip("Stretching", count: 13, fps: 8),
+            // Работа закончена: кот потягивается пару раз, укладывается и засыпает.
+            // `Laying` — это готовый переход «сесть и лечь» из самого набора: в петле
+            // он выглядел бы бесконечным вставанием, а одним проходом ровно тем, чем
+            // и является. Потягивание тоже одноразовое по смыслу — крутить его все
+            // десять минут, что живёт состояние, значит показывать движение, которого
+            // в жизни не бывает.
+            .done: SpriteAnimation(phases: [
+                SpritePhase(frames: stripFrames("Stretching", count: 13), framesPerSecond: 8, repeats: 2),
+                SpritePhase(frames: stripFrames("Laying", count: 8), framesPerSecond: 6, repeats: 1),
+                SpritePhase(frames: sleepingFrames, framesPerSecond: 0.6),
+            ]),
             .problem: problem,
         ]
     }
@@ -100,16 +110,22 @@ public enum MascotSkins {
         frameSize: 32,
         animations: {
             let sheet = "Cat Sprite Sheet.png"
+            func rowFrames(_ r: Int, _ columns: Range<Int>) -> [SpriteFrame] {
+                columns.map { SpriteFrame(sheet: sheet, index: r * 8 + $0) }
+            }
             func row(_ r: Int, _ columns: Range<Int>, fps: Double) -> SpriteAnimation {
-                SpriteAnimation(
-                    frames: columns.map { SpriteFrame(sheet: sheet, index: r * 8 + $0) },
-                    framesPerSecond: fps)
+                SpriteAnimation(frames: rowFrames(r, columns), framesPerSecond: fps)
             }
             return [
                 .sleeping: row(6, 0..<4, fps: 2),   // lying flat
                 .working: row(0, 0..<4, fps: 6),    // sitting, flicking its tail
                 .waiting: row(3, 0..<4, fps: 5),    // raising a paw
-                .done: row(7, 0..<6, fps: 6),       // washing
+                // Умылся после работы — и лёг. Тот же переход к покою, что и у
+                // остальных наборов (см. `.done` у LuizMelo).
+                .done: SpriteAnimation(phases: [
+                    SpritePhase(frames: rowFrames(7, 0..<6), framesPerSecond: 6, repeats: 2),
+                    SpritePhase(frames: rowFrames(6, 0..<4), framesPerSecond: 2),
+                ]),
                 .problem: row(9, 0..<8, fps: 6),    // tail up, alert
             ]
         }())
@@ -132,17 +148,25 @@ public enum MascotSkins {
         frameSize: 16,
         animations: {
             let sheet = "16x16-Brown.png"
+            func cells(_ indices: [Int]) -> [SpriteFrame] {
+                indices.map { SpriteFrame(sheet: sheet, index: $0) }
+            }
             func frames(_ indices: [Int], fps: Double) -> SpriteAnimation {
-                SpriteAnimation(
-                    frames: indices.map { SpriteFrame(sheet: sheet, index: $0) },
-                    framesPerSecond: fps)
+                SpriteAnimation(frames: cells(indices), framesPerSecond: fps)
             }
             return [
                 .sleeping: frames([7, 8], fps: 0.6),      // (2,1), (2,2): lying, eyes closed
                 .working: frames([0, 1, 2], fps: 5),      // row 0
                 .waiting: frames([3, 4, 5], fps: 5),      // row 1: raises a paw
-                // Same pose as "waiting", but held still and without the red badge.
-                .done: frames([3], fps: 1),
+                // Раньше здесь стоял один застывший кадр стоящего кота — и он висел
+                // так все десять минут, что живёт состояние. Теперь кот садится,
+                // укладывается и остаётся лежать: три позы, которые есть в наборе,
+                // как раз и складываются в этот переход.
+                .done: SpriteAnimation(phases: [
+                    SpritePhase(frames: cells([4, 5]), framesPerSecond: 2.5, repeats: 2),
+                    SpritePhase(frames: cells([6]), framesPerSecond: 1.2, repeats: 1),
+                    SpritePhase(frames: cells([7, 8]), framesPerSecond: 0.6),
+                ]),
                 // Same as "working"; the badge is what tells them apart.
                 .problem: frames([0, 1, 2], fps: 5),
             ]

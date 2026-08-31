@@ -55,16 +55,55 @@ extension MascotSkinsTests {
         }
     }
 
-    func testNoAnimationIsEmptyOrHasNonPositiveFPS() {
+    /// Проверяется каждая фаза, а не только первая: у движений с переходом
+    /// («потянулся — улёгся — спит») пустая или слишком быстрая фаза в середине
+    /// осталась бы незамеченной ровно там, где её никто не разглядывает глазами.
+    func testNoAnimationPhaseIsEmptyOrHasFPSOutsideTheAllowedRange() {
         for skin in MascotSkins.all {
             for (key, animation) in skin.animations {
-                XCTAssertFalse(animation.frames.isEmpty, "\(skin.id)/\(key.rawValue)")
-                XCTAssertGreaterThan(animation.framesPerSecond, 0, "\(skin.id)/\(key.rawValue)")
-                // The mascot sits on screen all day; anything faster is battery spent
-                // on redrawing a transparent panel.
-                XCTAssertLessThanOrEqual(animation.framesPerSecond, 8, "\(skin.id)/\(key.rawValue)")
-                XCTAssertGreaterThanOrEqual(animation.framesPerSecond, 0.6, "\(skin.id)/\(key.rawValue)")
+                XCTAssertFalse(animation.phases.isEmpty, "\(skin.id)/\(key.rawValue)")
+                for (index, phase) in animation.phases.enumerated() {
+                    let where_ = "\(skin.id)/\(key.rawValue) фаза \(index)"
+                    XCTAssertFalse(phase.frames.isEmpty, where_)
+                    // The mascot sits on screen all day; anything faster is battery spent
+                    // on redrawing a transparent panel.
+                    XCTAssertLessThanOrEqual(phase.framesPerSecond, 8, where_)
+                    XCTAssertGreaterThanOrEqual(phase.framesPerSecond, 0.6, where_)
+                    XCTAssertNotEqual(phase.repeats, 0, "\(where_): нулевое повторение — мёртвая фаза")
+                }
             }
+        }
+    }
+
+    /// Последняя фаза обязана крутиться бесконечно, а все предыдущие — быть
+    /// конечными. Иначе движение либо замирает на последнем кадре навсегда, либо
+    /// никогда не доходит до покоя, ради которого фазы и заведены.
+    func testEveryAnimationEndsInAnEndlessPhaseAndNoneIsUnreachable() {
+        for skin in MascotSkins.all {
+            for (key, animation) in skin.animations {
+                XCTAssertNil(animation.phases.last?.repeats,
+                             "\(skin.id)/\(key.rawValue): последняя фаза должна крутиться бесконечно")
+                for (index, phase) in animation.phases.dropLast().enumerated() {
+                    XCTAssertNotNil(phase.repeats,
+                                    "\(skin.id)/\(key.rawValue): фаза \(index) бесконечна, всё за ней недостижимо")
+                }
+            }
+        }
+    }
+
+    /// Смысловая проверка того, о чём просили: «закончил» обязано приводить кота к
+    /// покою, а не крутить действие без конца. Кадры последней фазы «закончил»
+    /// должны совпадать с кадрами сна — то есть кот действительно ложится отдыхать.
+    func testDoneSettlesIntoTheRestingPose() {
+        for skin in MascotSkins.all {
+            guard let done = skin.animation(for: .done),
+                  let sleeping = skin.animation(for: .sleeping) else {
+                XCTFail("\(skin.id): нет «закончил» или «спит»"); continue
+            }
+            XCTAssertGreaterThan(done.phases.count, 1,
+                                 "\(skin.id): «закончил» должно быть переходом, а не петлёй")
+            XCTAssertEqual(done.phases.last?.frames, sleeping.phases.last?.frames,
+                           "\(skin.id): «закончил» должно заканчиваться позой покоя")
         }
     }
 

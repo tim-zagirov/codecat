@@ -17,6 +17,8 @@ struct MascotView: View {
     var drawingSize: CGSize?
     var canvasSize: CGSize?
     var showsBadge: Bool = true
+    /// Момент входа в текущее состояние — см. `SpriteMascotView.since`.
+    var since: Date?
     /// Called when a sprite skin could not be loaded, so the app can report it.
     var onLoadFailure: (MascotSkin) -> Void = { _ in }
 
@@ -44,7 +46,8 @@ struct MascotView: View {
         if let loaded = SpriteSheetStore.shared.load(skin) {
             SpriteMascotView(loaded: loaded, status: status, sessionCount: sessionCount,
                              showsBadge: showsBadge,
-                             drawingSize: drawingSize, canvasSize: canvasSize)
+                             drawingSize: drawingSize, canvasSize: canvasSize,
+                             since: since)
         } else {
             fallback
         }
