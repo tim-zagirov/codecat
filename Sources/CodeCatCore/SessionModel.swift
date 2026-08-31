@@ -89,11 +89,19 @@ public struct TranscriptActivity: Equatable, Sendable {
     public let projectPath: String
     public let description: String
     public let timestamp: Date
+    /// Активность пришла из транскрипта субагента (`~/.claude/projects/.../subagents/agent-*.jsonl`),
+    /// а не из транскрипта самой сессии. Субагент несёт `sessionId` родительской сессии,
+    /// поэтому его работа корректно приписывается ей же — но неотличимо от собственной
+    /// работы сессии, что и путает пользователя, глядя на панель. Этот флаг даёт панели
+    /// способ отличить одно от другого, ничего не меняя в том, кому активность засчитана.
+    public let isSubagent: Bool
 
-    public init(sessionId: String, projectPath: String, description: String, timestamp: Date) {
+    public init(sessionId: String, projectPath: String, description: String, timestamp: Date,
+                isSubagent: Bool = false) {
         self.sessionId = sessionId
         self.projectPath = projectPath
         self.description = description
         self.timestamp = timestamp
+        self.isSubagent = isSubagent
     }
 }

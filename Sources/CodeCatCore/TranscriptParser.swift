@@ -29,8 +29,14 @@ public enum TranscriptParser {
         } else {
             description = describeAssistant(obj)
         }
+        // Субагент распознаётся по наличию непустого поля `agentId` в самой записи, а не
+        // по тому, что файл лежит в подпапке `subagents/`: путь — это деталь того, как
+        // Claude Code раскладывает файлы сегодня, а `agentId` — факт о самой записи,
+        // который переживёт возможные будущие изменения раскладки.
+        let isSubagent = !((obj["agentId"] as? String ?? "").isEmpty)
         return TranscriptActivity(sessionId: sessionId, projectPath: cwd,
-                                  description: description, timestamp: ts)
+                                  description: description, timestamp: ts,
+                                  isSubagent: isSubagent)
     }
 
     private static func describeAssistant(_ obj: [String: Any]) -> String {

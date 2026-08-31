@@ -110,7 +110,12 @@ public final class SessionStore: ObservableObject {
         guard activity.timestamp > s.lastActivity || sessions[activity.sessionId] == nil else { return }
         guard s.status != .crashed else { return }
         s.status = .working
-        s.activityDescription = activity.description
+        // Работа субагента — это работа сессии (см. `isSubagent` на `TranscriptActivity`):
+        // статус, `aggregate`, `badgeCount` и `anyWorking` не отличают её от собственной
+        // работы сессии. Единственное отличие — пометка в описании, чтобы строка в панели
+        // не выглядела загадочно, когда сама сессия молчит, а работу ведёт подчинённый агент.
+        s.activityDescription = activity.isSubagent
+            ? "субагент \(activity.description)" : activity.description
         s.lastActivity = activity.timestamp
         s.finishedAt = nil
         if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
