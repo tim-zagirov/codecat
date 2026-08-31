@@ -43,17 +43,44 @@ final class AppState: ObservableObject {
     }
     @Published var hooksInstalled = false
 
+    /// Id of the selected skin. Persisted so the choice survives a restart; read
+    /// back through `MascotSkins.skin(withID:)`, which falls back to the drawn cat
+    /// for anything it does not recognise.
+    @Published var skinID: String {
+        didSet { UserDefaults.standard.set(skinID, forKey: "mascotSkin") }
+    }
+
+    /// Whether the "Об ассетах" credits disclosure in `SkinPickerView` is expanded.
+    /// Lives here rather than as local `@State` on that view so toggling it
+    /// publishes through `objectWillChange` like every other piece of visible
+    /// state: `OverlayController.handleStateChange()` resizes the details panel to
+    /// fit its SwiftUI content on that notification, and the credits list — the one
+    /// attribution that is a licence obligation (mxmaze, CC BY 4.0) — must never
+    /// open clipped inside a panel whose AppKit content rect didn't grow with it.
+    @Published var creditsExpanded = false
+
+    var skin: MascotSkin { MascotSkins.skin(withID: skinID) }
+
+    /// Skins whose failure alert has already been shown. Only the *alert* is
+    /// once-per-launch: the view that renders the mascot is rebuilt constantly, and
+    /// an alert on every rebuild would be unusable. The fallback to the drawn cat in
+    /// `reportSkinLoadFailure` is unconditional and runs every time, regardless of
+    /// this set.
+    private var reportedSkinFailures: Set<String> = []
+
     private var lidHelperInstallInFlight = false
 
     init() {
         let defaults = UserDefaults.standard
         defaults.register(defaults: [
             "keepAwake": true, "lidMode": false, "sounds": false, "showMascot": true,
+            "mascotSkin": "drawn",
         ])
         keepAwakeEnabled = defaults.bool(forKey: "keepAwake")
         lidModeEnabled = defaults.bool(forKey: "lidMode")
         soundsEnabled = defaults.bool(forKey: "sounds")
         showMascot = defaults.bool(forKey: "showMascot")
+        skinID = defaults.string(forKey: "mascotSkin") ?? MascotSkins.drawn.id
 
         jumpExecutor = SystemJumpExecutor()
         powerManager = PowerManager(
@@ -407,6 +434,32 @@ final class AppState: ObservableObject {
         let alert = NSAlert()
         alert.messageText = message.title
         alert.informativeText = message.body
+        alert.window.level = .modalPanel
+        alert.window.orderFrontRegardless()
+        alert.runModal()
+    }
+
+    /// Reports a skin whose sheets could not be read, and switches back to the drawn
+    /// cat. Told with an alert rather than a line in the details panel because the
+    /// panel may well be closed — this project's rule is that there are no silent
+    /// refusals.
+    ///
+    /// Only the alert is once per launch (see `reportedSkinFailures`'s doc comment);
+    /// the fallback to the drawn cat runs unconditionally, every time this is
+    /// called. Selecting the same broken skin a second time still needs `skinID`
+    /// reverted and persisted — otherwise the second selection would return at the
+    /// old guard before reverting, leaving `skinID` pointing at a skin that fails to
+    /// load, silently persisted to `UserDefaults`, with the picker's selection
+    /// border drawn around a skin the mascot isn't actually showing.
+    func reportSkinLoadFailure(_ skin: MascotSkin) {
+        if skinID == skin.id { skinID = MascotSkins.drawn.id }
+        guard reportedSkinFailures.insert(skin.id).inserted else { return }
+        // Same activation dance as `presentJumpAlert`: CodeCat is an accessory app
+        // and its windows do not come forward on their own.
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Не удалось загрузить облик «\(skin.name)»"
+        alert.informativeText = "Файлы набора не читаются. Вернул нарисованного кота."
         alert.window.level = .modalPanel
         alert.window.orderFrontRegardless()
         alert.runModal()
