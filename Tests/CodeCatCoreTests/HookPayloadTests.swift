@@ -11,7 +11,8 @@ final class HookPayloadTests: XCTestCase {
         hostPID: 4242,
         hostBundlePath: "/Applications/Claude.app",
         hostBundleID: "com.anthropic.claudefordesktop",
-        tty: "/dev/ttys001")
+        tty: "/dev/ttys001",
+        agentPID: 777)
 
     func testEnrichmentAddsTheRouteFields() {
         let input = #"{"hook_event_name":"SessionStart","session_id":"abc"}"#.data(using: .utf8)!
@@ -20,6 +21,7 @@ final class HookPayloadTests: XCTestCase {
         XCTAssertEqual(result["host_bundle_path"] as? String, "/Applications/Claude.app")
         XCTAssertEqual(result["host_bundle_id"] as? String, "com.anthropic.claudefordesktop")
         XCTAssertEqual(result["host_tty"] as? String, "/dev/ttys001")
+        XCTAssertEqual(result["agent_pid"] as? Int, 777)
     }
 
     /// Every field CodeCat adds is namespaced `host_*`: an un-namespaced `tty` key

@@ -26,7 +26,13 @@ if !input.isEmpty {
         // А вот tty ищем от себя: контролирующий терминал наследуется, у хука он
         // тот же, что у родителя, и старт от getpid() переживает случай, когда хук
         // осиротел (getppid() == 1) — иначе сессия молча потеряла бы вкладку.
-        tty: ProcessTree.tty(startingAt: getpid(), provider: tree))
+        tty: ProcessTree.tty(startingAt: getpid(), provider: tree),
+        // Процесс самой сессии — ближайший предок с именем `claude` (обычно через
+        // `sh -c`, которым Claude Code запускает хук). Ищем от родителя по той же
+        // причине, что и host: сам хук предком себе не является. По этому pid
+        // приложение потом точно знает, жива ли сессия, вместо того чтобы гадать по
+        // общему числу процессов `claude` в системе.
+        agentPID: ProcessTree.agent(startingAt: parent, provider: tree))
     HookSocketClient.send(HookPayload.enriched(input, with: fields), to: CodeCatPaths.socketURL)
 }
 exit(0)

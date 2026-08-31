@@ -187,6 +187,9 @@ struct DetailsPanelView: View {
 
     private func color(for status: SessionStatus) -> Color {
         switch status {
+        // Серый: сессия открыта, но ничего не происходит — ровно то же, что говорит
+        // спящий кот и пустой бейдж.
+        case .idle: return .secondary
         case .working: return .green
         case .waitingForYou: return .orange
         case .done: return .blue
@@ -196,6 +199,7 @@ struct DetailsPanelView: View {
 
     private func label(for status: SessionStatus) -> String {
         switch status {
+        case .idle: return "открыта"
         case .working: return "работает"
         case .waitingForYou: return "ждёт тебя"
         case .done: return "закончил"
