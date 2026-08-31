@@ -21,6 +21,11 @@ final class IslandController: NSObject, MascotPresenting {
     private let appState: AppState
     private var islandPanel: OverlayPanel?
     private var cancellables: Set<AnyCancellable> = []
+    /// Последняя запрошенная видимость острова. Сегодня её никто не читает —
+    /// читатель появится в задаче 8: `screensChanged()` будет звать
+    /// `setVisible(isVisible)`, чтобы перепоказать остров после смены
+    /// конфигурации дисплеев, не спрашивая заново `AppState.showMascot`
+    /// (который к этому моменту мог и не измениться).
     private var isVisible = false
 
     /// Всё, что нужно знать о геометрии в текущий момент. Пересчитывается на
@@ -90,12 +95,21 @@ final class IslandController: NSObject, MascotPresenting {
                                                auxRight: screen.auxiliaryTopRightArea)
         else { return nil }
 
-        // `SpriteSheetStore` is `@MainActor`-isolated (its doc comment: every caller
-        // already runs on the main actor). `IslandController` itself is not typed as
-        // `@MainActor` — doing so would force `AppDelegate` and `main.swift` onto it
-        // too, well past this task's scope — but it only ever runs on the main
-        // thread in practice (AppKit panels, a `Combine` sink dispatched via
-        // `.receive(on: .main)`), so `assumeIsolated` just states that fact.
+        // `SpriteSheetStore` изолирован `@MainActor` (см. его доккомментарий: все
+        // вызывающие уже работают на главном потоке). Сам `IslandController` не
+        // помечен `@MainActor` — это каскадом потянуло бы `@MainActor` на
+        // `AppDelegate`, а оттуда — на глобальный `delegate` в `main.swift`, то есть
+        // далеко за рамки этой задачи. Но фактически сюда всегда приходят с
+        // главного потока: AppKit-панели и `Combine`-сток, подписанный через
+        // `.receive(on: DispatchQueue.main)`. `assumeIsolated` просто констатирует
+        // этот факт, а не меняет архитектуру.
+        //
+        // Инвариант: всякий путь сюда приходит на главном потоке. Сегодня в
+        // `geometry()` ведут ровно два вызова — из `init` (через
+        // `setVisible(appState.showMascot)`) и из `handleStateChange()` — и оба на
+        // главном потоке. Если появится третий путь не с главного потока,
+        // `assumeIsolated` не предупредит об этом, а уронит процесс — держи это в
+        // уме при правках.
         let spriteSize = MainActor.assumeIsolated {
             SpriteSheetStore.shared.load(appState.skin)?
                 .drawingSize(targetHeight: SpriteScale.islandTargetHeight,
