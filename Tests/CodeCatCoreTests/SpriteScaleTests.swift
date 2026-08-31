@@ -52,4 +52,50 @@ final class SpriteScaleTests: XCTestCase {
         XCTAssertEqual(SpriteScale.factor(boundsWidth: 0, boundsHeight: 0), 1)
         XCTAssertEqual(SpriteScale.factor(boundsWidth: -5, boundsHeight: -5), 1)
     }
+
+    // MARK: - Островная нормировка (строка меню 32 pt)
+
+    /// Все облики в строке меню обязаны получить один и тот же целочисленный
+    /// множитель, иначе коты разъедятся по высоте вдвое, как это уже было на
+    /// канве маскота. Рамки — те же, что в тесте выше: шесть котов LuizMelo не
+    /// делят одну рамку (cat-4 — 28x16, cat-5 — 27x16).
+    func testEverySkinLandsOnTimesTwoInTheMenuBar() {
+        let bounds = [(27, 14), (28, 16), (27, 16), (18, 12), (16, 16)]
+        for (w, h) in bounds {
+            XCTAssertEqual(SpriteScale.factor(boundsWidth: w, boundsHeight: h,
+                                              targetHeight: SpriteScale.islandTargetHeight,
+                                              maxWidth: SpriteScale.islandMaxWidth),
+                           2, "\(w)x\(h)")
+        }
+    }
+
+    /// Прямая причина, по которой islandTargetHeight равен именно 32: на 30 pt
+    /// mxmaze (16x16) падает до x1 и становится вдвое мельче остальных.
+    func testALowerTargetWouldHalveTheSquareSkin() {
+        XCTAssertEqual(SpriteScale.factor(boundsWidth: 16, boundsHeight: 16,
+                                          targetHeight: 30, maxWidth: 60), 1)
+    }
+
+    /// Ни один облик не должен вылезти за отведённую ширину крыла.
+    func testIslandWidthsStayWithinTheCap() {
+        let bounds = [(27, 14), (28, 16), (27, 16), (18, 12), (16, 16)]
+        for (w, h) in bounds {
+            let s = SpriteScale.factor(boundsWidth: w, boundsHeight: h,
+                                       targetHeight: SpriteScale.islandTargetHeight,
+                                       maxWidth: SpriteScale.islandMaxWidth)
+            XCTAssertLessThanOrEqual(w * s, SpriteScale.islandMaxWidth, "\(w)x\(h)")
+            XCTAssertLessThanOrEqual(h * s, SpriteScale.islandTargetHeight, "\(w)x\(h)")
+        }
+    }
+
+    /// Плавающий кот не имеет права поменяться ни на пиксель: вызов без новых
+    /// параметров обязан давать ровно то же, что и раньше.
+    func testDefaultArgumentsReproduceTheFloatingMascot() {
+        XCTAssertEqual(SpriteScale.factor(boundsWidth: 27, boundsHeight: 14), 4)
+        XCTAssertEqual(SpriteScale.factor(boundsWidth: 18, boundsHeight: 12), 5)
+        XCTAssertEqual(SpriteScale.factor(boundsWidth: 16, boundsHeight: 16), 4)
+        XCTAssertEqual(SpriteScale.factor(boundsWidth: 27, boundsHeight: 14,
+                                          targetHeight: SpriteScale.targetHeight,
+                                          maxWidth: SpriteScale.maxWidth), 4)
+    }
 }
