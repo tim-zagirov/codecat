@@ -81,6 +81,27 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(menu.minX, screen.minX)
     }
 
+    /// Узкий экран не выталкивает меню за границу: когда меню шире самого
+    /// экрана, `upperBound < lowerBound`, и `menuFrame` обязан прижать меню к
+    /// левому краю, а не пытаться зажать его между противоречащими друг другу
+    /// границами (см. комментарий у `min(max(...))` в реализации).
+    func testMenuWiderThanScreenIsPinnedToTheLeftEdge() {
+        let narrowScreen = CGRect(x: 0, y: 0, width: 200, height: 1117)
+        let island = CGRect(x: 60, y: 1085, width: 78, height: 32)
+        let menu = IslandLayout.menuFrame(island: island,
+                                          size: CGSize(width: 290, height: 200),
+                                          screenFrame: narrowScreen)
+        XCTAssertEqual(menu.minX, 8, accuracy: 0.001)
+    }
+
+    // MARK: - Числа из спеки
+
+    /// Правое крыло — число из спеки; в остальных тестах оно фигурирует только
+    /// как литерал, здесь закреплено явно.
+    func testCounterWingWidthMatchesSpec() {
+        XCTAssertEqual(IslandLayout.counterWingWidth, 34)
+    }
+
     /// Меню выше экрана не должно уезжать под нижнюю границу.
     func testMenuNeverGoesBelowTheScreen() {
         let island = CGRect(x: 701, y: 1085, width: 289, height: 32)
