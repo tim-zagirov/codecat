@@ -3,21 +3,21 @@ import CodeCatCore
 
 /// The skin picker: a grid of live previews plus the credits disclosure.
 ///
-/// Nine previews at 36pt would not fit the 290pt panel in one row, and horizontal
+/// Eight previews at 36pt would not fit the 290pt panel in one row, and horizontal
 /// scrolling inside a popover that closes on any click outside it is a way to miss,
-/// not a way to choose — hence a 5x2 grid that fits whole. Fits with room to spare:
-/// 5 columns x 34pt + 4 gaps x 8pt = 202pt, against 290 - 2x14 = 262pt of usable
+/// not a way to choose — hence a 4x2 grid that fits whole. Fits with room to spare:
+/// 4 columns x 34pt + 3 gaps x 8pt = 160pt, against 290 - 2x14 = 262pt of usable
 /// width inside the panel's own padding.
 struct SkinPickerView: View {
     @ObservedObject var appState: AppState
 
-    /// Previews are small and there are nine of them animating at once, so their
+    /// Previews are small and there are eight of them animating at once, so their
     /// frame rate is capped well below the mascot's own.
     private let previewFPS: Double = 4
     private let previewSize: CGFloat = 34
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.fixed(previewSize), spacing: 8), count: 5)
+        Array(repeating: GridItem(.fixed(previewSize), spacing: 8), count: 4)
     }
 
     var body: some View {
@@ -36,10 +36,11 @@ struct SkinPickerView: View {
         let isSelected = skin.id == appState.skinID
         // Every preview plays the "waiting" animation: that is the state the
         // mascot exists for. `sessionCount: 0` is what suppresses the badge for
-        // the drawn cat (its `MascotBadge` only draws when the count is positive);
-        // the sprite path additionally passes `showsBadge: false` since the badge
-        // there is a separate view, not gated on the count. At 34pt the badge
-        // would cover the cat either way.
+        // the fallback `CatView` (its `MascotBadge` only draws when the count is
+        // positive), reachable here only for a skin that failed to load; the sprite
+        // path additionally passes `showsBadge: false` since the badge there is a
+        // separate view, not gated on the count. At 34pt the badge would cover the
+        // cat either way.
         return previewContent(skin)
             .scaleEffect(previewSize / MascotLayout.canvasSize)
             .frame(width: previewSize, height: previewSize)
@@ -58,7 +59,12 @@ struct SkinPickerView: View {
         // Both `SpriteMascotView` and `CatView` already lay themselves out on a
         // `MascotLayout.canvasSize` canvas internally, so no extra outer frame is
         // needed before scaling them down to `previewSize`.
-        if skin.isSpriteBased, let loaded = SpriteSheetStore.shared.load(skin) {
+        //
+        // The `CatView` branch only fires for a skin whose sheets fail to load —
+        // every registered skin is sprite-backed now, so this is purely the
+        // emergency render, kept here so a broken skin still shows something in its
+        // tile instead of an empty square.
+        if let loaded = SpriteSheetStore.shared.load(skin) {
             SpriteMascotView(loaded: loaded, status: .waiting(1), sessionCount: 0,
                              maxFPS: previewFPS, showsBadge: false)
         } else {
@@ -97,16 +103,11 @@ struct SkinPickerView: View {
     private var creditedPacks: [(author: String, license: String, sourceURL: String)] {
         var seen = Set<String>()
         var result: [(author: String, license: String, sourceURL: String)] = []
-        for skin in MascotSkins.all where skin.isSpriteBased {
+        for skin in MascotSkins.all {
             guard seen.insert(skin.author).inserted else { continue }
             result.append((author: skin.author,
                            license: licenseText(skin.license),
-                           // Every sprite-based skin's `sourceURL` is set in
-                           // `MascotSkins` — only the drawn cat (excluded by the
-                           // `where` above) leaves it nil — but nil-coalesce rather
-                           // than force-unwrap so a future skin added without one
-                           // degrades to a missing link instead of a crash.
-                           sourceURL: skin.sourceURL ?? ""))
+                           sourceURL: skin.sourceURL))
         }
         return result
     }
@@ -122,7 +123,6 @@ struct SkinPickerView: View {
         // 4.0", which is what the licence actually requires.
         case .ccBy4: return "CC BY 4.0"
         case .authorTerms(let summary): return summary
-        case .builtIn: return "Нарисован для CodeCat"
         }
     }
 }

@@ -1,29 +1,26 @@
 import Foundation
 
-/// The nine skins the app ships with. Every mapping here was built by looking at the
-/// files themselves — frame counts come from each sheet's real width, not from the
-/// itch.io descriptions.
+/// The eight sprite skins the app ships with. Every mapping here was built by
+/// looking at the files themselves — frame counts come from each sheet's real
+/// width, not from the itch.io descriptions.
+///
+/// The hand-drawn cat (`CatView`, in `CodeCatApp`) is no longer one of these: it is
+/// not selectable, only the emergency render used when a sprite skin's sheets fail
+/// to load. It has no entry here because it has no sprite data to register.
 public enum MascotSkins {
 
-    /// The hand-drawn cat: the default, and the fallback whenever anything about a
-    /// sprite skin goes wrong.
-    public static let drawn = MascotSkin(
-        id: "drawn",
-        name: "Нарисованный",
-        author: "CodeCat",
-        license: .builtIn,
-        sourceURL: nil,
-        directory: nil,
-        frameSize: 0,
-        animations: [:])
+    public static let all: [MascotSkin] = luizMeloCats + [elthen, mxmaze]
 
-    public static let all: [MascotSkin] = [drawn] + luizMeloCats + [elthen, mxmaze]
+    /// `luizmelo-cat-1` ("Рыжий"): the warm ginger cat, closest in spirit to the
+    /// retired hand-drawn default, and the only LuizMelo cat in a warm palette.
+    public static let `default` = all.first { $0.id == "luizmelo-cat-1" }!
 
-    /// Falls back to the drawn cat rather than failing: an id that is not in the
-    /// registry means a corrupted or downgraded `UserDefaults`, which must never
-    /// leave the user without a mascot.
+    /// Falls back to `default` rather than failing: an id that is not in the
+    /// registry means a corrupted or downgraded `UserDefaults` (including a stored
+    /// `"drawn"`, from before the hand-drawn cat stopped being selectable), which
+    /// must never leave the user without a mascot.
     public static func skin(withID id: String) -> MascotSkin {
-        all.first { $0.id == id } ?? drawn
+        all.first { $0.id == id } ?? MascotSkins.default
     }
 
     // MARK: - LuizMelo

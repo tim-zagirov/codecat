@@ -21,13 +21,12 @@ final class MascotSkinsTests: XCTestCase {
         XCTAssertTrue(SkinLicense.ccBy4.requiresAttribution)
         XCTAssertFalse(SkinLicense.cc0.requiresAttribution)
         XCTAssertFalse(SkinLicense.authorTerms(summary: "условия автора").requiresAttribution)
-        XCTAssertFalse(SkinLicense.builtIn.requiresAttribution)
     }
 
     func testAnimationLookupReturnsNilForAMissingState() {
         let skin = MascotSkin(
-            id: "test", name: "Тестовый", author: "никто", license: .builtIn,
-            sourceURL: "https://example.com", directory: nil, frameSize: 16,
+            id: "test", name: "Тестовый", author: "никто", license: .cc0,
+            sourceURL: "https://example.com", directory: "test", frameSize: 16,
             animations: [.sleeping: SpriteAnimation(
                 frames: [SpriteFrame(sheet: "a.png", index: 0)], framesPerSecond: 1)])
         XCTAssertEqual(skin.animation(for: .sleeping)?.frames.count, 1)
@@ -38,10 +37,9 @@ final class MascotSkinsTests: XCTestCase {
 extension MascotSkinsTests {
 
     /// These ids are persisted in `UserDefaults`. Renaming one silently resets the
-    /// user's choice back to the drawn cat, which is why the list is frozen here.
+    /// user's choice back to the default skin, which is why the list is frozen here.
     func testSkinIDsAreExactlyThisFrozenList() {
         XCTAssertEqual(MascotSkins.all.map(\.id), [
-            "drawn",
             "luizmelo-cat-1", "luizmelo-cat-2", "luizmelo-cat-3",
             "luizmelo-cat-4", "luizmelo-cat-5", "luizmelo-cat-6",
             "elthen-cat", "mxmaze-kitty",
@@ -49,22 +47,12 @@ extension MascotSkinsTests {
     }
 
     func testEveryStateResolvesForEverySpriteSkin() {
-        for skin in MascotSkins.all where skin.isSpriteBased {
+        for skin in MascotSkins.all {
             for key in AggregateStatusKey.allCases {
                 XCTAssertNotNil(skin.animation(for: key),
                                 "\(skin.id) не знает состояния \(key.rawValue)")
             }
         }
-    }
-
-    /// The drawn cat is drawn by `CatView`, not from sheets, so it declares no
-    /// animations and no directory at all.
-    func testDrawnSkinHasNoSpriteData() {
-        XCTAssertEqual(MascotSkins.drawn.id, "drawn")
-        XCTAssertNil(MascotSkins.drawn.directory)
-        XCTAssertNil(MascotSkins.drawn.sourceURL)
-        XCTAssertTrue(MascotSkins.drawn.animations.isEmpty)
-        XCTAssertFalse(MascotSkins.drawn.isSpriteBased)
     }
 
     func testNoAnimationIsEmptyOrHasNonPositiveFPS() {
@@ -84,15 +72,7 @@ extension MascotSkinsTests {
         for skin in MascotSkins.all {
             XCTAssertFalse(skin.name.isEmpty, skin.id)
             XCTAssertFalse(skin.author.isEmpty, skin.id)
-            if skin.isSpriteBased {
-                XCTAssertTrue(skin.sourceURL?.hasPrefix("https://") ?? false, skin.id)
-            } else {
-                // The drawn cat has no upstream source to link to — asserting nil
-                // here (rather than skipping the skin) keeps this test honest: a
-                // fake placeholder URL on a non-sprite skin used to pass this same
-                // assertion vacuously.
-                XCTAssertNil(skin.sourceURL, skin.id)
-            }
+            XCTAssertTrue(skin.sourceURL.hasPrefix("https://"), skin.id)
         }
     }
 
@@ -108,10 +88,15 @@ extension MascotSkinsTests {
         }
     }
 
-    func testUnknownIDFallsBackToTheDrawnCat() {
-        XCTAssertEqual(MascotSkins.skin(withID: "мусор-из-настроек").id, "drawn")
-        XCTAssertEqual(MascotSkins.skin(withID: "").id, "drawn")
+    func testUnknownIDFallsBackToTheDefaultSkin() {
+        XCTAssertEqual(MascotSkins.skin(withID: "мусор-из-настроек").id, MascotSkins.default.id)
+        XCTAssertEqual(MascotSkins.skin(withID: "").id, MascotSkins.default.id)
         XCTAssertEqual(MascotSkins.skin(withID: "elthen-cat").id, "elthen-cat")
+        // Every existing user's `UserDefaults` still says "drawn" — the hand-drawn
+        // cat's old id, from before it stopped being selectable. That must resolve
+        // to the default skin exactly like any other unrecognised id, silently:
+        // it is not the user's error.
+        XCTAssertEqual(MascotSkins.skin(withID: "drawn").id, MascotSkins.default.id)
     }
 
     /// `Cat-3` is the one LuizMelo cat with no `Itch` sheet, so its "problem" state
