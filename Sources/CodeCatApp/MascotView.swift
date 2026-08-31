@@ -46,7 +46,33 @@ struct MascotView: View {
                              showsBadge: showsBadge,
                              drawingSize: drawingSize, canvasSize: canvasSize)
         } else {
-            CatView(status: status, sessionCount: sessionCount)
+            fallback
+        }
+    }
+
+    /// Аварийная отрисовка: у `CatView` нет своего `showsBadge` — он рисует
+    /// `MascotBadge` безусловно, — поэтому бейдж гасится здесь, на уровне ветки,
+    /// где `MascotView` уже знает про `showsBadge`, а не правкой контракта
+    /// `CatView` (у плавающего кота бейдж обязан остаться на месте). `MascotBadge`
+    /// рисует себя только при `sessionCount > 0` (см. её тело), так что нулевой
+    /// счётчик надёжно её выключает — тем же приёмом, каким уже пользуется
+    /// `SkinPickerView` для своих превью 34pt.
+    @ViewBuilder
+    private var fallback: some View {
+        let cat = CatView(status: status, sessionCount: showsBadge ? sessionCount : 0)
+        if let canvasSize {
+            // `CatView` рисует себя на канве `MascotLayout.canvasSize` (128pt) —
+            // без сжатия в островном крыле высотой 32pt он показался бы обрезанным
+            // фрагментом. Тот же приём, что и у `SkinPickerView`
+            // (`.scaleEffect(previewSize / MascotLayout.canvasSize)`), только
+            // размер берётся из уже переданного `canvasSize`. Когда `canvasSize`
+            // не задан (плавающий кот), эта ветка не выполняется — поведение не
+            // меняется ни на пиксель.
+            cat
+                .scaleEffect(canvasSize.height / MascotLayout.canvasSize)
+                .frame(width: canvasSize.width, height: canvasSize.height)
+        } else {
+            cat
         }
     }
 }
