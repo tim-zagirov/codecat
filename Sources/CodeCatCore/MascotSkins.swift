@@ -1,52 +1,60 @@
 import Foundation
 
-/// The nine skins the app ships with. Every mapping here was built by looking at the
-/// files themselves — frame counts come from each sheet's real width, not from the
-/// itch.io descriptions.
+/// The eight sprite skins the app ships with. Every mapping here was built by
+/// looking at the files themselves — frame counts come from each sheet's real
+/// width, not from the itch.io descriptions.
+///
+/// The hand-drawn cat (`CatView`, in `CodeCatApp`) is no longer one of these: it is
+/// not selectable, only the emergency render used when a sprite skin's sheets fail
+/// to load. It has no entry here because it has no sprite data to register.
 public enum MascotSkins {
 
-    /// The hand-drawn cat: the default, and the fallback whenever anything about a
-    /// sprite skin goes wrong.
-    public static let drawn = MascotSkin(
-        id: "drawn",
-        name: "Нарисованный",
-        author: "CodeCat",
-        license: .builtIn,
-        sourceURL: nil,
-        directory: nil,
-        frameSize: 0,
-        animations: [:])
+    public static let all: [MascotSkin] = (1...6).map(luizMeloCat) + [elthen, mxmaze]
 
-    public static let all: [MascotSkin] = [drawn] + luizMeloCats + [elthen, mxmaze]
+    /// `luizmelo-cat-1` ("Рыжий"): the warm ginger cat, closest in spirit to the
+    /// retired hand-drawn default, and the only LuizMelo cat in a warm palette.
+    ///
+    /// Built directly rather than looked up in `all`, so this can never fail: a
+    /// lookup-based default (`all.first { $0.id == "luizmelo-cat-1" }!`) would trap
+    /// at launch if that id were ever renamed or removed from `all`.
+    public static let `default` = luizMeloCat(1)
 
-    /// Falls back to the drawn cat rather than failing: an id that is not in the
-    /// registry means a corrupted or downgraded `UserDefaults`, which must never
-    /// leave the user without a mascot.
+    /// Falls back to `default` rather than failing: an id that is not in the
+    /// registry means a corrupted or downgraded `UserDefaults` (including a stored
+    /// `"drawn"`, from before the hand-drawn cat stopped being selectable), which
+    /// must never leave the user without a mascot.
     public static func skin(withID id: String) -> MascotSkin {
-        all.first { $0.id == id } ?? drawn
+        all.first { $0.id == id } ?? MascotSkins.default
     }
 
     // MARK: - LuizMelo
 
     /// Colours read off each cat's `Idle` frame; that is all that distinguishes
-    /// `Cat-1`…`Cat-6` in the archive, where they are only numbered.
-    private static let luizMeloNames = [
-        1: "Рыжий", 2: "Чёрный", 3: "Сиамский",
-        4: "Дымчатый", 5: "Белый", 6: "Полосатый",
-    ]
-
-    private static var luizMeloCats: [MascotSkin] {
-        (1...6).map { n in
-            MascotSkin(
-                id: "luizmelo-cat-\(n)",
-                name: luizMeloNames[n]!,
-                author: "LuizMelo",
-                license: .cc0,
-                sourceURL: "https://luizmelo.itch.io/pet-cat-pack",
-                directory: "luizmelo/Cat-\(n)",
-                frameSize: 50,
-                animations: luizMeloAnimations(n))
+    /// `Cat-1`…`Cat-6` in the archive, where they are only numbered. A `switch`
+    /// rather than a dictionary lookup: the compiler proves every `1...6` case is
+    /// covered, so there is no force-unwrap that could trap on a typo'd number.
+    private static func luizMeloName(_ n: Int) -> String {
+        switch n {
+        case 1: return "Рыжий"
+        case 2: return "Чёрный"
+        case 3: return "Сиамский"
+        case 4: return "Дымчатый"
+        case 5: return "Белый"
+        case 6: return "Полосатый"
+        default: return "Кот \(n)"
         }
+    }
+
+    private static func luizMeloCat(_ n: Int) -> MascotSkin {
+        MascotSkin(
+            id: "luizmelo-cat-\(n)",
+            name: luizMeloName(n),
+            author: "LuizMelo",
+            license: .cc0,
+            sourceURL: "https://luizmelo.itch.io/pet-cat-pack",
+            directory: "luizmelo/Cat-\(n)",
+            frameSize: 50,
+            animations: luizMeloAnimations(n))
     }
 
     private static func luizMeloAnimations(_ n: Int) -> [AggregateStatusKey: SpriteAnimation] {
