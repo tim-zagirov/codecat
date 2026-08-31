@@ -63,9 +63,11 @@ final class AppState: ObservableObject {
 
     /// Skins whose failure alert has already been shown. Only the *alert* is
     /// once-per-launch: the view that renders the mascot is rebuilt constantly, and
-    /// an alert on every rebuild would be unusable. The fallback to the drawn cat in
+    /// an alert on every rebuild would be unusable. The revert to the default skin in
     /// `reportSkinLoadFailure` is unconditional and runs every time, regardless of
-    /// this set.
+    /// this set — the drawn cat is not involved here; it is only `MascotView`'s
+    /// in-place render fallback for a single failed frame, not something `AppState`
+    /// switches to.
     private var reportedSkinFailures: Set<String> = []
 
     private var lidHelperInstallInFlight = false
@@ -80,7 +82,14 @@ final class AppState: ObservableObject {
         lidModeEnabled = defaults.bool(forKey: "lidMode")
         soundsEnabled = defaults.bool(forKey: "sounds")
         showMascot = defaults.bool(forKey: "showMascot")
-        skinID = defaults.string(forKey: "mascotSkin") ?? MascotSkins.default.id
+        // Resolve through `MascotSkins.skin(withID:)` rather than trusting the raw
+        // stored string: an id from an older build (e.g. the retired `"drawn"`) must
+        // migrate to the default skin here, at read time, so `skinID` and `skin.id`
+        // never disagree. Assigning the raw value directly would leave a stale id
+        // sitting in `skinID` — rendering the default skin correctly, but with no
+        // tile selected in `SkinPickerView` (it compares `skin.id == skinID`) until
+        // the user happens to tap one, since `didSet` does not fire on `init`.
+        skinID = MascotSkins.skin(withID: defaults.string(forKey: "mascotSkin") ?? MascotSkins.default.id).id
 
         jumpExecutor = SystemJumpExecutor()
         powerManager = PowerManager(
@@ -467,7 +476,12 @@ final class AppState: ObservableObject {
         NSApp.activate()
         let alert = NSAlert()
         alert.messageText = "Не удалось загрузить облик «\(skin.name)»"
-        alert.informativeText = "Файлы набора не читаются. Вернул облик по умолчанию."
+        // Must not claim which skin ended up on screen: if the whole `Skins`
+        // directory is missing, the default skin's own sheets fail to load too, and
+        // the user is looking at `CatView`'s drawn-cat fallback, not the default
+        // skin. Naming only the skin that failed and saying "мы переключились" keeps
+        // this true in both cases.
+        alert.informativeText = "Файлы набора не читаются. Переключились на другой облик."
         alert.window.level = .modalPanel
         alert.window.orderFrontRegardless()
         alert.runModal()
