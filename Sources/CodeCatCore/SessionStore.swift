@@ -113,6 +113,15 @@ public final class SessionStore: ObservableObject {
                 s.status = .idle
                 s.activityDescription = "открыта, ждёт задачу"
             }
+        case "UserPromptSubmit":
+            // Единственный сигнал «работа началась», который приходит мгновенно и
+            // наверняка. Транскрипт скажет то же самое, но позже (замеры — см.
+            // `HooksInstaller.events`) и подробнее: он уточнит описание, а статус
+            // к тому моменту уже верный.
+            upsert(event: event, now: now) { s in
+                s.status = .working
+                s.activityDescription = "взялся за задачу"
+            }
         case "Notification":
             let text = (event.message ?? "").lowercased()
             let reason: WaitReason = text.contains("permission") ? .permission : .question

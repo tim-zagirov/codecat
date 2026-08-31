@@ -24,7 +24,15 @@ public enum SettingsReadResult: Equatable {
 
 public enum HooksInstaller {
     /// The hook events CodeCat subscribes to.
-    public static let events = ["SessionStart", "Stop", "Notification", "SessionEnd"]
+    ///
+    /// `UserPromptSubmit` — точный момент, когда агент взялся за работу. Без него
+    /// начало работы приходилось узнавать из транскрипта, а он приходит пачками:
+    /// на живой машине замерена задержка в 21 секунду между тем, как строка
+    /// записана, и тем, как о ней сообщил FSEvents. Всё это время котик спал, хотя
+    /// агент уже работал. Хук приходит по сокету сразу.
+    public static let events = [
+        "SessionStart", "UserPromptSubmit", "Stop", "Notification", "SessionEnd",
+    ]
 
     /// Reads the settings file at `url`, distinguishing "does not exist" from "exists but
     /// could not be read". This distinction matters because `install(into:hookCommand:)`
