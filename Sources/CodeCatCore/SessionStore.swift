@@ -51,13 +51,19 @@ public final class SessionStore: ObservableObject {
     /// Deliberately derived from `aggregate` rather than recomputing "which state is
     /// the mascot in" a second time: two places independently deciding that question
     /// is exactly how the number and the colour drifted apart in the first place.
+    /// Число на бейдже — это «сколько агентов прямо сейчас чем-то заняты или ждут
+    /// тебя». Больше ничего.
+    ///
+    /// Поэтому у `.done` и `.problem` числа нет: закончившая сессия не работает, и
+    /// оборвавшаяся тоже. Позы кота (доволен / тревога) сами говорят, что случилось,
+    /// а сколько именно сессий в этом состоянии — видно в панели. Раньше число там
+    /// было, и оно врало ровно так, как это читает человек: «ничего не запущено, а
+    /// на бейдже 2» — это были две сессии, закончившие турн в последние десять минут.
     public var badgeCount: Int {
         switch aggregate {
         case .waiting(let n): return n
         case .working(let n): return n
-        case .problem: return sessions.values.filter { $0.status == .crashed }.count
-        case .done: return sessions.values.filter { $0.status == .done }.count
-        case .sleeping: return 0
+        case .problem, .done, .sleeping: return 0
         }
     }
 
@@ -152,6 +158,22 @@ public final class SessionStore: ObservableObject {
             lastActivity: activity.timestamp)
         guard activity.timestamp > s.lastActivity || isNew else { return }
         guard s.status != .crashed else { return }
+        // Конец турна виден прямо в транскрипте (`stop_reason == "end_turn"`), и
+        // полагаться на это надёжнее, чем на хук `Stop`: тот приходит не всегда —
+        // замер см. в доккомменте `TranscriptActivity.endsTurn`. Без этого сессия,
+        // чей хук потерялся, оставалась «работает» навсегда.
+        //
+        // Турн субагента здесь не считается: субагент закончил — сессия продолжает
+        // работать, разбирая его результат.
+        if activity.endsTurn && !activity.isSubagent {
+            s.status = .done
+            s.activityDescription = "закончил"
+            s.finishedAt = activity.timestamp
+            s.lastActivity = activity.timestamp
+            if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
+            sessions[activity.sessionId] = s
+            return
+        }
         s.status = .working
         // Работа субагента — это работа сессии (см. `isSubagent` на `TranscriptActivity`):
         // статус, `aggregate`, `badgeCount` и `anyWorking` не отличают её от собственной

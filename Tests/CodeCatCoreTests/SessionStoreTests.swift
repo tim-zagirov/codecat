@@ -406,6 +406,68 @@ final class SessionStoreTests: XCTestCase {
     }
 }
 
+// MARK: - Конец турна виден в транскрипте, а не только в хуке
+
+extension SessionStoreTests {
+
+    private func endOfTurn(id: String = "s1", at time: Date) -> TranscriptActivity {
+        TranscriptActivity(sessionId: id, projectPath: "/proj", description: "закончил",
+                           timestamp: time, endsTurn: true)
+    }
+
+    /// Ровно тот случай, что поймали на живой машине: сессия закончила турн, хук
+    /// `Stop` до приложения не дошёл — и раньше она навсегда оставалась «работает»,
+    /// продолжая давать единицу на бейдже при пустом столе.
+    func testEndOfTurnInTheTranscriptFinishesTheSessionWithoutTheStopHook() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        XCTAssertEqual(store.aggregate, .working(1))
+        store.apply(activity: endOfTurn(at: t0.addingTimeInterval(30)))
+        XCTAssertEqual(store.ordered[0].status, .done)
+        XCTAssertEqual(store.ordered[0].finishedAt, t0.addingTimeInterval(30),
+                       "TTL показа отсчитывается от конца турна")
+        XCTAssertEqual(store.aggregate, .done)
+        XCTAssertEqual(store.badgeCount, 0)
+        XCTAssertFalse(store.anyWorking, "мак больше незачем держать не спящим")
+    }
+
+    /// Субагент закончил свой турн — сессия продолжает работать: она разбирает его
+    /// результат. Гасить её здесь значило бы усыплять кота посреди работы.
+    func testSubagentEndOfTurnDoesNotFinishTheSession() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        let subagentDone = TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "закончил",
+            timestamp: t0.addingTimeInterval(30), isSubagent: true, endsTurn: true)
+        store.apply(activity: subagentDone)
+        XCTAssertEqual(store.ordered[0].status, .working)
+        XCTAssertEqual(store.badgeCount, 1)
+    }
+
+    /// Следующая реплика человека снова заводит работу — законченность не залипает.
+    func testWorkResumesAfterAnEndOfTurnSeenInTheTranscript() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.apply(activity: endOfTurn(at: t0.addingTimeInterval(30)))
+        startWorking(store, at: t0.addingTimeInterval(60))
+        XCTAssertEqual(store.ordered[0].status, .working)
+        XCTAssertNil(store.ordered[0].finishedAt)
+        XCTAssertEqual(store.badgeCount, 1)
+    }
+
+    /// Законченная сессия истекает по обычному TTL — от конца турна.
+    func testASessionFinishedByTheTranscriptExpiresOnTheUsualTTL() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        let end = t0.addingTimeInterval(30)
+        store.apply(activity: endOfTurn(at: end))
+        store.expireFinished(now: end.addingTimeInterval(599))
+        XCTAssertEqual(store.ordered.count, 1)
+        store.expireFinished(now: end.addingTimeInterval(601))
+        XCTAssertTrue(store.ordered.isEmpty)
+    }
+}
+
 // MARK: - Жива ли сессия: точный ответ по её собственному процессу
 
 extension SessionStoreTests {
@@ -661,7 +723,8 @@ extension SessionStoreTests {
         XCTAssertEqual(store.badgeCount, 3)
     }
 
-    func testBadgeCountForProblemCountsOnlyCrashedSessions() {
+    /// Оборвавшаяся сессия не работает — числа у неё нет, только поза тревоги.
+    func testProblemShowsThePoseWithoutANumber() {
         let store = SessionStore()
         // c1 works, then goes stale with no claude processes alive -> crashed.
         startWorking(store, id: "c1", cwd: "/c1", at: t0)
@@ -670,17 +733,34 @@ extension SessionStoreTests {
         store.apply(hook: hook("SessionStart", id: "d1", cwd: "/d1"), now: t0)
         store.apply(hook: hook("Stop", id: "d1"), now: t0.addingTimeInterval(10))
         XCTAssertEqual(store.aggregate, .problem)
-        XCTAssertEqual(store.badgeCount, 1)
+        XCTAssertEqual(store.badgeCount, 0)
     }
 
-    func testBadgeCountForDoneCountsAllDoneSessions() {
+    /// Жалоба, ради которой правило и переписано: «ничего не запущено, а на бейдже
+    /// 2» — это были две сессии, закончившие турн в последние десять минут. Кот
+    /// показывает, что работа сделана, позой; число же значит ровно «столько агентов
+    /// сейчас заняты», и здесь оно ноль.
+    func testFinishedSessionsShowThePoseWithoutANumber() {
         let store = SessionStore()
         for id in ["d1", "d2"] {
             store.apply(hook: hook("SessionStart", id: id, cwd: "/\(id)"), now: t0)
             store.apply(hook: hook("Stop", id: id), now: t0.addingTimeInterval(10))
         }
         XCTAssertEqual(store.aggregate, .done)
-        XCTAssertEqual(store.badgeCount, 2)
+        XCTAssertEqual(store.badgeCount, 0)
+    }
+
+    /// И зеркало: как только в одной из них снова начинается работа — ровно единица,
+    /// а не «две законченные плюс одна».
+    func testOneWorkingSessionAmongFinishedOnesBadgesExactlyOne() {
+        let store = SessionStore()
+        for id in ["d1", "d2"] {
+            store.apply(hook: hook("SessionStart", id: id, cwd: "/\(id)"), now: t0)
+            store.apply(hook: hook("Stop", id: id), now: t0.addingTimeInterval(10))
+        }
+        store.apply(hook: hook("UserPromptSubmit", id: "d1"), now: t0.addingTimeInterval(20))
+        XCTAssertEqual(store.aggregate, .working(1))
+        XCTAssertEqual(store.badgeCount, 1)
     }
 
     func testBadgeCountIsZeroForEmptySleepingStore() {
@@ -689,30 +769,34 @@ extension SessionStoreTests {
         XCTAssertEqual(store.badgeCount, 0)
     }
 
-    /// Pins the invariant itself, across every store shape built above: the badge can
-    /// never claim more sessions are active than the store actually holds, and it is
-    /// zero exactly when the mascot is asleep — never zero while there's something to
-    /// show, never nonzero while there isn't.
-    func testBadgeCountInvariantNeverExceedsOrderedCountAndIsZeroOnlyWhenSleeping() {
+    /// Инвариант числа на бейдже: оно никогда не больше того, что стор реально
+    /// держит, и оно ненулевое ровно тогда, когда есть чем быть занятым — то есть в
+    /// состояниях «работает» и «ждёт тебя», и только в них.
+    func testBadgeCountInvariantNeverExceedsOrderedCountAndIsNonZeroOnlyForWorkOrWaiting() {
         func assertInvariant(_ store: SessionStore, file: StaticString = #filePath,
                              line: UInt = #line) {
             XCTAssertLessThanOrEqual(store.badgeCount, store.ordered.count, file: file, line: line)
-            XCTAssertEqual(store.badgeCount == 0, store.aggregate == .sleeping, file: file, line: line)
+            let inFlight: Bool
+            switch store.aggregate {
+            case .working, .waiting: inFlight = true
+            case .done, .problem, .sleeping: inFlight = false
+            }
+            XCTAssertEqual(store.badgeCount > 0, inFlight, file: file, line: line)
         }
 
         let empty = SessionStore()
         assertInvariant(empty)
 
         let working = SessionStore()
-        working.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
-        working.apply(hook: hook("SessionStart", id: "w2", cwd: "/w2"), now: t0)
+        startWorking(working, id: "w1", cwd: "/w1", at: t0)
+        startWorking(working, id: "w2", cwd: "/w2", at: t0)
         assertInvariant(working)
 
         let waiting = SessionStore()
         waiting.apply(hook: hook("SessionStart", id: "n1", cwd: "/n1"), now: t0)
         waiting.apply(hook: hook("Notification", id: "n1", message: "нужно разрешение"),
                      now: t0.addingTimeInterval(10))
-        waiting.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
+        startWorking(waiting, id: "w1", cwd: "/w1", at: t0)
         assertInvariant(waiting)
 
         let done = SessionStore()
@@ -721,12 +805,12 @@ extension SessionStoreTests {
         assertInvariant(done)
 
         let problem = SessionStore()
-        problem.apply(hook: hook("SessionStart", id: "c1", cwd: "/c1"), now: t0)
+        startWorking(problem, id: "c1", cwd: "/c1", at: t0)
         problem.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300))
         assertInvariant(problem)
 
         let mixedWorkingAndDone = SessionStore()
-        mixedWorkingAndDone.apply(hook: hook("SessionStart", id: "w1", cwd: "/w1"), now: t0)
+        startWorking(mixedWorkingAndDone, id: "w1", cwd: "/w1", at: t0)
         mixedWorkingAndDone.apply(hook: hook("SessionStart", id: "d1", cwd: "/d1"), now: t0)
         mixedWorkingAndDone.apply(hook: hook("Stop", id: "d1"), now: t0.addingTimeInterval(10))
         assertInvariant(mixedWorkingAndDone)
