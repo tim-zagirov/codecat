@@ -112,8 +112,32 @@ final class HooksInstallerTests: XCTestCase {
             from: "broken{".data(using: .utf8)!, hookCommand: cmd))
     }
 
-    func testEventsListIsExactlyTheSpecifiedFour() {
-        XCTAssertEqual(HooksInstaller.events, ["SessionStart", "Stop", "Notification", "SessionEnd"])
+    /// Список событий закреплён целиком: каждое из них отвечает за конкретный
+    /// переход состояния, и молча выпавшее событие — это застрявший котик.
+    /// `UserPromptSubmit` — момент начала работы (см. доккоммент к `events`).
+    func testEventsListIsExactlyTheSubscribedFive() {
+        XCTAssertEqual(HooksInstaller.events,
+                       ["SessionStart", "UserPromptSubmit", "Stop", "Notification", "SessionEnd"])
+    }
+
+    /// Установка, сделанная прежней версией (без `UserPromptSubmit`), обязана
+    /// читаться как неполная: иначе приложение решило бы, что всё на месте, и
+    /// никогда не предложило бы дописать недостающее событие.
+    func testAnOlderPartialInstallDoesNotCountAsInstalled() throws {
+        let older = try JSONSerialization.data(withJSONObject: ["hooks": [
+            "SessionStart": [["hooks": [["type": "command", "command": cmd]]]],
+            "Stop": [["hooks": [["type": "command", "command": cmd]]]],
+            "Notification": [["hooks": [["type": "command", "command": cmd]]]],
+            "SessionEnd": [["hooks": [["type": "command", "command": cmd]]]],
+        ]])
+        XCTAssertFalse(HooksInstaller.isInstalled(in: older, hookCommand: cmd))
+        // А после установки — на месте, и старые записи не продублированы.
+        let updated = try HooksInstaller.install(into: older, hookCommand: cmd)
+        XCTAssertTrue(HooksInstaller.isInstalled(in: updated, hookCommand: cmd))
+        let root = (try JSONSerialization.jsonObject(with: updated)) as? [String: Any]
+        let hooks = root?["hooks"] as? [String: Any]
+        XCTAssertEqual((hooks?["Stop"] as? [Any])?.count, 1)
+        XCTAssertEqual((hooks?["UserPromptSubmit"] as? [Any])?.count, 1)
     }
 
     // MARK: - Malformed foreign content must survive install (review finding)

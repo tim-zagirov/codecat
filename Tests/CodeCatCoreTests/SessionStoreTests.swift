@@ -35,6 +35,29 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertFalse(store.anyWorking, "открытая вкладка не повод не давать маку заснуть")
     }
 
+    /// `UserPromptSubmit` — точный момент начала работы, и он приходит по сокету
+    /// сразу, не дожидаясь, пока FSEvents донесёт строку транскрипта.
+    func testUserPromptSubmitStartsWorkImmediately() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        XCTAssertEqual(store.aggregate, .sleeping)
+        store.apply(hook: hook("UserPromptSubmit"), now: t0.addingTimeInterval(5))
+        XCTAssertEqual(store.ordered[0].status, .working)
+        XCTAssertEqual(store.aggregate, .working(1))
+        XCTAssertTrue(store.anyWorking)
+    }
+
+    /// Полный круг одного турна: взялся → закончил → снова взялся.
+    func testAPromptAfterAFinishedTurnMakesTheSessionWorkAgain() {
+        let store = SessionStore()
+        store.apply(hook: hook("UserPromptSubmit"), now: t0)
+        store.apply(hook: hook("Stop"), now: t0.addingTimeInterval(60))
+        XCTAssertEqual(store.aggregate, .done)
+        store.apply(hook: hook("UserPromptSubmit"), now: t0.addingTimeInterval(120))
+        XCTAssertEqual(store.ordered[0].status, .working)
+        XCTAssertNil(store.ordered[0].finishedAt, "сессия снова в работе — не законченная")
+    }
+
     /// И зеркальный случай: как только в сессии действительно началась работа
     /// (первая строка турна в транскрипте), она немедленно считается работающей.
     func testFirstTranscriptLineTurnsAnIdleSessionIntoAWorkingOne() {
