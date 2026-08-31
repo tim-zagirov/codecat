@@ -41,7 +41,7 @@ class OverlayPanel: NSPanel {
 
 /// Owns the cat panel and the details panel, and is the sole place that knows how
 /// they relate to each other (position, visibility, click-to-open).
-final class OverlayController: NSObject, NSWindowDelegate {
+final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
     /// `[x, y, canvas]`. The canvas the position was saved for is stored with it so
     /// changing the panel size migrates old positions instead of shifting the cat.
     private static let positionKey = "mascotPosition.v2"
