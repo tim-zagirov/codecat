@@ -12,10 +12,10 @@ import ImageIO
 /// registry-driven check also needs to run against the assembled `.app`, so it
 /// doubles as `make app`'s post-build guard: setting `CODECAT_SKINS_DIR` points it
 /// at any directory instead (see the Makefile's `app` target, which runs this suite
-/// with that variable set to `dist/CodeCat.app/Contents/Resources/Skins`). Because
-/// `skin.isSpriteBased` sheets are enumerated straight from `MascotSkins.all` rather
-/// than a hand-written file list, a future skin added without its assets fails this
-/// check wherever it points, not just here.
+/// with that variable set to `dist/CodeCat.app/Contents/Resources/Skins`). Sheets are
+/// enumerated straight from `MascotSkins.all` rather than a hand-written file list,
+/// so a future skin added without its assets fails this check wherever it points,
+/// not just here.
 final class SkinAssetsTests: XCTestCase {
 
     private var skinsDirectory: URL {
@@ -39,8 +39,8 @@ final class SkinAssetsTests: XCTestCase {
     }
 
     func testEveryDeclaredSheetExistsAndHoldsEveryDeclaredFrame() throws {
-        for skin in MascotSkins.all where skin.isSpriteBased {
-            let directory = skinsDirectory.appendingPathComponent(skin.directory!)
+        for skin in MascotSkins.all {
+            let directory = skinsDirectory.appendingPathComponent(skin.directory)
             // Highest frame index actually asked for, per sheet.
             var maxIndex: [String: Int] = [:]
             for animation in skin.animations.values {

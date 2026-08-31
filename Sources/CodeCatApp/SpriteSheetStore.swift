@@ -86,7 +86,6 @@ final class SpriteSheetStore {
     /// Reads, measures and caches a skin. Returns nil if any declared sheet is
     /// missing or unreadable, or if the skin turns out to be fully transparent.
     func load(_ skin: MascotSkin) -> LoadedSkin? {
-        guard skin.isSpriteBased else { return nil }
         if let cached = loaded[skin.id] { return cached }
         if failed.contains(skin.id) { return nil }
 
@@ -129,8 +128,7 @@ final class SpriteSheetStore {
     // MARK: - Sheets
 
     private func sheet(named name: String, of skin: MascotSkin) -> CGImage? {
-        guard let directory = skin.directory else { return nil }
-        let key = "\(directory)/\(name)"
+        let key = "\(skin.directory)/\(name)"
         if let cached = sheets[key] { return cached }
         // `.copy("Skins")` keeps the directory tree, so the sheet sits at
         // <skinsRoot>/<directory>/<name>. `Bundle`'s `url(forResource:withExtension:)`
