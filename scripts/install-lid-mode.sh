@@ -21,6 +21,20 @@ EOF
 visudo -cf "$TMP"
 install -m 0440 -o root -g wheel "$TMP" "$SUDOERS_FILE"
 
+# Демон СНАЧАЛА проверяет флаг и только потом пишет. Без этой проверки он
+# выполнял `pmset -a disablesleep 0` безусловно каждые StartInterval секунд всё
+# время, пока CodeCat не запущен, — то есть навсегда после того, как человек вышел
+# из приложения. Каждый такой вызов заставляет powerd перечитать и переписать
+# настройки энергосбережения («Energy Saver Prefs have changed» в системном
+# журнале), от root, раз в минуту, вечно. На машине разработчика набежало 1957
+# запусков за двое суток. Ничего не ломалось, но так вести себя утилита не имеет
+# права, и в раздаваемой сборке этого быть не должно.
+#
+# Скобки вокруг второй половины обязательны. `A || B && C` в bash разбирается как
+# `(A || B) && C` — то есть при ЖИВОМ CodeCat (A истинно) выполнился бы C и снял
+# флаг прямо во время работы агентов, ровно наоборот задуманному. Группировка
+# `A || { B && C; }` — единственная запись, которая делает то, что написано.
+#
 # Раньше демон срабатывал только один раз при загрузке (RunAtLoad), поэтому
 # если приложение падало (crash, kill -9, Force Quit) с уже включённым
 # disablesleep, флаг оставался выставленным до следующей перезагрузки — ровно
@@ -39,7 +53,7 @@ cat > "$DAEMON_PLIST" <<'EOF'
     <array>
         <string>/bin/bash</string>
         <string>-c</string>
-        <string>/usr/bin/pgrep -x CodeCat >/dev/null 2>&amp;1 || /usr/bin/pmset -a disablesleep 0</string>
+        <string>/usr/bin/pgrep -x CodeCat >/dev/null 2>&amp;1 || { /usr/bin/pmset -g | /usr/bin/grep -qE 'SleepDisabled[[:space:]]+1' &amp;&amp; /usr/bin/pmset -a disablesleep 0; }</string>
     </array>
     <key>RunAtLoad</key><true/>
     <key>StartInterval</key><integer>60</integer>
