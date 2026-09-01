@@ -108,6 +108,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             #selector(toggleLidMode)))
         menu.addItem(toggle("Звуки", appState.soundsEnabled, #selector(toggleSounds)))
         menu.addItem(toggle("Показывать котика", appState.showMascot, #selector(toggleMascot)))
+        // Дубликат пункта из панели настроек, и он здесь обязателен, а не для
+        // удобства: включив «прятать», пользователь убирает с экрана и самого
+        // маскота, и меню, которое живёт внутри него, — выключить обратно было бы
+        // неоткуда. Меню-бар остаётся на месте всегда.
+        menu.addItem(toggle("Прятать котика, когда сессий нет",
+                            appState.hidesWhenNoSessions, #selector(toggleHideWhenIdle)))
         menu.addItem(.separator())
         if appState.hooksInstalled {
             menu.addItem(NSMenuItem(title: "Убрать хуки Claude Code…",
@@ -142,6 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleKeepAwake() { appState.keepAwakeEnabled.toggle() }
     @objc private func toggleSounds() { appState.soundsEnabled.toggle() }
     @objc private func toggleMascot() { appState.showMascot.toggle() }
+
+    @objc private func toggleHideWhenIdle() { appState.hidesWhenNoSessions.toggle() }
 
     @objc private func toggleLidMode() {
         appState.requestLidModeChange(to: !appState.lidModeEnabled)
