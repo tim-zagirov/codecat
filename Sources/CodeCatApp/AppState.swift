@@ -73,11 +73,18 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(islandHidesWhenIdle, forKey: "islandHidesWhenIdle") }
     }
 
-    /// Должен ли остров прямо сейчас быть скрыт по настройке «прятать в покое».
+    /// Должен ли остров прямо сейчас быть скрыт по настройке «прятать, когда
+    /// сессий нет».
+    ///
+    /// Условие — именно отсутствие сессий, а не «кот спит». Раньше здесь стоял
+    /// `aggregate == .sleeping`, и это совпадало с подписью ровно до тех пор, пока
+    /// всякая известная сессия считалась работающей. Теперь открытая, но
+    /// простаивающая сессия даёт `.sleeping` — и остров исчезал с экрана, хотя
+    /// сессии были и были видны в панели. Обещание подписи важнее: прячем, когда
+    /// прятать действительно нечего.
     var islandShouldHideNow: Bool {
         guard islandHidesWhenIdle else { return false }
-        if case .sleeping = store.aggregate { return true }
-        return false
+        return !store.hasSessions
     }
 
     /// Whether the "Об ассетах" credits disclosure in `SkinPickerView` is expanded.
