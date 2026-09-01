@@ -124,4 +124,58 @@ final class IslandLayoutTests: XCTestCase {
         let menu = IslandLayout.menuFrame(island: island, height: 4000, screenFrame: screen)
         XCTAssertGreaterThanOrEqual(menu.minY, screen.minY)
     }
+
+    // MARK: - Силуэт: галтели у кромки экрана
+
+    /// Галтели лежат снаружи корпуса, поэтому окно шире — но ровно на них, и центр
+    /// не уезжает: остров обязан оставаться симметричным относительно выреза.
+    func testSilhouetteFrameAddsTheFilletMarginsOnBothSidesWithoutMovingTheCentre() {
+        let island = CGRect(x: 100, y: 1085, width: 329, height: 32)
+        let silhouette = IslandLayout.silhouetteFrame(island: island)
+        XCTAssertEqual(silhouette.width, island.width + 2 * IslandLayout.edgeRadius)
+        XCTAssertEqual(silhouette.height, island.height)
+        XCTAssertEqual(silhouette.midX, island.midX)
+        XCTAssertEqual(silhouette.minY, island.minY)
+    }
+
+    /// Форма касается всех четырёх сторон своего прямоугольника: сверху она во всю
+    /// ширину (упирается в кромку экрана), снизу — по корпусу.
+    func testSilhouetteFillsTheWholeWidthAtTheScreenEdge() {
+        let rect = CGRect(x: 0, y: 0, width: 200, height: 32)
+        let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 16)
+        XCTAssertEqual(path.boundingBox.minX, rect.minX, accuracy: 0.01)
+        XCTAssertEqual(path.boundingBox.maxX, rect.maxX, accuracy: 0.01)
+        XCTAssertEqual(path.boundingBox.minY, rect.minY, accuracy: 0.01)
+        XCTAssertEqual(path.boundingBox.maxY, rect.maxY, accuracy: 0.01)
+    }
+
+    /// Суть галтели: у самой кромки чёрное доходит до края окна, а чуть ниже — уже
+    /// нет, оно сузилось до корпуса. Прямой угол дал бы «занято» в обеих точках.
+    func testTheFilletIsBlackAtTheEdgeAndCutAwayJustBelowIt() {
+        let rect = CGRect(x: 0, y: 0, width: 200, height: 32)
+        let e = IslandLayout.edgeRadius
+        let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 16)
+        XCTAssertTrue(path.contains(CGPoint(x: 1, y: 0.5)), "у кромки — закрашено")
+        XCTAssertFalse(path.contains(CGPoint(x: 1, y: e)), "ниже галтели — уже нет")
+        XCTAssertTrue(path.contains(CGPoint(x: rect.maxX - 1, y: 0.5)), "и справа так же")
+        XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - 1, y: e)))
+        XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: e)), "корпус на месте")
+    }
+
+    /// Нулевой радиус галтели — прежняя форма с прямыми верхними углами. Нужен и
+    /// как деградация на узком острове, и чтобы разница была проверяема.
+    func testZeroEdgeRadiusLeavesSquareTopCorners() {
+        let rect = CGRect(x: 0, y: 0, width: 200, height: 32)
+        let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 16, edgeRadius: 0)
+        XCTAssertTrue(path.contains(CGPoint(x: 0.5, y: 10)), "угол прямой — закрашено")
+    }
+
+    /// Радиусы, не влезающие в прямоугольник, зажимаются, а не выворачивают форму
+    /// наизнанку: остров бывает узким на маленьком вырезе.
+    func testOversizedRadiiAreClampedAndTheShapeStaysInsideItsRect() {
+        let rect = CGRect(x: 0, y: 0, width: 20, height: 8)
+        let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 999, edgeRadius: 999)
+        XCTAssertTrue(rect.insetBy(dx: -0.01, dy: -0.01).contains(path.boundingBox))
+        XCTAssertFalse(path.isEmpty)
+    }
 }
