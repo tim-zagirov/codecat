@@ -13,14 +13,87 @@ struct IslandView: View {
     let notchWidth: CGFloat
     let wingWidth: CGFloat
     let spriteSize: CGSize
+    /// Высота полосы острова — она же высота выреза.
     let height: CGFloat
-    /// Открыто ли меню под островом. Пока открыто, нижние углы острова
-    /// распрямляются: скругляет их уже меню, и две чёрные формы читаются как один
-    /// силуэт. Со скруглением на стыке в углах проступали бы обои — тот самый
-    /// видимый разрыв.
-    var menuIsOpen: Bool = false
+    /// Какое меню показывать под островом. `nil` — только полоса.
+    var menuLevel: IslandMenuLevel?
+    /// Меню закрывается: силуэт едет обратно к высоте острова той же пружиной.
+    /// Содержимое при этом остаётся смонтированным — иначе схлопывать было бы
+    /// нечего, — и снимается уже после того, как анимация доехала.
+    var isCollapsing: Bool = false
+    var onJump: () -> Void = {}
+
+    /// Высота содержимого меню, измеренная по факту вёрстки, и признак того, что
+    /// раскрытие состоялось. Пара нужна вместе: пока высота неизвестна, раскрывать
+    /// нечего, а запуск анимации раньше поехал бы от нуля к нулю.
+    @State private var menuHeight: CGFloat = 0
+    @State private var revealed = false
+
+    /// Пружина без отскока. Отскок в строке меню читается не как живость, а как
+    /// дребезг: форма стоит вплотную к кромке экрана, и любое перелетание за
+    /// конечную высоту выглядит браком.
+    static let reveal = Animation.spring(response: 0.28, dampingFraction: 1.0)
+
+    /// Сколько ждать, прежде чем убирать содержимое меню и сжимать окно: пружина
+    /// без отскока укладывается в это время с запасом. Знает и контроллер.
+    static let revealDuration: TimeInterval = 0.32
+
+    /// Ширина корпуса — без места под галтели.
+    private var bodyWidth: CGFloat { 2 * wingWidth + notchWidth }
+
+    /// До какой высоты открыт силуэт прямо сейчас. Это и есть вся анимация: у
+    /// одной формы растёт высота, а её скруглённая нижняя кромка едет вниз вместе
+    /// с ней. Ни шва, ни второй формы, ни подгонки радиусов друг под друга.
+    private var revealedHeight: CGFloat { height + (revealed ? menuHeight : 0) }
 
     var body: some View {
+        VStack(spacing: 0) {
+            strip
+            if let menuLevel {
+                IslandMenuView(appState: appState, level: menuLevel,
+                               width: bodyWidth, onJump: onJump)
+            }
+        }
+        // Место под галтели у кромки экрана: они лежат снаружи корпуса, поэтому
+        // окно шире корпуса на `edgeRadius` с каждой стороны, а содержимое остаётся
+        // ровно в корпусе. См. `IslandLayout.edgeRadius`.
+        .padding(.horizontal, IslandLayout.edgeRadius)
+        .background(Color.black)
+        // Одна маска на остров и меню разом — та самая общая подложка. Форма
+        // рисуется маской, а не обрезкой фона: `clipShape` резал бы прямоугольник
+        // фона, а закрашивать надо в том числе площадь снаружи корпуса (галтели).
+        .mask(alignment: .top) {
+            IslandShape(bottomRadius: IslandLayout.cornerRadius)
+                .frame(height: revealedHeight)
+        }
+        .onPreferenceChange(IslandContentHeightKey.self) { measured in
+            guard measured > 0 else { return }
+            if revealed {
+                // Переход «короткое → полное»: раскрытие уже состоялось, той же
+                // пружиной доезжаем до новой высоты, не схлопывая список сессий.
+                withAnimation(Self.reveal) { menuHeight = measured }
+            } else {
+                menuHeight = measured
+                guard menuLevel != nil, !isCollapsing else { return }
+                withAnimation(Self.reveal) { revealed = true }
+            }
+        }
+        .onChange(of: isCollapsing) { _, collapsing in
+            guard collapsing else { return }
+            withAnimation(Self.reveal) { revealed = false }
+        }
+        .onChange(of: menuLevel == nil) { _, gone in
+            // Содержимое сняли — сбрасываем без анимации: силуэт уже стоит на
+            // высоте острова, анимировать нечего.
+            guard gone else { return }
+            revealed = false
+            menuHeight = 0
+        }
+    }
+
+    /// Полоса острова: кот в левом крыле, счётчик в правом, между ними — дырка
+    /// под физический вырез.
+    private var strip: some View {
         HStack(spacing: 0) {
             cat
                 .frame(width: wingWidth, height: height)
@@ -31,27 +104,6 @@ struct IslandView: View {
                 .frame(width: wingWidth, height: height)
         }
         .frame(height: height)
-        // Место под галтели у кромки экрана: они лежат снаружи корпуса, поэтому окно
-        // шире корпуса на `edgeRadius` с каждой стороны, а содержимое остаётся
-        // ровно в корпусе. См. `IslandLayout.edgeRadius`.
-        .padding(.horizontal, IslandLayout.edgeRadius)
-        // Форма рисуется заливкой, а не обрезкой фона: обрезка отрезала бы галтели
-        // вместе с прямоугольником фона, а нам нужно закрасить площадь снаружи
-        // корпуса.
-        .background(
-            IslandShape(bottomRadius: menuIsOpen ? 0 : IslandLayout.cornerRadius)
-                .fill(Color.black))
-        // Смена радиуса намеренно без анимации.
-        //
-        // Углы острова при открытом меню — внутренний шов, который меню
-        // закрывает собой с первого же пункта выезда. Любая длительность здесь
-        // означает промежуток, когда углы уже скруглены меньше, чем были, а меню
-        // ещё не доехало их прикрыть, — и в стыке снова открываются щели с
-        // обоями, ровно те же, ради которых всё это затевалось. Мгновенная смена
-        // не видна: в первом же кадре кромку закрывает выезжающая форма.
-        //
-        // Обратно углы возвращаются тоже сразу, и это согласовано с закрытием:
-        // меню не уезжает анимацией, а сразу уводится с экрана.
     }
 
     private var cat: some View {
@@ -134,37 +186,5 @@ struct IslandShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         Path(IslandLayout.silhouettePath(in: rect, bottomRadius: bottomRadius))
-    }
-}
-
-/// Прямоугольник со скруглением только снизу.
-///
-/// `animatableData` не для красоты: радиус меняется в момент раскрытия меню, и
-/// без него углы щёлкали бы мгновенно, пока сама форма едет пружиной.
-struct BottomRoundedRectangle: Shape {
-    var radius: CGFloat
-
-    var animatableData: CGFloat {
-        get { radius }
-        set { radius = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let r = max(0, min(radius, min(rect.width, rect.height) / 2))
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
-        if r > 0 {
-            path.addQuadCurve(to: CGPoint(x: rect.maxX - r, y: rect.maxY),
-                              control: CGPoint(x: rect.maxX, y: rect.maxY))
-        }
-        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        if r > 0 {
-            path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - r),
-                              control: CGPoint(x: rect.minX, y: rect.maxY))
-        }
-        path.closeSubpath()
-        return path
     }
 }

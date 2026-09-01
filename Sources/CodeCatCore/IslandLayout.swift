@@ -146,26 +146,23 @@ public enum IslandLayout {
         return path
     }
 
-    /// Выпадающее меню: верхняя кромка вплотную к низу острова (щель между чёрным
-    /// меню и чёрным островом сразу выдала бы, что это два разных окна), центр по
-    /// острову, всё подрезано по краям экрана.
-    /// Ширину меню задаёт остров, а не вызывающий: две чёрные формы разной ширины
-    /// на стыке дают видимый разрыв — обои проступают в уступах по краям. Пока
-    /// ширина принималась снаружи, разрыв можно было вернуть одним неверным
-    /// аргументом; теперь равенство ширин обеспечено по построению.
-    public static func menuFrame(island: CGRect,
-                                 height: CGFloat,
-                                 screenFrame: CGRect,
-                                 edgeInset: CGFloat = 8) -> CGRect {
-        let width = island.width
-        let lowerBound = screenFrame.minX + edgeInset
-        let upperBound = screenFrame.maxX - width - edgeInset
-        // Меню шире экрана: подрезка слева и справа противоречат друг другу,
-        // поэтому прижимаем к левому краю, а не считаем min от max.
-        let x = upperBound >= lowerBound
-            ? min(max(island.midX - width / 2, lowerBound), upperBound)
-            : lowerBound
-        let y = max(screenFrame.minY, island.minY - height)
-        return CGRect(x: x, y: y, width: width, height: height)
+    /// Рамка окна острова при полной высоте `totalHeight` (полоса острова плюс
+    /// раскрытое меню).
+    ///
+    /// Верхняя кромка не двигается никогда: окно растёт вниз от кромки экрана.
+    /// Ширина — всегда ширина силуэта, потому что остров и меню теперь одна форма в
+    /// одном окне; отдельной ширины у меню больше нет, а значит нет и уступа на
+    /// стыке, который раньше приходилось прятать.
+    ///
+    /// Высота зажата снизу полосой острова (меньше неё окно быть не может) и сверху
+    /// нижним краем экрана.
+    public static func windowFrame(island: CGRect,
+                                   totalHeight: CGFloat,
+                                   screenFrame: CGRect) -> CGRect {
+        let silhouette = silhouetteFrame(island: island)
+        let available = island.maxY - screenFrame.minY
+        let height = max(island.height, min(totalHeight, available))
+        return CGRect(x: silhouette.minX, y: island.maxY - height,
+                      width: silhouette.width, height: height)
     }
 }

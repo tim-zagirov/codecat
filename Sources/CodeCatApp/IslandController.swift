@@ -20,8 +20,13 @@ final class IslandController: NSObject, MascotPresenting {
 
     private let appState: AppState
     private var islandPanel: OverlayPanel?
-    private var menuPanel: OverlayPanel?
     private var menuLevel: IslandMenuLevel?
+    /// Меню схлопывается пружиной, но его содержимое ещё смонтировано: снимут его
+    /// по `pendingTeardown`.
+    private var isCollapsing = false
+    /// Какой уровень меню сейчас схлопывается: содержимое обязано остаться на
+    /// экране, пока силуэт едет обратно, иначе схлопывать будет нечего.
+    private var collapsingLevel: IslandMenuLevel?
     private var pendingClose: DispatchWorkItem?
     /// Уборка окна меню после того, как анимация закрытия доехала. Держится
     /// отдельно от `pendingClose` (та решает, *закрывать ли* короткое меню по уходу
@@ -70,7 +75,6 @@ final class IslandController: NSObject, MascotPresenting {
         // Панель надо увести с экрана явно: контроллер умирает при смене режима,
         // и оставленное видимым окно пережило бы его.
         NotificationCenter.default.removeObserver(self)
-        menuPanel?.orderOut(nil)
         islandPanel?.orderOut(nil)
     }
 
@@ -79,38 +83,35 @@ final class IslandController: NSObject, MascotPresenting {
         // `islandShouldHideNow` — настройка «прятать, когда сессий нет». Меню при
         // этом тоже уходит: его не к чему было бы привязать.
         guard visible, !appState.islandShouldHideNow, let geometry = geometry() else {
-            hideMenu(animated: false)
+            dropMenu()
             islandPanel?.orderOut(nil)
             return
         }
         let panel = islandPanel ?? makePanel()
         islandPanel = panel
-        if let hosting = panel.contentView as? IslandHostingView {
-            hosting.rootView = content(for: geometry)
-        } else {
+        let hosting = self.hosting(of: panel) ?? {
             let hosting = IslandHostingView(rootView: content(for: geometry))
             hosting.onEnter = { [weak self] in self?.pointerEnteredRegion() }
             hosting.onExit = { [weak self] in self?.pointerLeftRegion() }
             hosting.onClick = { [weak self] in self?.islandClicked() }
             panel.contentView = hosting
-        }
-        // Окно шире корпуса на галтели с обеих сторон — см. `IslandLayout.edgeRadius`.
-        panel.setFrame(IslandLayout.silhouetteFrame(island: geometry.island), display: true)
+            return hosting
+        }()
+        hosting.rootView = content(for: geometry)
+        hosting.islandStripHeight = geometry.island.height
+        panel.setFrame(windowFrame(for: geometry, hosting: hosting), display: true)
         panel.orderFrontRegardless()
     }
 
     private func handleStateChange() {
         setVisible(appState.showMascot)
-        if menuPanel != nil, let geometry = geometry() {
-            layoutMenu(geometry: geometry)
-        }
     }
 
     // MARK: - Наведение и клик
 
-    /// Курсор внутри острова или внутри меню — это один регион: пока он в любом из
-    /// двух окон, короткое меню живёт. Иначе оно закрывалось бы ровно в тот момент,
-    /// когда мышь переходит с острова на меню, то есть всегда.
+    /// Курсор внутри окна. Окно теперь одно на остров и меню, поэтому и вопрос
+    /// один: раньше приходилось спрашивать про два окна и следить, чтобы переход
+    /// мышью с острова на меню не считался уходом.
     private func pointerEnteredRegion() {
         pendingClose?.cancel()
         pendingClose = nil
@@ -125,12 +126,8 @@ final class IslandController: NSObject, MascotPresenting {
         pendingClose?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            // Опрос реального положения курсора, а не доверие порядку событий.
-            // Остров и меню — два разных окна, и на переходе между ними AppKit
-            // шлёт `mouseExited` острова и `mouseEntered` меню без гарантии
-            // порядка. Полагаться на то, что `mouseEntered` успеет отменить это
-            // задание, нельзя: при обратном порядке меню закрывалось бы ровно в
-            // тот момент, когда пользователь до него дотянулся.
+            // Опрос реального положения курсора, а не доверие порядку событий:
+            // окно в этот момент уже могло вырасти под курсором.
             guard !self.pointerIsInsideRegion() else { return }
             self.hideMenu()
         }
@@ -138,13 +135,10 @@ final class IslandController: NSObject, MascotPresenting {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
-    /// Курсор внутри острова или внутри меню. `NSEvent.mouseLocation` — в тех же
-    /// экранных координатах, что и `NSWindow.frame`.
+    /// `NSEvent.mouseLocation` — в тех же экранных координатах, что и `NSWindow.frame`.
     private func pointerIsInsideRegion() -> Bool {
-        let point = NSEvent.mouseLocation
-        if let island = islandPanel, island.isVisible, island.frame.contains(point) { return true }
-        if let menu = menuPanel, menu.isVisible, menu.frame.contains(point) { return true }
-        return false
+        guard let panel = islandPanel, panel.isVisible else { return false }
+        return panel.frame.contains(NSEvent.mouseLocation)
     }
 
     private func islandClicked() {
@@ -155,55 +149,30 @@ final class IslandController: NSObject, MascotPresenting {
         }
     }
 
-    /// Переход «короткое → полное» происходит **в той же панели**, а не через
-    /// закрытие и открытие новой. Пересоздание схлопнуло бы меню и собрало заново,
-    /// то есть список сессий мигнул бы и переехал; а обещание раскрытия ровно
-    /// обратное — при переходе не должен сдвинуться ни один пиксель уже
-    /// показанного, меняется только высота. Поэтому панель меню всегда создаётся с
-    /// правом становиться key, хотя короткому уровню это право не нужно: сменить
-    /// его у живого окна нельзя, оно задаётся при создании.
+    /// Переход «короткое → полное» — это смена содержимого в том же окне, без
+    /// пересоздания: список сессий не имеет права мигнуть и пересобраться. Высота
+    /// доезжает той же пружиной внутри `IslandView`.
     private func expandMenu() {
-        guard let panel = menuPanel, let geometry = geometry(),
-              let hosting = panel.contentView as? HoverHostingView<IslandMenuView> else { return }
+        guard let panel = islandPanel, let hosting = hosting(of: panel),
+              let geometry = geometry() else { return }
         menuLevel = .full
-        hosting.rootView = menuContent(.full, geometry: geometry)
-        layoutMenu(geometry: geometry)
+        hosting.rootView = content(for: geometry)
+        panel.setFrame(windowFrame(for: geometry, hosting: hosting), display: true)
         // Полное меню обязано становиться key, иначе тумблеры, переключатель вида
         // и кнопка хуков внутри него не получают кликов.
         panel.makeKeyAndOrderFront(nil)
-        refreshIsland()
-    }
-
-    private func menuContent(_ level: IslandMenuLevel, geometry: Geometry,
-                             isCollapsing: Bool = false) -> IslandMenuView {
-        IslandMenuView(appState: appState,
-                       level: level,
-                       width: geometry.island.width,
-                       isCollapsing: isCollapsing,
-                       onJump: { [weak self] in self?.hideMenu() })
     }
 
     private func showMenu(_ level: IslandMenuLevel) {
-        guard let geometry = geometry() else { return }
-        // Мгновенно: новое меню встаёт на место старого, и ждать, пока доедет
-        // анимация закрытия предыдущего, незачем — пользователь уже попросил другое.
-        hideMenu(animated: false)
-
-        let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0,
-                                                     width: geometry.island.width, height: 200),
-                                 allowsKey: true)
-        panel.level = Self.islandLevel
-        panel.acceptsMouseMovedEvents = true
-        let hosting = HoverHostingView(rootView: menuContent(level, geometry: geometry))
-        hosting.onEnter = { [weak self] in self?.pointerEnteredRegion() }
-        hosting.onExit = { [weak self] in self?.pointerLeftRegion() }
-        panel.contentView = hosting
-
-        menuPanel = panel
+        guard let panel = islandPanel, let hosting = hosting(of: panel),
+              let geometry = geometry() else { return }
+        pendingTeardown?.cancel()
+        pendingTeardown = nil
+        isCollapsing = false
+        collapsingLevel = nil
         menuLevel = level
-        layoutMenu(geometry: geometry)
-        refreshIsland()
-
+        hosting.rootView = content(for: geometry)
+        panel.setFrame(windowFrame(for: geometry, hosting: hosting), display: true)
         if level == .full {
             panel.makeKeyAndOrderFront(nil)
         } else {
@@ -211,11 +180,6 @@ final class IslandController: NSObject, MascotPresenting {
         }
     }
 
-    /// Панель уводится с экрана и отпускается, а не прячется для повторного
-    /// использования: внутри полного меню живут восемь превью обликов, каждое со
-    /// своим таймером анимации, и держать их между открытиями — ровно тот расход
-    /// батареи, которого спек обликов велел избегать. Та же причина, что и у
-    /// `OverlayController.hideDetails()`.
     /// - Parameter animated: закрывать пружиной, зеркально раскрытию. `false` —
     ///   для путей, где ждать нельзя: остров уходит с экрана целиком, меняется
     ///   режим отображения, на его месте немедленно открывается другое меню.
@@ -225,63 +189,62 @@ final class IslandController: NSObject, MascotPresenting {
         pendingTeardown?.cancel()
         pendingTeardown = nil
 
-        guard animated, let panel = menuPanel, let geometry = geometry(),
-              let level = menuLevel,
-              let hosting = panel.contentView as? HoverHostingView<IslandMenuView> else {
-            menuPanel?.orderOut(nil)
-            menuPanel = nil
-            menuLevel = nil
-            refreshIsland()
+        guard animated, menuLevel != nil, let panel = islandPanel,
+              let hosting = hosting(of: panel), let geometry = geometry() else {
+            dropMenu()
             return
         }
 
         // Меню больше не считается открытым с этого момента: клик по острову во
-        // время закрытия обязан открыть его заново, а не закрыть повторно.
+        // время закрытия обязан открыть его заново, а не закрыть повторно. Само
+        // содержимое остаётся смонтированным — силуэт его схлопывает.
+        collapsingLevel = menuLevel
         menuLevel = nil
-        hosting.rootView = menuContent(level, geometry: geometry, isCollapsing: true)
-        // Нижние углы острова скругляются той же пружиной и в то же время: меню
-        // уезжает вверх, закрывая их собой почти до конца, поэтому мгновенная
-        // подстановка радиуса в конце читалась бы как щелчок.
-        withAnimation(IslandMenuView.reveal) { refreshIsland() }
+        isCollapsing = true
+        hosting.rootView = content(for: geometry)
 
         let teardown = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.pendingTeardown = nil
-            self.menuPanel?.orderOut(nil)
-            self.menuPanel = nil
+            self.dropMenu()
         }
         pendingTeardown = teardown
-        DispatchQueue.main.asyncAfter(deadline: .now() + IslandMenuView.revealDuration,
+        DispatchQueue.main.asyncAfter(deadline: .now() + IslandView.revealDuration,
                                       execute: teardown)
     }
 
-    /// Пересобирает содержимое острова, не трогая окно. Нужно потому, что остров
-    /// показывает состояние, которого нет в `AppState`: открыто ли меню. Пока оно
-    /// открыто, нижние углы острова распрямлены, и скругляет их уже меню — иначе
-    /// на стыке двух чёрных форм в углах проступают обои.
-    private func refreshIsland() {
-        guard let panel = islandPanel,
-              let hosting = panel.contentView as? IslandHostingView,
+    /// Снимает содержимое меню и сжимает окно обратно до полосы острова. Окно
+    /// держится тем же, что и было: это одна форма, а не две.
+    private func dropMenu() {
+        pendingTeardown?.cancel()
+        pendingTeardown = nil
+        menuLevel = nil
+        isCollapsing = false
+        collapsingLevel = nil
+        guard let panel = islandPanel, let hosting = hosting(of: panel),
               let geometry = geometry() else { return }
         hosting.rootView = content(for: geometry)
+        panel.setFrame(windowFrame(for: geometry, hosting: hosting), display: true)
     }
 
-    private func layoutMenu(geometry: Geometry) {
-        guard let panel = menuPanel,
-              let hosting = panel.contentView else { return }
-        let fitting = hosting.fittingSize
-        let height = fitting.height > 0 ? fitting.height : 200
-        panel.setFrame(IslandLayout.menuFrame(island: geometry.island,
-                                              height: height,
-                                              screenFrame: geometry.screen.frame),
-                       display: true)
+    private func hosting(of panel: OverlayPanel) -> IslandHostingView? {
+        panel.contentView as? IslandHostingView
     }
 
-    /// Непривязанная панель, ставшая key, может её потерять — пользователь кликнул
-    /// в другое окно или по рабочему столу. Для полного меню это «клик мимо».
-    /// Короткое меню key никогда не становится, поэтому сюда не попадает.
+    /// Рамка окна под текущее содержимое. Высоту спрашиваем у самой вёрстки
+    /// (`fittingSize`), а не считаем: меню собирается из списка сессий и настроек,
+    /// и его высота зависит от того, сколько сессий сейчас есть.
+    private func windowFrame(for geometry: Geometry, hosting: IslandHostingView) -> NSRect {
+        let fitting = hosting.fittingSize.height
+        let total = fitting > 0 ? fitting : geometry.island.height
+        return IslandLayout.windowFrame(island: geometry.island,
+                                        totalHeight: total,
+                                        screenFrame: geometry.screen.frame)
+    }
+
     @objc private func menuDidResignKey(_ notification: Notification) {
-        guard let panel = notification.object as? NSPanel, panel === menuPanel else { return }
+        guard let panel = notification.object as? NSPanel, panel === islandPanel,
+              menuLevel == .full else { return }
         hideMenu()
     }
 
@@ -302,7 +265,11 @@ final class IslandController: NSObject, MascotPresenting {
     }
 
     private func makePanel() -> OverlayPanel {
-        let panel = OverlayPanel(contentRect: .zero, allowsKey: false)
+        // `allowsKey: true`: окно одно на остров и меню, а в полном меню живут
+        // тумблеры и кнопки — без права становиться key они не получают кликов.
+        // Ключевым окно делается только по клику (`makeKeyAndOrderFront`), наведение
+        // показывает меню через `orderFrontRegardless` и фокус не трогает.
+        let panel = OverlayPanel(contentRect: .zero, allowsKey: true)
         panel.level = Self.islandLevel
         panel.acceptsMouseMovedEvents = true
         return panel
@@ -314,7 +281,9 @@ final class IslandController: NSObject, MascotPresenting {
                    wingWidth: IslandLayout.wingWidth,
                    spriteSize: geometry.spriteSize,
                    height: geometry.island.height,
-                   menuIsOpen: menuLevel != nil)
+                   menuLevel: menuLevel ?? (isCollapsing ? collapsingLevel : nil),
+                   isCollapsing: isCollapsing,
+                   onJump: { [weak self] in self?.hideMenu() })
     }
 
     /// Экран с вырезом и вся производная геометрия. `nil` — острову негде жить.
