@@ -11,6 +11,11 @@ import CodeCatCore
 final class AppState: ObservableObject {
     let store: SessionStore
     let awayLog = AwayLog()
+    /// Единственный способ узнать, что происходило внутри: приложение `LSUIElement`,
+    /// у него нет ни окна, ни консоли, и инструменты управления экраном его не видят.
+    /// До появления этого файла разбор приходилось вести внешним двойником на
+    /// `CodeCatCore`.
+    let log = DiagnosticLog(url: CodeCatPaths.logURL, source: "app")
     let powerManager: PowerManager
     let lidController: LidSleepController
     let jumpExecutor: JumpExecuting
@@ -156,21 +161,38 @@ final class AppState: ObservableObject {
 
     func start() {
         CodeCatPaths.ensureAppSupportExists()
+        // Ротация именно здесь, а не только в обслуживании: приложение может
+        // проработать без перезапуска сутками, но и наоборот — запускаться часто и
+        // жить недолго, и тогда 15-секундный тик до предела просто не доживёт.
+        log.rotateIfNeeded()
+        let info = Bundle.main.infoDictionary
+        log.write("запуск — версия \(info?["CFBundleShortVersionString"] as? String ?? "?") "
+            + "(\(info?["CFBundleVersion"] as? String ?? "?")), вид: \(displayMode.rawValue), "
+            + "облик: \(skinID)")
+
         hooksInstalled = HooksInstaller.isInstalled(
             in: try? Data(contentsOf: CodeCatPaths.claudeSettings),
             hookCommand: hookBinaryPath())
+        log.write("хуки установлены: \(hooksInstalled), бинарник: \(hookBinaryPath())")
 
         let server = HookSocketServer(path: CodeCatPaths.socketURL) { [weak self] event in
             guard let self else { return }
+            // Строка на каждое ПРИНЯТОЕ событие. Вместе со строкой, которую пишет сам
+            // хук перед отправкой, это единственный способ отличить «Claude Code не
+            // позвал хук» от «позвал, но до приложения не дошло»: снаружи обе
+            // неисправности выглядят одинаково — котик просто не шевелится.
+            self.log.write("событие \(event.hookEventName) сессия=\(event.sessionId.prefix(8)) "
+                + "cwd=\(event.cwd ?? "—") tty=\(event.tty ?? "—")")
             self.store.apply(hook: event, now: Date())
             self.refresh()
         }
         do {
             try server.start()
+            log.write("сокет слушает: \(CodeCatPaths.socketURL.path)")
         } catch {
-            let message = "Не удалось запустить socket server на \(CodeCatPaths.socketURL.path): \(error)"
-            FileHandle.standardError.write(message.data(using: .utf8) ?? Data())
-            FileHandle.standardError.write("\n".data(using: .utf8) ?? Data())
+            // Раньше это уходило в FileHandle.standardError, то есть в никуда:
+            // бандл запускают из Finder, и стандартного вывода у него нет.
+            log.write("ОШИБКА: не удалось поднять сокет на \(CodeCatPaths.socketURL.path): \(error)")
         }
         socketServer = server
 
@@ -192,6 +214,9 @@ final class AppState: ObservableObject {
                 self.store.applyIdleHeuristic(now: now)
             }
             self.powerManager.tick(now: now)
+            // Ротацию делает только приложение — см. DiagnosticLog: хук, переименовав
+            // файл, увёл бы его из-под уже открытого здесь дескриптора.
+            self.log.rotateIfNeeded()
             // Reconciles against the real `SleepDisabled` flag on this slower cadence only —
             // `refresh()` below still drives the cheap, cache-only `update(shouldPreventSleep:)`
             // path for the frequent hook-driven case.
@@ -222,6 +247,11 @@ final class AppState: ObservableObject {
 
     private func notifyTransition(to agg: AggregateStatus) {
         guard agg != lastAggregate else { return }
+        // Переход состояния — это то, что видно глазами как поза котика. Записанный
+        // рядом с событиями хука, он отвечает на главный вопрос ручной проверки:
+        // «кот показывает не то — событие не пришло или пришло, но состояние
+        // посчиталось иначе?»
+        log.write("состояние: \(lastAggregate) → \(agg), сессий: \(store.ordered.count)")
         switch agg {
         case .waiting:
             awayLog.record("агент ждёт тебя", at: Date())
@@ -494,10 +524,13 @@ final class AppState: ObservableObject {
     }
 
     func shutdown() {
+        log.write("выход")
         lidController.resetOnExit()
         socketServer?.stop()
         watcher?.stop()
         timer?.invalidate()
+        // Последним: всё, что выше, ещё может захотеть записаться.
+        log.close()
     }
 
     // MARK: - Jumping to a session

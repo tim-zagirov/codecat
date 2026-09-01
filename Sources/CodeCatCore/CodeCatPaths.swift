@@ -21,6 +21,13 @@ public enum CodeCatPaths {
         appSupport.appendingPathComponent("routes.json")
     }
 
+    /// Файл лога — рядом с сокетом и кэшем маршрутов. Пишут двое: приложение и
+    /// `codecat-hook` (см. `DiagnosticLog`). Приложение `LSUIElement`, у него нет ни
+    /// окна, ни консоли, и это единственный способ узнать, что внутри происходило.
+    public static var logURL: URL {
+        appSupport.appendingPathComponent("codecat.log")
+    }
+
     public static var claudeSettings: URL {
         home.appendingPathComponent(".claude/settings.json")
     }
