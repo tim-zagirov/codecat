@@ -25,6 +25,11 @@ final class AppState: ObservableObject {
     private var timer: Timer?
     private var cancellables: Set<AnyCancellable> = []
     private var lastAggregate: AggregateStatus = .sleeping
+    /// Выход зовётся дважды: из `applicationWillTerminate` и из `atexit` в main.swift
+    /// (страховка на случай сигнала). Видно было прямо в логе — две строки «выход»
+    /// на один выход, с разницей в 38 мс. Само по себе безобидно, но `resetOnExit()`
+    /// теперь запускает мост через `caffeinate`, и запускать его дважды незачем.
+    private var didShutdown = false
 
     @Published var keepAwakeEnabled: Bool {
         didSet {
@@ -524,6 +529,8 @@ final class AppState: ObservableObject {
     }
 
     func shutdown() {
+        guard !didShutdown else { return }
+        didShutdown = true
         log.write("выход")
         lidController.resetOnExit()
         socketServer?.stop()
