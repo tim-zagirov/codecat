@@ -69,45 +69,46 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(IslandLayout.wingWidth, 56 + 2 * IslandLayout.wingPadding)
     }
 
-    // MARK: - Выпадающее меню
+    // MARK: - Окно: остров и меню — одна форма
 
-    /// Верхняя кромка меню вплотную к низу острова — между ними не должно быть
-    /// щели, иначе чёрное меню перестанет читаться как продолжение выреза.
-    func testMenuHangsDirectlyBelowTheIsland() {
+    /// Верхняя кромка окна не двигается: форма растёт вниз от кромки экрана, а не
+    /// переезжает. Это и есть «выезжает из острова».
+    func testWindowGrowsDownwardsAndKeepsItsTopEdgeAtTheScreenEdge() {
         let island = CGRect(x: 701, y: 1085, width: 329, height: 32)
-        let menu = IslandLayout.menuFrame(island: island, height: 200, screenFrame: screen)
-        XCTAssertEqual(menu.maxY, island.minY, accuracy: 0.001)
-        XCTAssertEqual(menu.midX, island.midX, accuracy: 0.001)
-    }
-
-    /// Меню обязано быть ровно той же ширины, что остров: разная ширина двух чёрных
-    /// форм — это и есть тот видимый разрыв на стыке, ради которого ширина меню
-    /// больше не принимается снаружи, а выводится из острова.
-    func testMenuIsExactlyAsWideAsTheIsland() {
-        for width in [281.0, 329.0, 400.0] as [CGFloat] {
-            let island = CGRect(x: 701, y: 1085, width: width, height: 32)
-            let menu = IslandLayout.menuFrame(island: island, height: 200, screenFrame: screen)
-            XCTAssertEqual(menu.width, island.width, accuracy: 0.001, "ширина \(width)")
+        for total in [32.0, 120.0, 400.0] as [CGFloat] {
+            let frame = IslandLayout.windowFrame(island: island, totalHeight: total,
+                                                 screenFrame: screen)
+            XCTAssertEqual(frame.maxY, island.maxY, accuracy: 0.001, "высота \(total)")
+            XCTAssertEqual(frame.height, total, accuracy: 0.001, "высота \(total)")
         }
     }
 
-    /// Остров у самого правого края экрана не имеет права вытолкнуть меню за границу.
-    func testMenuIsClampedToTheScreenEdges() {
-        let island = CGRect(x: 1650, y: 1085, width: 78, height: 32)
-        let menu = IslandLayout.menuFrame(island: island, height: 200, screenFrame: screen)
-        XCTAssertLessThanOrEqual(menu.maxX, screen.maxX)
-        XCTAssertGreaterThanOrEqual(menu.minX, screen.minX)
+    /// Ширина окна всегда одна — ширина силуэта. Отдельной ширины у меню больше нет,
+    /// а значит нет и уступа на стыке, который раньше приходилось прятать.
+    func testWindowIsAlwaysAsWideAsTheSilhouette() {
+        for width in [281.0, 329.0, 400.0] as [CGFloat] {
+            let island = CGRect(x: 701, y: 1085, width: width, height: 32)
+            let frame = IslandLayout.windowFrame(island: island, totalHeight: 200,
+                                                 screenFrame: screen)
+            XCTAssertEqual(frame.width, IslandLayout.silhouetteFrame(island: island).width,
+                           accuracy: 0.001, "ширина \(width)")
+            XCTAssertEqual(frame.midX, island.midX, accuracy: 0.001)
+        }
     }
 
-    /// Узкий экран не выталкивает меню за границу: когда меню шире самого
-    /// экрана, `upperBound < lowerBound`, и `menuFrame` обязан прижать меню к
-    /// левому краю, а не пытаться зажать его между противоречащими друг другу
-    /// границами (см. комментарий у `min(max(...))` в реализации).
-    func testMenuWiderThanScreenIsPinnedToTheLeftEdge() {
-        let narrowScreen = CGRect(x: 0, y: 0, width: 200, height: 1117)
-        let island = CGRect(x: 60, y: 1085, width: 290, height: 32)
-        let menu = IslandLayout.menuFrame(island: island, height: 200, screenFrame: narrowScreen)
-        XCTAssertEqual(menu.minX, 8, accuracy: 0.001)
+    /// Ниже полосы острова окно не сжимается: это его собственная высота в покое.
+    func testWindowNeverShrinksBelowTheIslandStrip() {
+        let island = CGRect(x: 701, y: 1085, width: 329, height: 32)
+        let frame = IslandLayout.windowFrame(island: island, totalHeight: 0, screenFrame: screen)
+        XCTAssertEqual(frame.height, island.height, accuracy: 0.001)
+    }
+
+    /// Меню выше экрана не должно уезжать под нижнюю границу.
+    func testWindowNeverGoesBelowTheScreen() {
+        let island = CGRect(x: 701, y: 1085, width: 329, height: 32)
+        let frame = IslandLayout.windowFrame(island: island, totalHeight: 4000,
+                                             screenFrame: screen)
+        XCTAssertGreaterThanOrEqual(frame.minY, screen.minY)
     }
 
     // MARK: - Числа из спеки
@@ -116,13 +117,6 @@ final class IslandLayoutTests: XCTestCase {
     /// фигурирует только как производная, здесь закреплена явно.
     func testWingWidthMatchesSpec() {
         XCTAssertEqual(IslandLayout.wingWidth, 72)
-    }
-
-    /// Меню выше экрана не должно уезжать под нижнюю границу.
-    func testMenuNeverGoesBelowTheScreen() {
-        let island = CGRect(x: 701, y: 1085, width: 329, height: 32)
-        let menu = IslandLayout.menuFrame(island: island, height: 4000, screenFrame: screen)
-        XCTAssertGreaterThanOrEqual(menu.minY, screen.minY)
     }
 
     // MARK: - Силуэт: галтели у кромки экрана
