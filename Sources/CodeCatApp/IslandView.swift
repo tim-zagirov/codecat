@@ -31,9 +31,16 @@ struct IslandView: View {
                 .frame(width: wingWidth, height: height)
         }
         .frame(height: height)
-        .background(Color.black)
-        // Верхние углы прямые — они упираются в кромку экрана.
-        .clipShape(BottomRoundedRectangle(radius: menuIsOpen ? 0 : IslandLayout.cornerRadius))
+        // Место под галтели у кромки экрана: они лежат снаружи корпуса, поэтому окно
+        // шире корпуса на `edgeRadius` с каждой стороны, а содержимое остаётся
+        // ровно в корпусе. См. `IslandLayout.edgeRadius`.
+        .padding(.horizontal, IslandLayout.edgeRadius)
+        // Форма рисуется заливкой, а не обрезкой фона: обрезка отрезала бы галтели
+        // вместе с прямоугольником фона, а нам нужно закрасить площадь снаружи
+        // корпуса.
+        .background(
+            IslandShape(bottomRadius: menuIsOpen ? 0 : IslandLayout.cornerRadius)
+                .fill(Color.black))
         // Смена радиуса намеренно без анимации.
         //
         // Углы острова при открытом меню — внутренний шов, который меню
@@ -107,6 +114,26 @@ struct IslandView: View {
         case .problem: return .red
         case .sleeping: return Color.white.opacity(0.35)
         }
+    }
+}
+
+/// Силуэт острова: вогнутые галтели у верхней кромки экрана, скруглённые углы
+/// снизу. Вся геометрия — в `IslandLayout.silhouettePath`, здесь только обёртка для
+/// SwiftUI.
+///
+/// `animatableData` — нижний радиус: он меняется при раскрытии меню, и без этого
+/// углы щёлкали бы мгновенно, пока сама форма едет пружиной. Галтели у кромки не
+/// анимируются: кромка экрана никуда не двигается.
+struct IslandShape: Shape {
+    var bottomRadius: CGFloat
+
+    var animatableData: CGFloat {
+        get { bottomRadius }
+        set { bottomRadius = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        Path(IslandLayout.silhouettePath(in: rect, bottomRadius: bottomRadius))
     }
 }
 
