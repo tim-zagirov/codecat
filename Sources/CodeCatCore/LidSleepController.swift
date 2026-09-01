@@ -29,6 +29,7 @@ import Foundation
 public final class LidSleepController {
     private let runner: ([String]) -> Int32
     private let flagReader: () -> Bool?
+    private let bridgeRunner: (Int) -> Bool
 
     /// Whether `pmset -a disablesleep 1` is currently believed to be in effect, i.e. the
     /// last successful call was "on" and no later "off" call has succeeded since.
@@ -45,9 +46,11 @@ public final class LidSleepController {
     }
 
     public init(runner: @escaping ([String]) -> Int32 = LidSleepController.defaultRunner,
-                flagReader: @escaping () -> Bool? = LidSleepController.defaultFlagReader) {
+                flagReader: @escaping () -> Bool? = LidSleepController.defaultFlagReader,
+                bridgeRunner: @escaping (Int) -> Bool = LidSleepController.defaultBridgeRunner) {
         self.runner = runner
         self.flagReader = flagReader
+        self.bridgeRunner = bridgeRunner
     }
 
     /// Mirrors the same `shouldPreventSleep` bit the caller feeds `PowerManager`. A no-op
@@ -90,10 +93,68 @@ public final class LidSleepController {
     }
 
     private func setFlag(_ on: Bool) {
+        // Мост ставится ДО снятия флага, иначе он опоздает: сон наступает в те же
+        // миллисекунды, что и запись pmset. См. bridgeIdleSleep.
+        if !on { bridge(Self.bridgeSeconds) }
         let args = ["/usr/bin/sudo", "-n", "/usr/bin/pmset", "-a",
                      "disablesleep", on ? "1" : "0"]
         if runner(args) == 0 {
             lidSleepDisabled = on
+        }
+    }
+
+    /// Сколько секунд удерживать мак от сна сразу после снятия `disablesleep`.
+    ///
+    /// Смысл окна — дать маку прожить обычную паузу вместо мгновенного провала в
+    /// сон, чтобы за это время засчиталось живое действие человека (он только что
+    /// нажал «Выйти» и почти наверняка ещё за машиной). Если человек всё-таки ушёл,
+    /// окно истечёт и мак уснёт сам — это правильно, мешать этому не надо.
+    public static let bridgeSeconds = 60
+
+    /// Почему это вообще нужно — замерено на живой машине, а не выведено из
+    /// документации.
+    ///
+    /// `pmset -a disablesleep 0` заставляет ядро перечитать настройки сна. Всё
+    /// время, пока флаг стоял, простой продолжал накапливаться, поэтому при
+    /// перечитывании мак видит простой, давно перешедший порог, и засыпает
+    /// НЕМЕДЛЕННО — в журнале это `sleep reason Software Sleep`, то есть сон по
+    /// программному запросу, а не по простою. Замер на выходе из приложения:
+    ///
+    ///     11:20:06.018  powerd: Energy Saver Prefs have changed   (это наш pmset)
+    ///     11:20:06.055  kernel: PMRD: sleep reason Software Sleep (через 37 мс)
+    ///     11:20:06.094  corebrightnessd: Will Sleep, яркость 0    (экран погас)
+    ///
+    /// Контрольный опыт: тот же выход при ВЫКЛЮЧЕННОМ режиме крышки — сна нет
+    /// вовсе. Виноват именно этот `pmset`, а не снятие IOKit-удержания: отдельно
+    /// проверено, что `IOPMAssertionDeclareUserActivity` (то же, что `caffeinate -u`)
+    /// этот путь не перекрывает — мак засыпает всё равно.
+    ///
+    /// Работает `caffeinate -i` — обычное удержание сна по простою. Он ОТДЕЛЬНЫЙ
+    /// процесс намеренно: удержание принадлежит своему процессу, и взятое внутри
+    /// CodeCat умерло бы вместе с ним через миллисекунды (в журнале powerd это
+    /// видно как `ClientDied`), то есть ровно тогда, когда оно и нужно.
+    private func bridge(_ seconds: Int) {
+        _ = bridgeRunner(seconds)
+    }
+
+    /// Запускает `caffeinate -i -t <seconds>` отвязанно. Подменяется в тестах —
+    /// ни один тест не должен порождать настоящий процесс.
+    public static let defaultBridgeRunner: (Int) -> Bool = { seconds in
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
+        task.arguments = ["-i", "-t", String(seconds)]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+            // Намеренно НЕ ждём: процесс должен пережить наш выход. launchd
+            // усыновит его, когда мы умрём.
+            return true
+        } catch {
+            // Мост — удобство, а не корректность. Не смогли — снимаем флаг всё
+            // равно: оставить disablesleep поднятым куда хуже, чем разбудить
+            // человека погасшим экраном.
+            return false
         }
     }
 
