@@ -23,6 +23,11 @@ final class IslandController: NSObject, MascotPresenting {
     private var menuPanel: OverlayPanel?
     private var menuLevel: IslandMenuLevel?
     private var pendingClose: DispatchWorkItem?
+    /// Уборка окна меню после того, как анимация закрытия доехала. Держится
+    /// отдельно от `pendingClose` (та решает, *закрывать ли* короткое меню по уходу
+    /// курсора): открыть меню заново можно прямо посреди закрытия, и тогда уборку
+    /// надо отменить, не трогая логику наведения.
+    private var pendingTeardown: DispatchWorkItem?
     private var cancellables: Set<AnyCancellable> = []
     /// Последняя запрошенная видимость острова. Читает её `screensChanged()`: она
     /// зовёт `setVisible(isVisible)`, чтобы перепоказать остров после смены
@@ -74,7 +79,7 @@ final class IslandController: NSObject, MascotPresenting {
         // `islandShouldHideNow` — настройка «прятать, когда сессий нет». Меню при
         // этом тоже уходит: его не к чему было бы привязать.
         guard visible, !appState.islandShouldHideNow, let geometry = geometry() else {
-            hideMenu()
+            hideMenu(animated: false)
             islandPanel?.orderOut(nil)
             return
         }
@@ -89,7 +94,8 @@ final class IslandController: NSObject, MascotPresenting {
             hosting.onClick = { [weak self] in self?.islandClicked() }
             panel.contentView = hosting
         }
-        panel.setFrame(geometry.island, display: true)
+        // Окно шире корпуса на галтели с обеих сторон — см. `IslandLayout.edgeRadius`.
+        panel.setFrame(IslandLayout.silhouetteFrame(island: geometry.island), display: true)
         panel.orderFrontRegardless()
     }
 
@@ -168,16 +174,20 @@ final class IslandController: NSObject, MascotPresenting {
         refreshIsland()
     }
 
-    private func menuContent(_ level: IslandMenuLevel, geometry: Geometry) -> IslandMenuView {
+    private func menuContent(_ level: IslandMenuLevel, geometry: Geometry,
+                             isCollapsing: Bool = false) -> IslandMenuView {
         IslandMenuView(appState: appState,
                        level: level,
                        width: geometry.island.width,
+                       isCollapsing: isCollapsing,
                        onJump: { [weak self] in self?.hideMenu() })
     }
 
     private func showMenu(_ level: IslandMenuLevel) {
         guard let geometry = geometry() else { return }
-        hideMenu()
+        // Мгновенно: новое меню встаёт на место старого, и ждать, пока доедет
+        // анимация закрытия предыдущего, незачем — пользователь уже попросил другое.
+        hideMenu(animated: false)
 
         let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0,
                                                      width: geometry.island.width, height: 200),
@@ -206,13 +216,43 @@ final class IslandController: NSObject, MascotPresenting {
     /// своим таймером анимации, и держать их между открытиями — ровно тот расход
     /// батареи, которого спек обликов велел избегать. Та же причина, что и у
     /// `OverlayController.hideDetails()`.
-    private func hideMenu() {
+    /// - Parameter animated: закрывать пружиной, зеркально раскрытию. `false` —
+    ///   для путей, где ждать нельзя: остров уходит с экрана целиком, меняется
+    ///   режим отображения, на его месте немедленно открывается другое меню.
+    private func hideMenu(animated: Bool = true) {
         pendingClose?.cancel()
         pendingClose = nil
-        menuPanel?.orderOut(nil)
-        menuPanel = nil
+        pendingTeardown?.cancel()
+        pendingTeardown = nil
+
+        guard animated, let panel = menuPanel, let geometry = geometry(),
+              let level = menuLevel,
+              let hosting = panel.contentView as? HoverHostingView<IslandMenuView> else {
+            menuPanel?.orderOut(nil)
+            menuPanel = nil
+            menuLevel = nil
+            refreshIsland()
+            return
+        }
+
+        // Меню больше не считается открытым с этого момента: клик по острову во
+        // время закрытия обязан открыть его заново, а не закрыть повторно.
         menuLevel = nil
-        refreshIsland()
+        hosting.rootView = menuContent(level, geometry: geometry, isCollapsing: true)
+        // Нижние углы острова скругляются той же пружиной и в то же время: меню
+        // уезжает вверх, закрывая их собой почти до конца, поэтому мгновенная
+        // подстановка радиуса в конце читалась бы как щелчок.
+        withAnimation(IslandMenuView.reveal) { refreshIsland() }
+
+        let teardown = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingTeardown = nil
+            self.menuPanel?.orderOut(nil)
+            self.menuPanel = nil
+        }
+        pendingTeardown = teardown
+        DispatchQueue.main.asyncAfter(deadline: .now() + IslandMenuView.revealDuration,
+                                      execute: teardown)
     }
 
     /// Пересобирает содержимое острова, не трогая окно. Нужно потому, что остров

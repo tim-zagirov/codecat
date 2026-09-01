@@ -20,6 +20,11 @@ struct IslandMenuView: View {
     @ObservedObject var appState: AppState
     let level: IslandMenuLevel
     let width: CGFloat
+    /// Меню закрывается: та же пружина, что и на раскрытии, но в обратную сторону.
+    /// Раньше закрытие было мгновенным — форма просто исчезала, и раскрытие с
+    /// закрытием читались как два разных механизма. Само окно уводится с экрана
+    /// уже после того, как анимация доехала; этим распоряжается `IslandController`.
+    var isCollapsing: Bool = false
     var onJump: () -> Void = {}
 
     /// Высота уже отрисованного содержимого и признак того, что раскрытие
@@ -32,7 +37,11 @@ struct IslandMenuView: View {
     /// Пружина без отскока. Отскок в строке меню читается не как живость, а как
     /// дребезг: форма стоит вплотную к кромке экрана, и любое перелетание за
     /// конечную высоту выглядит браком.
-    private static let reveal = Animation.spring(response: 0.28, dampingFraction: 1.0)
+    static let reveal = Animation.spring(response: 0.28, dampingFraction: 1.0)
+
+    /// Сколько ждать, прежде чем убирать окно: пружина без отскока укладывается в
+    /// это время с запасом. Отдельной константой, потому что её знает и контроллер.
+    static let revealDuration: TimeInterval = 0.32
 
     var body: some View {
         content
@@ -57,8 +66,13 @@ struct IslandMenuView: View {
                 BottomRoundedRectangle(radius: IslandLayout.cornerRadius)
                     .frame(height: revealed ? contentHeight : 0)
             }
+            .onChange(of: isCollapsing) { _, collapsing in
+                guard collapsing else { return }
+                withAnimation(Self.reveal) { revealed = false }
+            }
             .onPreferenceChange(ContentHeightKey.self) { height in
                 guard height > 0 else { return }
+                guard !isCollapsing else { return }
                 if revealed {
                     // Переход «короткое → полное»: высота меняется, а раскрытие
                     // уже состоялось. Той же пружиной доезжаем до новой высоты,

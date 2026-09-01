@@ -32,6 +32,19 @@ public enum IslandLayout {
     /// облика не меняется, и в строке меню ничего не дёргается.
     public static let wingWidth: CGFloat = 72
 
+    /// Скругление в местах, где остров упирается в верхнюю кромку экрана —
+    /// вогнутое, «наружу».
+    ///
+    /// Прямой угол на стыке читается как ступенька: чёрная плашка приставлена к
+    /// кромке, а не растёт из неё. Вогнутая галтель убирает ступеньку — чёрное
+    /// перетекает в кромку экрана без излома, и вырез с островом читаются одной
+    /// непрерывной формой. Тот же приём macOS применяет к самому вырезу.
+    ///
+    /// Плашка ради этого становится шире на `edgeRadius` с каждой стороны: галтель
+    /// лежит снаружи корпуса острова, и без запаса ей негде поместиться. Ширина
+    /// самого корпуса при этом не меняется — крылья остаются по 72 pt.
+    public static let edgeRadius: CGFloat = 10
+
     /// Скругление нижних углов острова и меню. Верхние углы острова прямые —
     /// они упираются в кромку экрана.
     ///
@@ -63,6 +76,70 @@ public enum IslandLayout {
                y: notch.minY,
                width: 2 * wingWidth + notch.width,
                height: notch.height)
+    }
+
+    /// Прямоугольник окна острова: корпус плюс место под галтели с обеих сторон.
+    /// Отдельно от `islandFrame`, потому что это разные величины: `islandFrame` —
+    /// то, по чему раскладывается содержимое (крыло, вырез, крыло), а это — то, что
+    /// нужно закрасить.
+    public static func silhouetteFrame(island: CGRect) -> CGRect {
+        island.insetBy(dx: -edgeRadius, dy: 0)
+    }
+
+    /// Контур острова в координатах SwiftUI (ось Y вниз, начало — левый верхний
+    /// угол): вогнутые галтели у кромки экрана сверху, скруглённые углы снизу.
+    ///
+    /// `rect` — весь прямоугольник окна (`silhouetteFrame`), то есть корпус плюс
+    /// галтели по краям. `edgeRadius` нулевой (или не влезающий) просто даёт прямые
+    /// верхние углы — форма остаётся корректной.
+    ///
+    /// Дуги строятся кубическими Безье с константой 0.5523: квадратичная кривая для
+    /// четверти окружности ошибается примерно на 5%, и на стыке с настоящей дугой
+    /// выреза это было бы видно.
+    public static func silhouettePath(in rect: CGRect,
+                                      bottomRadius: CGFloat,
+                                      edgeRadius: CGFloat = IslandLayout.edgeRadius) -> CGPath {
+        let k: CGFloat = 0.5523
+        // Зажимаем так, чтобы форма не выворачивалась на узком или низком острове:
+        // галтель не шире половины ширины и не выше самого острова, а нижний радиус
+        // не больше половины оставшегося корпуса и того, что осталось от высоты
+        // после галтели. Иначе вертикальная стенка корпуса пошла бы снизу вверх.
+        let e = max(0, min(edgeRadius, min(rect.width / 2, rect.height)))
+        let bodyWidth = rect.width - 2 * e
+        let b = max(0, min(bottomRadius, min(bodyWidth / 2, rect.height - e)))
+        let left = rect.minX, right = rect.maxX, top = rect.minY, bottom = rect.maxY
+        let bodyLeft = left + e, bodyRight = right - e
+
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: left, y: top))
+        path.addLine(to: CGPoint(x: right, y: top))
+        // Правая галтель: из кромки экрана вниз, к правому краю корпуса.
+        if e > 0 {
+            path.addCurve(to: CGPoint(x: bodyRight, y: top + e),
+                          control1: CGPoint(x: right, y: top + e * k),
+                          control2: CGPoint(x: bodyRight + e * k, y: top + e))
+        }
+        path.addLine(to: CGPoint(x: bodyRight, y: bottom - b))
+        if b > 0 {
+            path.addCurve(to: CGPoint(x: bodyRight - b, y: bottom),
+                          control1: CGPoint(x: bodyRight, y: bottom - b + b * k),
+                          control2: CGPoint(x: bodyRight - b + b * k, y: bottom))
+        }
+        path.addLine(to: CGPoint(x: bodyLeft + b, y: bottom))
+        if b > 0 {
+            path.addCurve(to: CGPoint(x: bodyLeft, y: bottom - b),
+                          control1: CGPoint(x: bodyLeft + b - b * k, y: bottom),
+                          control2: CGPoint(x: bodyLeft, y: bottom - b + b * k))
+        }
+        path.addLine(to: CGPoint(x: bodyLeft, y: top + e))
+        // Левая галтель: от корпуса обратно к кромке экрана.
+        if e > 0 {
+            path.addCurve(to: CGPoint(x: left, y: top),
+                          control1: CGPoint(x: bodyLeft - e * k, y: top + e),
+                          control2: CGPoint(x: left, y: top + e * k))
+        }
+        path.closeSubpath()
+        return path
     }
 
     /// Выпадающее меню: верхняя кромка вплотную к низу острова (щель между чёрным
