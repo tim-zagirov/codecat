@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened runtime обязателен для нотаризации, и он же по умолчанию запрещает
+         процессу слать Apple events кому бы то ни было. Без этого ключа переход к
+         сессии (SystemJumpExecutor: NSAppleScript + AEDeterminePermissionToAutomateTarget)
+         падает с errAEEventNotPermitted -1743 — причём НЕЗАВИСИМО от того, что
+         пользователь разрешил в «Системные настройки → Конфиденциальность →
+         Автоматизация». Заметить это на ad-hoc сборке нельзя: там hardened runtime нет,
+         и всё работает. Ломается ровно то, что уходит людям. -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+</dict>
+</plist>

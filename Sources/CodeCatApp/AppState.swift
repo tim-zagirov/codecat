@@ -307,6 +307,70 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Убирает хуки CodeCat из `~/.claude/settings.json`.
+    ///
+    /// Зеркало `installHooksIfNeeded()` и обязательное условие честной деинсталляции:
+    /// без него утилита, стёртая из /Applications, оставляла бы в настройках Claude
+    /// Code пять записей, зовущих несуществующий бинарник — на каждое событие каждой
+    /// сессии. `HooksInstaller.remove` вычищает только записи с нашей командой,
+    /// оставляя чужие хуки и все прочие ключи нетронутыми.
+    ///
+    /// Спрашивает подтверждение: это правка пользовательского файла настроек, а не
+    /// нашего собственного состояния.
+    func removeHooks() {
+        let existing: Data?
+        switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
+        case .notFound:
+            // Файла нет — убирать нечего, и это не ошибка. Но флаг сбрасываем:
+            // раз настроек нет, то и наших хуков в них нет.
+            hooksInstalled = false
+            return
+        case .data(let data):
+            existing = data
+        case .unreadable:
+            // Ровно та же осторожность, что и при установке, и по той же причине:
+            // `remove` трактует nil как пустой документ, и запись такого результата
+            // затёрла бы реальные настройки пользователя целиком.
+            presentHooksAlert(
+                title: "Не удалось убрать хуки",
+                message: "Не удалось прочитать файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте права доступа и попробуйте снова.")
+            return
+        }
+
+        let confirm = NSAlert()
+        confirm.messageText = "Убрать хуки CodeCat?"
+        confirm.informativeText = "Из \(CodeCatPaths.claudeSettings.path) будут удалены записи CodeCat для событий: \(HooksInstaller.events.joined(separator: ", ")). Чужие хуки и остальные настройки останутся как есть.\n\nБез хуков котик продолжит работать, но о состоянии сессий будет узнавать с задержкой — по транскриптам, а не по событиям."
+        confirm.addButton(withTitle: "Убрать")
+        confirm.addButton(withTitle: "Отмена")
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+
+        guard let updated = try? HooksInstaller.remove(
+            from: existing, hookCommand: hookBinaryPath()) else {
+            presentHooksAlert(
+                title: "Не удалось убрать хуки",
+                message: "Не удалось обновить файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте, что файл корректен.")
+            return
+        }
+
+        do {
+            // .atomic по той же причине, что и при установке: оборванная запись не
+            // имеет права оставить пользователя с обрезанным settings.json.
+            try updated.write(to: CodeCatPaths.claudeSettings, options: .atomic)
+            hooksInstalled = false
+        } catch {
+            presentHooksAlert(
+                title: "Не удалось убрать хуки",
+                message: "Не удалось записать в \(CodeCatPaths.claudeSettings.path): \(error.localizedDescription)")
+        }
+    }
+
+    private func presentHooksAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.runModal()
+    }
+
     // MARK: - Closed-lid mode
 
     /// Single entry point for the closed-lid toggle, from both the menu bar and the
