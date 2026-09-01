@@ -80,9 +80,9 @@ final class IslandController: NSObject, MascotPresenting {
 
     func setVisible(_ visible: Bool) {
         isVisible = visible
-        // `islandShouldHideNow` — настройка «прятать, когда сессий нет». Меню при
+        // `mascotShouldHideNow` — настройка «прятать, когда сессий нет». Меню при
         // этом тоже уходит: его не к чему было бы привязать.
-        guard visible, !appState.islandShouldHideNow, let geometry = geometry() else {
+        guard visible, !appState.mascotShouldHideNow, let geometry = geometry() else {
             dropMenu()
             islandPanel?.orderOut(nil)
             return

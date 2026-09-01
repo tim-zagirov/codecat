@@ -77,10 +77,17 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(displayMode.rawValue, forKey: "mascotDisplayMode") }
     }
 
-    /// Прятать остров, когда сессий нет вовсе. По умолчанию выключено: остров
-    /// стоит на одном месте, и на него всегда можно навести мышь.
-    @Published var islandHidesWhenIdle: Bool {
-        didSet { UserDefaults.standard.set(islandHidesWhenIdle, forKey: "islandHidesWhenIdle") }
+    /// Прятать маскота, когда сессий нет вовсе. По умолчанию выключено.
+    ///
+    /// Настройка про МАСКОТА, а не про остров: сначала её читал только
+    /// `IslandController`, и в плавающем режиме тумблер стоял мёртвым — включён, а
+    /// кот всё равно на экране. Обещание подписи важнее режима отображения.
+    ///
+    /// Ключ в UserDefaults остался прежним (`islandHidesWhenIdle`) намеренно: у тех,
+    /// кто уже включил тумблер, он должен пережить обновление. Переименование ключа
+    /// молча вернуло бы им «выключено».
+    @Published var hidesWhenNoSessions: Bool {
+        didSet { UserDefaults.standard.set(hidesWhenNoSessions, forKey: "islandHidesWhenIdle") }
     }
 
     /// Должен ли остров прямо сейчас быть скрыт по настройке «прятать, когда
@@ -92,8 +99,8 @@ final class AppState: ObservableObject {
     /// простаивающая сессия даёт `.sleeping` — и остров исчезал с экрана, хотя
     /// сессии были и были видны в панели. Обещание подписи важнее: прячем, когда
     /// прятать действительно нечего.
-    var islandShouldHideNow: Bool {
-        guard islandHidesWhenIdle else { return false }
+    var mascotShouldHideNow: Bool {
+        guard hidesWhenNoSessions else { return false }
         return !store.hasSessions
     }
 
@@ -132,7 +139,7 @@ final class AppState: ObservableObject {
         soundsEnabled = defaults.bool(forKey: "sounds")
         showMascot = defaults.bool(forKey: "showMascot")
         displayMode = MascotDisplayMode.mode(withID: defaults.string(forKey: "mascotDisplayMode"))
-        islandHidesWhenIdle = defaults.bool(forKey: "islandHidesWhenIdle")
+        hidesWhenNoSessions = defaults.bool(forKey: "islandHidesWhenIdle")
         // Resolve through `MascotSkins.skin(withID:)` rather than trusting the raw
         // stored string: an id from an older build (e.g. the retired `"drawn"`) must
         // migrate to the default skin here, at read time, so `skinID` and `skin.id`
