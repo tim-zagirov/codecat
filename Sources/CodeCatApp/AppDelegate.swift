@@ -109,7 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(toggle("Звуки", appState.soundsEnabled, #selector(toggleSounds)))
         menu.addItem(toggle("Показывать котика", appState.showMascot, #selector(toggleMascot)))
         menu.addItem(.separator())
-        if !appState.hooksInstalled {
+        if appState.hooksInstalled {
+            menu.addItem(NSMenuItem(title: "Убрать хуки Claude Code…",
+                                    action: #selector(removeHooks), keyEquivalent: ""))
+        } else {
             menu.addItem(NSMenuItem(title: "Установить хуки Claude Code…",
                                     action: #selector(installHooks), keyEquivalent: ""))
         }
@@ -117,6 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                    action: #selector(toggleLoginItem), keyEquivalent: "")
         loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
         menu.addItem(loginItem)
+        menu.addItem(.separator())
+        // Версия видна прямо в меню, потому что иначе по установленному бандлу не
+        // понять, что именно стоит: до 0.2.0 CFBundleVersion был «1» во всех сборках,
+        // и две разные сборки на руках было нечем различить.
+        let versionItem = NSMenuItem(title: "CodeCat \(Self.versionString)",
+                                     action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
         menu.addItem(NSMenuItem(title: "Выйти", action: #selector(quit), keyEquivalent: "q"))
         for item in menu.items where item.action != nil { item.target = self }
         return menu
@@ -145,6 +156,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func installHooks() { appState.installHooksIfNeeded() }
+
+    @objc private func removeHooks() { appState.removeHooks() }
+
+    /// «0.2.0 (136)». Build — число коммитов, проставляется в Info.plist при сборке
+    /// бандла (см. Makefile). Запасные «?» на случай запуска не из бандла — при
+    /// `swift run` Info.plist рядом нет, и падать из-за этого приложение не должно.
+    private static var versionString: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(short) (\(build))"
+    }
 
     @objc private func toggleLoginItem() {
         // работает только из собранного .app-бандла; при swift run молча игнорируем ошибку
