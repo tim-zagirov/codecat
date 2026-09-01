@@ -406,6 +406,43 @@ final class SessionStoreTests: XCTestCase {
     }
 }
 
+// MARK: - «Есть ли сессии» — это не «чем занят кот»
+
+extension SessionStoreTests {
+
+    func testAnEmptyStoreHasNoSessions() {
+        XCTAssertFalse(SessionStore().hasSessions)
+    }
+
+    /// Ключевой случай: сессия открыта, но простаивает. Кот при этом спит
+    /// (`aggregate == .sleeping`, бейдж пуст) — а сессия есть, и настройка
+    /// «прятать остров, когда сессий нет» не имеет права её не заметить.
+    func testAnIdleSessionStillCountsAsASession() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        XCTAssertEqual(store.aggregate, .sleeping, "коту показывать нечего")
+        XCTAssertEqual(store.badgeCount, 0)
+        XCTAssertTrue(store.hasSessions, "но сессия есть")
+    }
+
+    /// И законченная — тоже: она ещё висит в панели свой TTL, по ней можно
+    /// кликнуть, значит прятать остров не за что.
+    func testAFinishedSessionStillCountsAsASession() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.apply(hook: hook("Stop"), now: t0.addingTimeInterval(10))
+        XCTAssertTrue(store.hasSessions)
+    }
+
+    /// А когда сессия ушла совсем — сессий нет.
+    func testSessionEndLeavesNoSessions() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        store.apply(hook: hook("SessionEnd"), now: t0.addingTimeInterval(10))
+        XCTAssertFalse(store.hasSessions)
+    }
+}
+
 // MARK: - Конец турна виден в транскрипте, а не только в хуке
 
 extension SessionStoreTests {

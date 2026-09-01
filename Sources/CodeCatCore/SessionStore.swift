@@ -67,6 +67,15 @@ public final class SessionStore: ObservableObject {
         }
     }
 
+    /// Есть ли вообще отслеживаемые сессии — независимо от того, чем они заняты.
+    ///
+    /// Отвечает ровно на вопрос «есть ли сессии», и в этом всё дело: `aggregate`
+    /// отвечает на другой — «что показывает кот». С появлением `.idle` эти два
+    /// вопроса разошлись: открытая, но простаивающая сессия даёт `.sleeping`, хотя
+    /// сессия есть. Настройка «прятать остров, когда сессий нет» читала `aggregate`
+    /// и потому убирала остров с экрана, пока сессии преспокойно жили в панели.
+    public var hasSessions: Bool { !sessions.isEmpty }
+
     /// True when at least one session's *own* status counts as work in progress —
     /// unlike `aggregate`, which is a display-priority value (waiting outranks working
     /// so the UI surfaces the thing that needs the user's attention) and therefore must
