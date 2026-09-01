@@ -11,6 +11,11 @@ import CodeCatCore
 final class AppState: ObservableObject {
     let store: SessionStore
     let awayLog = AwayLog()
+    /// Единственный способ узнать, что происходило внутри: приложение `LSUIElement`,
+    /// у него нет ни окна, ни консоли, и инструменты управления экраном его не видят.
+    /// До появления этого файла разбор приходилось вести внешним двойником на
+    /// `CodeCatCore`.
+    let log = DiagnosticLog(url: CodeCatPaths.logURL, source: "app")
     let powerManager: PowerManager
     let lidController: LidSleepController
     let jumpExecutor: JumpExecuting
@@ -156,21 +161,38 @@ final class AppState: ObservableObject {
 
     func start() {
         CodeCatPaths.ensureAppSupportExists()
+        // Ротация именно здесь, а не только в обслуживании: приложение может
+        // проработать без перезапуска сутками, но и наоборот — запускаться часто и
+        // жить недолго, и тогда 15-секундный тик до предела просто не доживёт.
+        log.rotateIfNeeded()
+        let info = Bundle.main.infoDictionary
+        log.write("запуск — версия \(info?["CFBundleShortVersionString"] as? String ?? "?") "
+            + "(\(info?["CFBundleVersion"] as? String ?? "?")), вид: \(displayMode.rawValue), "
+            + "облик: \(skinID)")
+
         hooksInstalled = HooksInstaller.isInstalled(
             in: try? Data(contentsOf: CodeCatPaths.claudeSettings),
             hookCommand: hookBinaryPath())
+        log.write("хуки установлены: \(hooksInstalled), бинарник: \(hookBinaryPath())")
 
         let server = HookSocketServer(path: CodeCatPaths.socketURL) { [weak self] event in
             guard let self else { return }
+            // Строка на каждое ПРИНЯТОЕ событие. Вместе со строкой, которую пишет сам
+            // хук перед отправкой, это единственный способ отличить «Claude Code не
+            // позвал хук» от «позвал, но до приложения не дошло»: снаружи обе
+            // неисправности выглядят одинаково — котик просто не шевелится.
+            self.log.write("событие \(event.hookEventName) сессия=\(event.sessionId.prefix(8)) "
+                + "cwd=\(event.cwd ?? "—") tty=\(event.tty ?? "—")")
             self.store.apply(hook: event, now: Date())
             self.refresh()
         }
         do {
             try server.start()
+            log.write("сокет слушает: \(CodeCatPaths.socketURL.path)")
         } catch {
-            let message = "Не удалось запустить socket server на \(CodeCatPaths.socketURL.path): \(error)"
-            FileHandle.standardError.write(message.data(using: .utf8) ?? Data())
-            FileHandle.standardError.write("\n".data(using: .utf8) ?? Data())
+            // Раньше это уходило в FileHandle.standardError, то есть в никуда:
+            // бандл запускают из Finder, и стандартного вывода у него нет.
+            log.write("ОШИБКА: не удалось поднять сокет на \(CodeCatPaths.socketURL.path): \(error)")
         }
         socketServer = server
 
@@ -192,6 +214,9 @@ final class AppState: ObservableObject {
                 self.store.applyIdleHeuristic(now: now)
             }
             self.powerManager.tick(now: now)
+            // Ротацию делает только приложение — см. DiagnosticLog: хук, переименовав
+            // файл, увёл бы его из-под уже открытого здесь дескриптора.
+            self.log.rotateIfNeeded()
             // Reconciles against the real `SleepDisabled` flag on this slower cadence only —
             // `refresh()` below still drives the cheap, cache-only `update(shouldPreventSleep:)`
             // path for the frequent hook-driven case.
@@ -222,6 +247,11 @@ final class AppState: ObservableObject {
 
     private func notifyTransition(to agg: AggregateStatus) {
         guard agg != lastAggregate else { return }
+        // Переход состояния — это то, что видно глазами как поза котика. Записанный
+        // рядом с событиями хука, он отвечает на главный вопрос ручной проверки:
+        // «кот показывает не то — событие не пришло или пришло, но состояние
+        // посчиталось иначе?»
+        log.write("состояние: \(lastAggregate) → \(agg), сессий: \(store.ordered.count)")
         switch agg {
         case .waiting:
             awayLog.record("агент ждёт тебя", at: Date())
@@ -305,6 +335,70 @@ final class AppState: ObservableObject {
             alert.informativeText = "Не удалось записать в \(CodeCatPaths.claudeSettings.path): \(error.localizedDescription)"
             alert.runModal()
         }
+    }
+
+    /// Убирает хуки CodeCat из `~/.claude/settings.json`.
+    ///
+    /// Зеркало `installHooksIfNeeded()` и обязательное условие честной деинсталляции:
+    /// без него утилита, стёртая из /Applications, оставляла бы в настройках Claude
+    /// Code пять записей, зовущих несуществующий бинарник — на каждое событие каждой
+    /// сессии. `HooksInstaller.remove` вычищает только записи с нашей командой,
+    /// оставляя чужие хуки и все прочие ключи нетронутыми.
+    ///
+    /// Спрашивает подтверждение: это правка пользовательского файла настроек, а не
+    /// нашего собственного состояния.
+    func removeHooks() {
+        let existing: Data?
+        switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
+        case .notFound:
+            // Файла нет — убирать нечего, и это не ошибка. Но флаг сбрасываем:
+            // раз настроек нет, то и наших хуков в них нет.
+            hooksInstalled = false
+            return
+        case .data(let data):
+            existing = data
+        case .unreadable:
+            // Ровно та же осторожность, что и при установке, и по той же причине:
+            // `remove` трактует nil как пустой документ, и запись такого результата
+            // затёрла бы реальные настройки пользователя целиком.
+            presentHooksAlert(
+                title: "Не удалось убрать хуки",
+                message: "Не удалось прочитать файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте права доступа и попробуйте снова.")
+            return
+        }
+
+        let confirm = NSAlert()
+        confirm.messageText = "Убрать хуки CodeCat?"
+        confirm.informativeText = "Из \(CodeCatPaths.claudeSettings.path) будут удалены записи CodeCat для событий: \(HooksInstaller.events.joined(separator: ", ")). Чужие хуки и остальные настройки останутся как есть.\n\nБез хуков котик продолжит работать, но о состоянии сессий будет узнавать с задержкой — по транскриптам, а не по событиям."
+        confirm.addButton(withTitle: "Убрать")
+        confirm.addButton(withTitle: "Отмена")
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+
+        guard let updated = try? HooksInstaller.remove(
+            from: existing, hookCommand: hookBinaryPath()) else {
+            presentHooksAlert(
+                title: "Не удалось убрать хуки",
+                message: "Не удалось обновить файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте, что файл корректен.")
+            return
+        }
+
+        do {
+            // .atomic по той же причине, что и при установке: оборванная запись не
+            // имеет права оставить пользователя с обрезанным settings.json.
+            try updated.write(to: CodeCatPaths.claudeSettings, options: .atomic)
+            hooksInstalled = false
+        } catch {
+            presentHooksAlert(
+                title: "Не удалось убрать хуки",
+                message: "Не удалось записать в \(CodeCatPaths.claudeSettings.path): \(error.localizedDescription)")
+        }
+    }
+
+    private func presentHooksAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.runModal()
     }
 
     // MARK: - Closed-lid mode
@@ -430,10 +524,13 @@ final class AppState: ObservableObject {
     }
 
     func shutdown() {
+        log.write("выход")
         lidController.resetOnExit()
         socketServer?.stop()
         watcher?.stop()
         timer?.invalidate()
+        // Последним: всё, что выше, ещё может захотеть записаться.
+        log.close()
     }
 
     // MARK: - Jumping to a session

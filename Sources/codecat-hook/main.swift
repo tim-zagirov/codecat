@@ -33,6 +33,31 @@ if !input.isEmpty {
         // приложение потом точно знает, жива ли сессия, вместо того чтобы гадать по
         // общему числу процессов `claude` в системе.
         agentPID: ProcessTree.agent(startingAt: parent, provider: tree))
-    HookSocketClient.send(HookPayload.enriched(input, with: fields), to: CodeCatPaths.socketURL)
+    let payload = HookPayload.enriched(input, with: fields)
+    let sent = HookSocketClient.send(payload, to: CodeCatPaths.socketURL)
+
+    // Хук по замыслу молчит и всегда выходит с нулём — он не имеет права мешать
+    // работе Claude Code. Побочный эффект: неудачная отправка не оставляла следа
+    // нигде, и «Claude Code не позвал хук» было неотличимо от «позвал, но
+    // приложение не получило» — снаружи обе неисправности выглядят одинаково.
+    // Одна строка в общий лог закрывает эту дыру, ничего не ломая: писать
+    // по-прежнему необязательно, ошибки записи глухие.
+    //
+    // writeIfWithinHardLimit, а не write: ротировать файл хук не может (он увёл бы
+    // его из-под дескриптора приложения), поэтому у него единственная защита —
+    // замолчать на разросшемся файле. Это тот случай, когда приложение снесли, а
+    // хуки в настройках остались.
+    let event = (try? JSONSerialization.jsonObject(with: input) as? [String: Any])
+        .flatMap { $0?["hook_event_name"] as? String } ?? "?"
+    // Каталога может не быть вовсе — если приложение ещё ни разу не запускалось.
+    // Это ровно тот случай, который интереснее всего записать (сокета тоже нет,
+    // отправка только что провалилась), поэтому создаём каталог, а не сдаёмся.
+    CodeCatPaths.ensureAppSupportExists()
+    let log = DiagnosticLog(url: CodeCatPaths.logURL, source: "hook")
+    _ = log.writeIfWithinHardLimit(
+        sent ? "отправлено \(event), \(payload.count) Б"
+             : "ОШИБКА: \(event) не ушло в сокет \(CodeCatPaths.socketURL.path) "
+               + "(приложение не запущено?)")
+    log.close()
 }
 exit(0)
