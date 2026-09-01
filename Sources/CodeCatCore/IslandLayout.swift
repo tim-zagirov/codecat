@@ -33,12 +33,13 @@ public enum IslandLayout {
     public static let wingWidth: CGFloat = 72
 
     /// Скругление в местах, где остров упирается в верхнюю кромку экрана —
-    /// вогнутое, «наружу».
+    /// вогнутое, внутрь корпуса.
     ///
     /// Прямой угол на стыке читается как ступенька: чёрная плашка приставлена к
-    /// кромке, а не растёт из неё. Вогнутая галтель убирает ступеньку — чёрное
-    /// перетекает в кромку экрана без излома, и вырез с островом читаются одной
-    /// непрерывной формой. Тот же приём macOS применяет к самому вырезу.
+    /// кромке, а не растёт из неё. Галтель убирает ступеньку — стенка корпуса
+    /// плавно заворачивает в кромку экрана, а угол обоев рядом получает скругление.
+    /// Дуга касается кромки сверху и стенки корпуса сбоку; если перепутать
+    /// касательные, она выгнется наружу и у острова вырастут плечи.
     ///
     /// Плашка ради этого становится шире на `edgeRadius` с каждой стороны: галтель
     /// лежит снаружи корпуса острова, и без запаса ей негде поместиться. Ширина
@@ -113,11 +114,14 @@ public enum IslandLayout {
         let path = CGMutablePath()
         path.move(to: CGPoint(x: left, y: top))
         path.addLine(to: CGPoint(x: right, y: top))
-        // Правая галтель: из кромки экрана вниз, к правому краю корпуса.
+        // Правая галтель: дуга касается кромки экрана сверху и стенки корпуса сбоку.
+        // Касательные именно так, а не наоборот: при обратной паре контрольных точек
+        // дуга выгибается наружу, и вместо перетекания в кромку у острова вырастают
+        // плечи — проверено отрисовкой, выглядит как уши.
         if e > 0 {
             path.addCurve(to: CGPoint(x: bodyRight, y: top + e),
-                          control1: CGPoint(x: right, y: top + e * k),
-                          control2: CGPoint(x: bodyRight + e * k, y: top + e))
+                          control1: CGPoint(x: right - e * k, y: top),
+                          control2: CGPoint(x: bodyRight, y: top + e - e * k))
         }
         path.addLine(to: CGPoint(x: bodyRight, y: bottom - b))
         if b > 0 {
@@ -132,11 +136,11 @@ public enum IslandLayout {
                           control2: CGPoint(x: bodyLeft, y: bottom - b + b * k))
         }
         path.addLine(to: CGPoint(x: bodyLeft, y: top + e))
-        // Левая галтель: от корпуса обратно к кромке экрана.
+        // Левая галтель, зеркально правой.
         if e > 0 {
             path.addCurve(to: CGPoint(x: left, y: top),
-                          control1: CGPoint(x: bodyLeft - e * k, y: top + e),
-                          control2: CGPoint(x: left, y: top + e * k))
+                          control1: CGPoint(x: bodyLeft, y: top + e - e * k),
+                          control2: CGPoint(x: left + e * k, y: top))
         }
         path.closeSubpath()
         return path

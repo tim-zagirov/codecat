@@ -149,17 +149,36 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertEqual(path.boundingBox.maxY, rect.maxY, accuracy: 0.01)
     }
 
-    /// Суть галтели: у самой кромки чёрное доходит до края окна, а чуть ниже — уже
-    /// нет, оно сузилось до корпуса. Прямой угол дал бы «занято» в обеих точках.
-    func testTheFilletIsBlackAtTheEdgeAndCutAwayJustBelowIt() {
+    /// Суть галтели — куда она загибается. Правильная вогнута внутрь: у самой
+    /// стенки корпуса чёрное расширяется наружу, а внешний угол у кромки остаётся
+    /// за обоями. Если перепутать касательные, дуга выгибается наружу и закрашивает
+    /// именно внешний угол — это и есть «уши», которые так делать не надо.
+    func testTheFilletCurvesInwardAndLeavesTheOuterCornerToTheWallpaper() {
         let rect = CGRect(x: 0, y: 0, width: 200, height: 32)
         let e = IslandLayout.edgeRadius
         let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 16)
-        XCTAssertTrue(path.contains(CGPoint(x: 1, y: 0.5)), "у кромки — закрашено")
-        XCTAssertFalse(path.contains(CGPoint(x: 1, y: e)), "ниже галтели — уже нет")
-        XCTAssertTrue(path.contains(CGPoint(x: rect.maxX - 1, y: 0.5)), "и справа так же")
-        XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - 1, y: e)))
+
+        XCTAssertFalse(path.contains(CGPoint(x: 0.5, y: 0.5)),
+                       "внешний угол слева — обои, а не плечо острова")
+        XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - 0.5, y: 0.5)),
+                       "и справа тоже")
+        XCTAssertTrue(path.contains(CGPoint(x: e - 1, y: 1)),
+                      "у стенки корпуса галтель закрашена — чёрное вытекает из кромки")
+        XCTAssertTrue(path.contains(CGPoint(x: rect.maxX - e + 1, y: 1)))
         XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: e)), "корпус на месте")
+    }
+
+    /// Галтель закрашивает площадь **снаружи** корпуса: точка чуть левее корпуса, у
+    /// самой кромки, с галтелью чёрная, а без неё — обои. Так видно, что расширение
+    /// даёт именно галтель, а не что-то ещё.
+    func testTheFilletFillsSpaceOutsideTheBodyThatIsOtherwiseWallpaper() {
+        let body = CGRect(x: 0, y: 0, width: 200, height: 32)
+        let spot = CGPoint(x: body.minX - 1, y: body.minY + 1)
+        let withFillet = IslandLayout.silhouettePath(
+            in: IslandLayout.silhouetteFrame(island: body), bottomRadius: 16)
+        let square = IslandLayout.silhouettePath(in: body, bottomRadius: 16, edgeRadius: 0)
+        XCTAssertTrue(withFillet.contains(spot))
+        XCTAssertFalse(square.contains(spot))
     }
 
     /// Нулевой радиус галтели — прежняя форма с прямыми верхними углами. Нужен и
