@@ -156,3 +156,97 @@ final class TranscriptWatcherTests: XCTestCase {
         try handle.write(contentsOf: Data(text.utf8))
     }
 }
+
+/// Восстановление картины при запуске.
+///
+/// До этого приложение при старте не узнавало о живых сессиях никак: FSEvents
+/// сообщает только о будущем, обход заводится через целый интервал, а FileTailer
+/// при первой встрече с файлом ставит смещение в конец. Замер на живой машине —
+/// от 4 до 89 секунд слепоты на каждом перезапуске.
+final class TranscriptPrimingTests: XCTestCase {
+
+    private var root: URL!
+
+    override func setUpWithError() throws {
+        root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("codecat-prime-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    private func writeTranscript(_ name: String, lines: [String],
+                                 modified: Date = Date()) throws -> URL {
+        let url = root.appendingPathComponent("\(name).jsonl")
+        try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: url.path)
+        return url
+    }
+
+    private func assistantLine(session: String, cwd: String, text: String) -> String {
+        """
+        {"type":"assistant","sessionId":"\(session)","cwd":"\(cwd)","timestamp":"2026-09-01T12:00:00.000Z","message":{"content":[{"type":"text","text":"\(text)"}]}}
+        """
+    }
+
+    func testPrimingFindsASessionThatWasAlreadyRunning() throws {
+        _ = try writeTranscript("live", lines: [
+            assistantLine(session: "aaaa1111", cwd: "/Users/x/Projects/alpha", text: "думаю"),
+        ])
+
+        var seen: [TranscriptActivity] = []
+        let expectation = expectation(description: "активность доехала")
+        expectation.assertForOverFulfill = false
+        let watcher = TranscriptWatcher(root: root) { activity in
+            seen.append(activity); expectation.fulfill()
+        }
+        watcher.primeFromExistingTranscripts()
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertEqual(seen.first?.sessionId, "aaaa1111",
+                       "уже идущая сессия обязана найтись сразу, а не через минуту")
+    }
+
+    /// Старые транскрипты подниматься не должны: иначе после запуска в списке
+    /// оказались бы сессии, закрытые вчера.
+    func testPrimingIgnoresTranscriptsOlderThanTheWindow() throws {
+        _ = try writeTranscript("ancient", lines: [
+            assistantLine(session: "old00001", cwd: "/Users/x/Projects/beta", text: "давно"),
+        ], modified: Date().addingTimeInterval(-3600))
+
+        var seen: [TranscriptActivity] = []
+        let watcher = TranscriptWatcher(root: root, rescanWindow: 600) { seen.append($0) }
+        watcher.primeFromExistingTranscripts()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+
+        XCTAssertTrue(seen.isEmpty, "транскрипт часовой давности поднимать не надо")
+    }
+
+    func testTailLinesReturnsWholeFileWhenSmall() throws {
+        let url = try writeTranscript("small", lines: ["один", "два", "три"])
+        XCTAssertEqual(TranscriptWatcher.tailLines(of: url, bytes: 64 * 1024),
+                       ["один", "два", "три"])
+    }
+
+    /// Кусок, начатый с середины файла, почти наверняка начинается с обрезанной
+    /// строки — её надо отбросить, иначе парсер получит битый JSON.
+    func testTailLinesDropsTheTruncatedFirstLine() throws {
+        let url = try writeTranscript("big", lines: [
+            String(repeating: "A", count: 500),
+            String(repeating: "B", count: 50),
+            String(repeating: "C", count: 50),
+        ])
+        let lines = TranscriptWatcher.tailLines(of: url, bytes: 120)
+        XCTAssertFalse(lines.contains { $0.hasPrefix("A") },
+                       "обрезанная строка не должна попасть в разбор")
+        XCTAssertEqual(lines.last, String(repeating: "C", count: 50))
+    }
+
+    func testTailLinesOnMissingFileIsEmptyNotFatal() {
+        XCTAssertEqual(
+            TranscriptWatcher.tailLines(of: root.appendingPathComponent("нет.jsonl"), bytes: 1024),
+            [])
+    }
+}
