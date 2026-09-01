@@ -77,7 +77,7 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
             .sink { [weak self] _ in self?.handleStateChange() }
             .store(in: &cancellables)
 
-        setVisible(appState.showMascot)
+        setVisible(shouldShowMascot)
     }
 
     deinit {
@@ -89,6 +89,14 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
         // читалось бы так, будто один из двух случаев опаснее другого.
         detailsPanel?.orderOut(nil)
         catPanel?.orderOut(nil)
+    }
+
+    /// Учитывает обе причины спрятать кота: тумблер «Показывать котика» и
+    /// «Прятать котика, когда сессий нет». Вторую плавающий режим раньше не читал
+    /// вовсе — тумблер стоял включённым, а кот оставался на экране, и настройка
+    /// работала только в острове.
+    private var shouldShowMascot: Bool {
+        appState.showMascot && !appState.mascotShouldHideNow
     }
 
     /// Shows or hides the whole overlay (cat + details). Hiding the cat also hides
@@ -104,7 +112,7 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
     }
 
     private func handleStateChange() {
-        setVisible(appState.showMascot)
+        setVisible(shouldShowMascot)
         // Keep the open details panel's session list, away log, and size in sync
         // with live state instead of only refreshing when it is next opened.
         if let panel = detailsPanel, panel.isVisible {
