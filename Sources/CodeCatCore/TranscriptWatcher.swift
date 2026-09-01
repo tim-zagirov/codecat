@@ -64,6 +64,10 @@ public final class TranscriptWatcher {
     }
 
     public func start() {
+        // ПЕРВЫМ делом — восстановить картину уже идущей работы. Обязано стоять до
+        // FileTailer'а: тот при первой встрече с файлом ставит смещение в конец и
+        // истории не отдаёт, поэтому после него хвосты читать уже поздно.
+        primeFromExistingTranscripts()
         // Обход-страховка заводится первым и независимо от FSEvents: если поток
         // событий не создался вовсе, наблюдатель обязан продолжать работать —
         // медленнее, но работать, а не молчать.
@@ -121,6 +125,60 @@ public final class TranscriptWatcher {
                 | kFSEventStreamEventFlagKernelDropped
                 | kFSEventStreamEventFlagRootChanged)
         return flags & lossy != 0
+    }
+
+    /// Восстанавливает картину уже идущей работы из существующих транскриптов.
+    ///
+    /// Зачем. До этого при запуске приложение не узнавало о живых сессиях НИКАК —
+    /// не «медленно», а никак. Складывались три вещи: поток FSEvents создаётся с
+    /// `kFSEventStreamEventIdSinceNow` и о прошлом не сообщает; обход-страховка
+    /// заводится с задержкой в целый `pollInterval`; а `FileTailer` при первой
+    /// встрече с файлом ставит смещение в конец и историю намеренно не переигрывает.
+    /// Поэтому агент, занятый долгим вызовом инструмента, в транскрипт ничего не
+    /// пишет — и остаётся невидимым, пока не напишет. Замер на живой машине,
+    /// восемь перезапусков подряд: 4, 7, 9, 11, 18, 25, 33 и 89 секунд слепоты.
+    ///
+    /// Особенно больно это с включённым «прятать котика, когда сессий нет»: маскот
+    /// не просто показывает спящего кота, его вовсе нет на экране, пока агент
+    /// работает.
+    ///
+    /// Читается хвост, а не файл целиком: транскрипт длинной сессии — это мегабайты,
+    /// а нужно только текущее состояние. Первая строка куска отбрасывается, если
+    /// начали не с начала файла: почти наверняка она обрезана посередине.
+    func primeFromExistingTranscripts(now: Date = Date(), tailBytes: Int = 64 * 1024) {
+        let cutoff = now.addingTimeInterval(-rescanWindow)
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]
+        guard let enumerator = FileManager.default.enumerator(
+            at: root, includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return }
+        for case let url as URL in enumerator {
+            guard url.pathExtension == "jsonl",
+                  let values = try? url.resourceValues(forKeys: Set(keys)),
+                  values.isRegularFile == true,
+                  let modified = values.contentModificationDate,
+                  modified >= cutoff
+            else { continue }
+            for line in Self.tailLines(of: url, bytes: tailBytes) {
+                if let activity = TranscriptParser.parseLine(line) {
+                    DispatchQueue.main.async { self.onActivity(activity) }
+                }
+            }
+        }
+    }
+
+    /// Последние `bytes` байт файла, разобранные на целые строки.
+    static func tailLines(of url: URL, bytes: Int) -> [String] {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
+        try? handle.seek(toOffset: start)
+        guard let data = try? handle.readToEnd(),
+              let text = String(data: data, encoding: .utf8) else { return [] }
+        var lines = text.components(separatedBy: "\n")
+        // Начали с середины файла — первая строка почти наверняка обрезана.
+        if start > 0, !lines.isEmpty { lines.removeFirst() }
+        return lines.filter { !$0.isEmpty }
     }
 
     private func startPolling() {
