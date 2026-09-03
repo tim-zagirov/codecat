@@ -192,3 +192,60 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertFalse(path.isEmpty)
     }
 }
+
+/// Контур как проверка попадания клика (см. `IslandHostingView.hitTest`).
+///
+/// Окно прямоугольное, остров — нет, и без этой проверки прямоугольник окна
+/// перехватывал клики там, где не нарисовано ничего.
+final class IslandSilhouetteHitTests: XCTestCase {
+
+    private let rect = CGRect(x: 0, y: 0, width: 200, height: 120)
+    private var path: CGPath {
+        IslandLayout.silhouettePath(in: rect, bottomRadius: 16)
+    }
+
+    /// Главная зона: верхние углы окна вогнуты галтелью и не закрашены НИКОГДА.
+    /// Именно здесь клики по строке меню доставались острову.
+    func testTopCornersAreOutsideSoMenuBarClicksPassThrough() {
+        let e = IslandLayout.edgeRadius
+        XCTAssertFalse(path.contains(CGPoint(x: 1, y: 1)),
+                       "левый верхний угол окна — галтель, там пусто")
+        XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - 1, y: 1)),
+                       "правый верхний угол окна — галтель, там пусто")
+        XCTAssertFalse(path.contains(CGPoint(x: 2, y: e - 2)),
+                       "вся вогнутая зона слева свободна")
+        XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - 2, y: e - 2)),
+                       "и справа тоже")
+    }
+
+    /// Обратная половина: по самому корпусу клики обязаны проходить, иначе
+    /// проверка сломала бы остров вместо того, чтобы починить.
+    func testBodyIsInsideSoTheIslandStillTakesClicks() {
+        XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: 2)),
+                      "середина верхней кромки — это корпус")
+        XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: rect.midY)))
+        XCTAssertTrue(path.contains(CGPoint(x: IslandLayout.edgeRadius + 2, y: rect.midY)),
+                      "левая стенка корпуса, сразу за галтелью")
+    }
+
+    /// Нижние углы скруглены — там тоже пусто.
+    func testBottomCornersAreOutside() {
+        let e = IslandLayout.edgeRadius
+        XCTAssertFalse(path.contains(CGPoint(x: e + 1, y: rect.maxY - 1)),
+                       "левый нижний угол скруглён")
+        XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - e - 1, y: rect.maxY - 1)),
+                       "правый нижний угол скруглён")
+        XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: rect.maxY - 1)),
+                      "но середина нижней кромки закрашена")
+    }
+
+    /// Пока меню не раскрыто, окно высотой в полосу острова: ниже полосы кликать
+    /// не по чему, и контур обязан это отражать.
+    func testShortWindowHasNoAreaBelowTheStrip() {
+        let strip = CGRect(x: 0, y: 0, width: 200, height: 32)
+        let p = IslandLayout.silhouettePath(in: strip, bottomRadius: 16)
+        XCTAssertTrue(p.contains(CGPoint(x: strip.midX, y: 16)))
+        XCTAssertFalse(p.contains(CGPoint(x: strip.midX, y: 40)),
+                       "за нижней кромкой окна формы нет")
+    }
+}

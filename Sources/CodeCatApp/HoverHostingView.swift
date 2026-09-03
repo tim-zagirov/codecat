@@ -39,6 +39,24 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     /// Высота полосы острова, считая от верхней кромки окна.
     var islandStripHeight: CGFloat = 0
 
+    /// Контур закрашенной площади в координатах SwiftUI (ось Y вниз, начало —
+    /// левый верхний угол окна). Ставится контроллером вместе с рамкой окна.
+    ///
+    /// Нужен, потому что окно прямоугольное, а остров — нет. Форма уже вся в
+    /// `IslandLayout.silhouettePath`, и без этой проверки прямоугольник окна
+    /// перехватывает клики на площади, где не нарисовано ничего. Заметнее всего это
+    /// в двух местах:
+    ///
+    ///  * **Галтели у кромки.** Верхние углы окна не закрашены НИКОГДА — форма там
+    ///    вогнутая. Окно шире корпуса на `edgeRadius` с каждой стороны, и в этой
+    ///    зоне клики по меню приложения слева и по статус-иконкам справа доставались
+    ///    острову. Это было постоянным раздражителем, а не мгновением.
+    ///  * **Раскрытие меню.** Окно встаёт в конечный размер сразу, а маска догоняет
+    ///    пружиной (`revealedHeight`), поэтому доли секунды окно шире рисунка снизу.
+    ///
+    /// `nil` — проверка выключена, окно ведёт себя как обычный прямоугольник.
+    var silhouette: CGPath?
+
     private func isInStrip(_ event: NSEvent) -> Bool {
         let point = convert(event.locationInWindow, from: nil)
         return isFlipped
@@ -47,6 +65,25 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// Точка в координатах SwiftUI-контура: ось Y вниз от верхней кромки окна.
+    /// `NSHostingView` перевёрнут, но полагаться на это молча нельзя — форма
+    /// поехала бы вверх ногами, если это когда-нибудь изменится.
+    private func silhouettePoint(_ pointInSelf: NSPoint) -> CGPoint {
+        CGPoint(x: pointInSelf.x,
+                y: isFlipped ? pointInSelf.y : bounds.height - pointInSelf.y)
+    }
+
+    /// Возвращает `nil` для точек вне закрашенной формы — тогда событие уходит
+    /// туда, где оно и должно быть: в строку меню, в окно под островом, куда угодно.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let silhouette else { return super.hitTest(point) }
+        // `hitTest` получает точку в координатах НАДвида, а не своих собственных.
+        let local = superview.map { convert(point, from: $0) } ?? point
+        guard bounds.contains(local) else { return super.hitTest(point) }
+        guard silhouette.contains(silhouettePoint(local)) else { return nil }
+        return super.hitTest(point)
+    }
 
     override func mouseDown(with event: NSEvent) {
         guard isInStrip(event) else { super.mouseDown(with: event); return }

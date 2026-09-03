@@ -99,7 +99,7 @@ final class IslandController: NSObject, MascotPresenting {
         }()
         hosting.rootView = content(for: geometry)
         hosting.islandStripHeight = geometry.island.height
-        panel.setFrame(windowFrame(for: geometry, hosting: hosting), display: true)
+        applyFrame(panel: panel, hosting: hosting, geometry: geometry)
         panel.orderFrontRegardless()
     }
 
@@ -157,7 +157,7 @@ final class IslandController: NSObject, MascotPresenting {
               let geometry = geometry() else { return }
         menuLevel = .full
         hosting.rootView = content(for: geometry)
-        panel.setFrame(windowFrame(for: geometry, hosting: hosting), display: true)
+        applyFrame(panel: panel, hosting: hosting, geometry: geometry)
         // Полное меню обязано становиться key, иначе тумблеры, переключатель вида
         // и кнопка хуков внутри него не получают кликов.
         panel.makeKeyAndOrderFront(nil)
@@ -177,7 +177,7 @@ final class IslandController: NSObject, MascotPresenting {
         collapsingLevel = nil
         menuLevel = level
         hosting.rootView = content(for: geometry)
-        panel.setFrame(windowFrame(for: geometry, hosting: hosting), display: true)
+        applyFrame(panel: panel, hosting: hosting, geometry: geometry)
         if level == .full {
             panel.makeKeyAndOrderFront(nil)
         } else {
@@ -229,11 +229,31 @@ final class IslandController: NSObject, MascotPresenting {
         guard let panel = islandPanel, let hosting = hosting(of: panel),
               let geometry = geometry() else { return }
         hosting.rootView = content(for: geometry)
-        panel.setFrame(windowFrame(for: geometry, hosting: hosting), display: true)
+        applyFrame(panel: panel, hosting: hosting, geometry: geometry)
     }
 
     private func hosting(of panel: OverlayPanel) -> IslandHostingView? {
         panel.contentView as? IslandHostingView
+    }
+
+    /// Ставит рамку окна и контур для hit-теста ОДНИМ действием.
+    ///
+    /// Вместе, а не порознь, намеренно: отставший контур режет клики по
+    /// нарисованному, то есть хуже отсутствующего. Первая версия этой правки
+    /// обновляла контур только в двух местах из четырёх — ошибку поймал grep, а не
+    /// тесты, потому что вживую она проявилась бы лишь в тех редких переходах.
+    /// Единственная точка входа делает такую ошибку невозможной.
+    ///
+    /// Контур считается ровно теми же аргументами, какими `IslandView` строит свою
+    /// маску: `IslandShape(bottomRadius: IslandLayout.cornerRadius)` на всю ширину
+    /// окна.
+    private func applyFrame(panel: OverlayPanel, hosting: IslandHostingView,
+                            geometry: Geometry) {
+        let frame = windowFrame(for: geometry, hosting: hosting)
+        panel.setFrame(frame, display: true)
+        hosting.silhouette = IslandLayout.silhouettePath(
+            in: CGRect(x: 0, y: 0, width: frame.width, height: frame.height),
+            bottomRadius: IslandLayout.cornerRadius)
     }
 
     /// Рамка окна под текущее содержимое. Высоту спрашиваем у самой вёрстки
