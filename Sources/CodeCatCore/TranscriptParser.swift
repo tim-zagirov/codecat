@@ -32,7 +32,7 @@ public enum TranscriptParser {
         if type == "user" {
             description = L10n.t("activity.working", "working on the task")
         } else if endsTurn {
-            description = L10n.t("activity.done", "done")
+            description = L10n.t("activity.done", "finished the task")
         } else {
             description = describeAssistant(obj)
         }

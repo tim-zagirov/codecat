@@ -53,7 +53,7 @@
 /* MARK: - Чем занят агент */
 
 "activity.working" = "работает над задачей";
-"activity.done" = "закончил";
+"activity.done" = "работа закончена";
 "activity.thinking" = "думает";
 "activity.editing.file" = "редактирует %@";
 "activity.editing" = "редактирует файлы";

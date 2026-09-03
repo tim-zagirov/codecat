@@ -163,6 +163,11 @@ final class IslandController: NSObject, MascotPresenting {
         panel.makeKeyAndOrderFront(nil)
     }
 
+    /// See `MascotPresenting.openMenuForCapture()`.
+    func openMenuForCapture() {
+        showMenu(.full)
+    }
+
     private func showMenu(_ level: IslandMenuLevel) {
         guard let panel = islandPanel, let hosting = hosting(of: panel),
               let geometry = geometry() else { return }

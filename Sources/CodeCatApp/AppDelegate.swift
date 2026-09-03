@@ -12,7 +12,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        appState.start()
+        // `--demo` drives the mascot through every state on a loop, for screenshots
+        // and for the landing-page recording (scripts/capture-screenshots.sh). It
+        // replaces `start()` rather than adding to it — see `startDemo`.
+        if CommandLine.arguments.contains("--demo") {
+            appState.startDemo(pinnedPhase: Self.pinnedDemoPhase())
+            // `--demo-open-menu` is what lets the capture script photograph the
+            // session list and the skin grid: with the app hidden from every
+            // screen-control tool, there is no other way to open them.
+            if CommandLine.arguments.contains("--demo-open-menu") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                    self?.presenter?.openMenuForCapture()
+                }
+            }
+        } else {
+            appState.start()
+        }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         appState.objectWillChange
@@ -58,6 +73,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         appState.shutdown()
+    }
+
+    /// `--demo-phase=idle|working|waiting|done`, for a capture that must not race
+    /// the four-second loop. An unrecognised name means "loop", not "crash": this
+    /// flag exists for a script, and a typo in it should cost a retake, not a
+    /// launch failure.
+    private static func pinnedDemoPhase() -> DemoFeed.Phase? {
+        guard let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--demo-phase=") })
+        else { return nil }
+        switch argument.dropFirst("--demo-phase=".count) {
+        case "idle": return .idle
+        case "working": return .working
+        case "waiting": return .waiting
+        case "done": return .done
+        default: return nil
+        }
     }
 
     private func updateStatusIcon() {

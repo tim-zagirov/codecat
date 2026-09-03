@@ -155,6 +155,14 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
         detailsPanel = nil
     }
 
+    /// See `MascotPresenting.openMenuForCapture()`. Idempotent: called on an
+    /// already-open panel it must not toggle it shut, which is why it does not
+    /// simply forward to `toggleDetails()`.
+    func openMenuForCapture() {
+        guard detailsPanel?.isVisible != true else { return }
+        toggleDetails()
+    }
+
     private func toggleDetails() {
         if let panel = detailsPanel, panel.isVisible {
             hideDetails()
