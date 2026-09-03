@@ -147,7 +147,7 @@ rewritten by root once a minute forever.
 ```bash
 git clone https://github.com/tim-zagirov/codecat.git
 cd codecat
-swift test        # 394 tests
+swift test        # 400 tests
 make app          # dist/CodeCat.app, ad-hoc signed — fine on your own machine
 ```
 
