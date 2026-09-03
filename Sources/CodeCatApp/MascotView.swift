@@ -9,6 +9,14 @@ import CodeCatCore
 /// only as this fallback, so the mascot is never missing even if a sprite sheet goes
 /// missing from the bundle; the user is told about it separately, once, by
 /// `AppState.reportSkinLoadFailure`.
+/// `@MainActor` is explicit rather than inferred. On Swift 6.3 (the toolchain this
+/// is developed on) SwiftUI's `View` members are main-actor isolated by default, so
+/// calling `SpriteSheetStore.shared` — which is `@MainActor` — compiles without it.
+/// On the toolchain shipping with macOS 14, the deployment target and what CI
+/// builds on, that inference does not happen and the same call is an error. The
+/// annotation is a no-op at runtime (these bodies only ever run on the main actor)
+/// and it is what makes the file build on both.
+@MainActor
 struct MascotView: View {
     let skin: MascotSkin
     let status: AggregateStatus
