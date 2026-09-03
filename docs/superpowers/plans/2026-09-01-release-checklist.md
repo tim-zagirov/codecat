@@ -1,12 +1,18 @@
 # CodeCat: что нужно, чтобы собрать всё к проду
 
+> **Этот файл исторический.** Он написан 2026-09-01 и почти весь выполнен в
+> релизе 0.3.0. Действующие документы: [`docs/release.md`](../../release.md)
+> (подпись, нотаризация, упаковка), [`docs/verification-checklist.md`](../../verification-checklist.md)
+> (ручная проверка) и `RELEASE_NOTES.md` (что именно сделано и что осталось
+> человеку). Оставлен как запись того, из какого состояния всё это делалось.
+
 Составлено 2026-09-01 по факту проверки состояния, а не по памяти. Каждый пункт
 проверяем командой, которая приведена рядом.
 
 ## Шаг 0. Что сейчас на руках
 
 - `master` = `94bd579`, всё сегодняшнее слито. **33 коммита не запушено.**
-- Пульт: `https://github.com/tim-zagirov/vibe-coding-utility.git`.
+- Пульт: `https://github.com/tim-zagirov/codecat.git`.
 - Установлено: `/Applications/CodeCat.app`, 2.5 МБ, `com.codecat.app`,
   версия `0.1.0` (build 1), минимум macOS 14.0, `LSUIElement`.
 - Подпись — **ad-hoc**, `TeamIdentifier=not set`.
@@ -17,7 +23,7 @@
 Проверить одной командой:
 
 ```bash
-cd ~/Projects/vibe-coding-utility && git log --oneline origin/master..master | wc -l && codesign -dv /Applications/CodeCat.app 2>&1 | grep -E "Signature|TeamIdentifier"
+cd ~/Projects/codecat && git log --oneline origin/master..master | wc -l && codesign -dv /Applications/CodeCat.app 2>&1 | grep -E "Signature|TeamIdentifier"
 ```
 
 ## Шаг 1. Привести репозиторий в порядок
