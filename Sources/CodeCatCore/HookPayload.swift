@@ -9,7 +9,7 @@ public enum HookPayload {
         public let hostBundlePath: String?
         public let hostBundleID: String?
         public let tty: String?
-        /// PID процесса `claude` этой сессии — см. `Session.agentPID`.
+        /// PID of this session's `claude` process — see `Session.agentPID`.
         public let agentPID: pid_t?
 
         public init(hostPID: pid_t?, hostBundlePath: String?, hostBundleID: String?,

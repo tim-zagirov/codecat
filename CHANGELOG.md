@@ -2,7 +2,7 @@
 
 All notable changes to CodeCat. Dates are the day the work was finished, not the
 day it was tagged. Derived from the commit history; the design decisions behind
-each release are in `docs/superpowers/specs/`.
+each release live in the source comments.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 CodeCat uses [semantic versioning](https://semver.org/) — pre-1.0, so the minor
@@ -14,9 +14,10 @@ The release that makes CodeCat publishable: an English interface, a licence, and
 a build a stranger can trust.
 
 ### Added
-- **English UI**, with Russian as a second localisation. Every user-visible
-  string moved into `Resources/{en,ru}.lproj/Localizable.strings`, and a test
-  keeps the two catalogs and the call sites in step.
+- **An English interface throughout.** Every user-visible string moved out of the
+  view bodies into `Resources/en.lproj/Localizable.strings`, and a test keeps the
+  catalog and the call sites in step. Source comments, the Makefile, the scripts
+  and the documentation are English too.
 - **MIT licence**, plus `THIRD_PARTY_NOTICES.md` naming every sprite pack with
   its author, source and terms.
 - **An app icon**, generated from the hand-drawn cat by
@@ -27,13 +28,12 @@ a build a stranger can trust.
   signing in CI, on purpose: a Developer ID key does not belong in a repository
   secret.
 - `CONTRIBUTING.md`, issue templates, `docs/release.md`, `CHANGELOG.md`, and
-  `docs/how-this-was-built.md`.
+  `docs/release.md`.
 
 ### Changed
 - The manual verification checklist moved out of the README into
-  `docs/verification-checklist.md` and gained an item for the localisation.
-- `README.md` was rewritten for someone who has never seen the project;
-  `README.ru.md` mirrors it.
+  `docs/verification-checklist.md`.
+- `README.md` was rewritten for someone who has never seen the project.
 - Session status words now come from one place (`SessionStatus.title`) instead
   of two hand-written copies.
 - `make release` asks Gatekeeper about the app with `-t exec` and about the disk

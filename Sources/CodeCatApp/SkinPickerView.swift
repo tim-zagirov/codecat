@@ -17,8 +17,8 @@ struct SkinPickerView: View {
     private let previewFPS: Double = 4
 
     @Environment(\.menuStyle) private var style
-    /// Облик под курсором. Ячейка без ответа на наведение читается как картинка,
-    /// а не как то, на что можно нажать.
+    /// The skin under the cursor. A cell that does not answer hover reads as a
+    /// picture rather than as something you can press.
     @State private var hoveredSkin: String?
 
     private var cell: CGSize { style.cellSize }
@@ -60,8 +60,8 @@ struct SkinPickerView: View {
         // separate view, not gated on the count. At 34pt the badge would cover the
         // cat either way.
         let isHovered = hoveredSkin == skin.id
-        // Масштаб берётся по меньшей стороне ячейки: у острова она шире, чем
-        // высока, и делить на ширину значило бы обрезать кота сверху и снизу.
+        // Scaled by the cell's smaller side: on the island the cell is wider than it is
+        // tall, and dividing by the width would crop the cat top and bottom.
         return previewContent(skin)
             .scaleEffect(min(cell.width, cell.height) / MascotLayout.canvasSize)
             .frame(width: cell.width, height: cell.height)

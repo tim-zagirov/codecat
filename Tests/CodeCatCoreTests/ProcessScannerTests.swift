@@ -5,22 +5,21 @@ final class ProcessScannerTests: XCTestCase {
     func testCountMatchesNamesExactly() {
         let names = ["claude", "claude", "codecat-hook", "claude-code", "Claude"]
         XCTAssertEqual(ProcessScanner.count(of: "claude", in: names), 2,
-                       "ни префиксы, ни другой регистр не считаются")
+                       "neither prefixes nor a different case are counted")
         XCTAssertEqual(ProcessScanner.count(of: "claude", in: []), 0)
     }
 
-    /// Перечисление процессов должно действительно перечислять процессы: пустой
-    /// массив из-за неверно посчитанного размера буфера выглядел бы как «во всей
-    /// системе не запущено ни одного `claude`» — а это тот самый сигнал, по которому
-    /// живые сессии помечаются оборвавшимися.
+    /// Enumerating processes has to actually enumerate them: an empty array caused by a
+    /// mis-sized buffer would look like "not a single `claude` is running anywhere on
+    /// the system" — and that is precisely the signal live sessions get marked as dead by.
     func testLiveProcessListIsPopulatedAndIncludesLaunchd() {
         let names = ProcessScanner.runningProcessNames()
-        XCTAssertGreaterThan(names.count, 10, "на macOS всегда работают десятки процессов")
-        XCTAssertTrue(names.contains("launchd"), "pid 1 есть всегда")
+        XCTAssertGreaterThan(names.count, 10, "macOS always has dozens of processes running")
+        XCTAssertTrue(names.contains("launchd"), "pid 1 is always there")
     }
 
     func testLiveScanDoesNotCrash() {
-        _ = ProcessScanner.claudeProcessCount() // просто не падает
+        _ = ProcessScanner.claudeProcessCount() // simply does not crash
     }
 
     func testIsProcessChecksTheExecutableNameNotJustExistence() {
@@ -30,8 +29,8 @@ final class ProcessScannerTests: XCTestCase {
         ])
         XCTAssertTrue(ProcessScanner.isProcess(7, provider: tree))
         XCTAssertFalse(ProcessScanner.isProcess(8, provider: tree),
-                       "номер pid переиспользуется — по нему может отвечать чужой процесс")
-        XCTAssertFalse(ProcessScanner.isProcess(9, provider: tree), "процесса нет")
+                       "pid numbers are reused — someone else's process may answer to it")
+        XCTAssertFalse(ProcessScanner.isProcess(9, provider: tree), "no such process")
         XCTAssertFalse(ProcessScanner.isProcess(0, provider: tree))
     }
 

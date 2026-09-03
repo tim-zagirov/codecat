@@ -1,15 +1,16 @@
 APP = dist/CodeCat.app
 
-# Маркетинговая версия правится руками в Resources/Info.plist — это решение
-# человека, а не следствие истории коммитов.
+# The marketing version is edited by hand in Resources/Info.plist — a human's
+# decision, not a consequence of the commit log.
 VERSION := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)
-# А CFBundleVersion выводится из числа коммитов: раньше он был «1» во всех сборках
-# без исключения, поэтому две разные сборки на руках было нечем различить — ни в
-# Finder, ни в отчёте о падении.
+# CFBundleVersion, on the other hand, is derived from the commit count: it used to
+# be "1" in every build without exception, so two different builds were
+# indistinguishable — in Finder and in a crash report alike.
 BUILD := $(shell git rev-list --count HEAD)
 
-# Ищется по подстроке, а не прописывается хешем: сертификат раз в год перевыпускают,
-# и захардкоженный отпечаток тихо превратил бы `make release` в ошибку через год.
+# Matched by substring rather than pinned by hash: certificates are reissued yearly,
+# and a hard-coded fingerprint would quietly turn `make release` into an error a
+# year from now.
 SIGN_ID ?= $(shell security find-identity -v -p codesigning \
 	| grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)"/\1/')
 NOTARY_PROFILE ?= codecat
@@ -22,15 +23,17 @@ DMG = dist/CodeCat-$(VERSION).dmg
 test:
 	swift test
 
-# Ассеты, которые нельзя держать в репозитории. Сейчас такой один — лист Elthen:
-# автор разрешает использовать спрайты, но не раздавать сами файлы, а публичный
-# репозиторий делает именно это. Скрипт не валит сборку: без листа просто нет
-# одного облика из восьми, и падать из-за недоступного itch.io незачем.
+# Assets that may not be kept in the repository. There is one today — Elthen's
+# sheet: the author allows using the sprites but not passing the files on, and a
+# public repository does exactly that. The script does not fail the build: without
+# the sheet one skin of eight is simply missing, and failing because itch.io is
+# unreachable earns nothing.
 assets:
 	@bash scripts/fetch-optional-assets.sh
 
-# Сборка бандла без подписи. Отдельной целью — потому что подписей две разные:
-# ad-hoc для локальной работы (`app`) и Developer ID для раздачи (`release`).
+# Assembling the bundle without signing. A separate target because there are two
+# different signatures: ad-hoc for local work (`app`) and Developer ID for
+# distribution (`release`).
 bundle: assets
 	swift build -c release
 	rm -rf $(APP)
@@ -38,63 +41,66 @@ bundle: assets
 	cp .build/release/CodeCatApp $(APP)/Contents/MacOS/CodeCat
 	cp .build/release/codecat-hook $(APP)/Contents/MacOS/codecat-hook
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
-	# Иконка. Лежит в Contents/Resources под тем именем, которое названо в
-	# CFBundleIconFile; перерисовывается `swift scripts/make-icon.swift`, а не
-	# сборкой — генератор рисует кота из `CatView` заново, и гонять его на каждую
-	# сборку значит перекладывать 350 КБ ради файла, который не меняется.
+	# The icon. It sits in Contents/Resources under the name CFBundleIconFile gives;
+	# it is redrawn by `swift scripts/make-icon.swift` rather than by the build — the
+	# generator redraws the cat from `CatView`, and running that on every build moves
+	# 350 KB around for a file that does not change.
 	cp Resources/CodeCat.icns $(APP)/Contents/Resources/
 	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD)" $(APP)/Contents/Info.plist
 	cp scripts/install-lid-mode.sh scripts/uninstall-lid-mode.sh $(APP)/Contents/Resources/
-	# Локализация. `.strings`, а не `.xcstrings`: каталог строк компилирует сборочная
-	# система Xcode, а здесь её нет — бандл собирается этим Makefile из пакета SwiftPM.
-	# Ищутся они через `Bundle.main` (см. `L10n`), поэтому лежать обязаны именно в
-	# Contents/Resources — и подпись их покрывает вместе с остальным содержимым.
-	cp -R Resources/en.lproj Resources/ru.lproj $(APP)/Contents/Resources/
-	# Ассеты обликов идут в Contents/Resources/Skins, поэтому подпись их покрывает.
-	# Приложение находит их через Bundle.main (см. SpriteSheetStore), не трогая
+	# Localisation. `.strings`, not `.xcstrings`: a string catalog is compiled by
+	# Xcode's build system, and there is none here — this Makefile assembles the
+	# bundle from a SwiftPM package. They are found through `Bundle.main` (see
+	# `L10n`), so they have to live in Contents/Resources, where the signature covers
+	# them along with everything else.
+	cp -R Resources/en.lproj $(APP)/Contents/Resources/
+	# The skin assets go to Contents/Resources/Skins so the signature covers them.
+	# The app finds them through Bundle.main (see SpriteSheetStore), never touching
 	# Bundle.module.
 	cp -R .build/release/CodeCat_CodeCatApp.bundle/Skins $(APP)/Contents/Resources/
 
 app: bundle
 	codesign --force -s - $(APP)
 	@$(MAKE) --no-print-directory verify-skins
-	@echo "Готово: $(APP) — версия $(VERSION) ($(BUILD)), подпись ad-hoc"
+	@echo "Done: $(APP) — version $(VERSION) ($(BUILD)), ad-hoc signature"
 
-# Подпись для раздачи. Отличий от ad-hoc три, и каждое обязательно:
-#  * --options runtime — hardened runtime, без него нотаризация отказывает;
-#  * --entitlements — вернуть право слать Apple events, которое hardened runtime
-#    отбирает (см. комментарий в Resources/CodeCat.entitlements);
-#  * --timestamp — доверенная метка времени, тоже требование нотаризации.
+# The signature for distribution. Three things differ from ad-hoc, and every one is
+# mandatory:
+#  * --options runtime — hardened runtime; without it notarisation refuses;
+#  * --entitlements — restores the right to send Apple events, which hardened
+#    runtime takes away (see the comment in Resources/CodeCat.entitlements);
+#  * --timestamp — a trusted timestamp, also a notarisation requirement.
 #
-# codecat-hook подписывается ОТДЕЛЬНО и ПЕРВЫМ. Он лежит в Contents/MacOS вторым
-# исполняемым файлом, и подпись бандла его собственной подписью не наделяет —
-# нотариус такой бандл отклоняет. Порядок «изнутри наружу» обязателен: подпись
-# бандла запечатывает содержимое, поэтому любая правка вложенного файла после
-# неё эту подпись ломает.
+# codecat-hook is signed SEPARATELY and FIRST. It is a second executable in
+# Contents/MacOS, and signing the bundle does not give it a signature of its own —
+# the notary service rejects a bundle like that. The inside-out order is mandatory:
+# the bundle's signature seals its contents, so editing any nested file afterwards
+# breaks it.
 sign: bundle
-	@test -n "$(SIGN_ID)" || (echo "ОШИБКА: не найден сертификат Developer ID Application."; \
-		echo "Проверь: security find-identity -v -p codesigning"; exit 1)
-	@echo "Подписываю как: $(SIGN_ID)"
+	@test -n "$(SIGN_ID)" || (echo "ERROR: no Developer ID Application certificate found."; \
+		echo "Check with: security find-identity -v -p codesigning"; exit 1)
+	@echo "Signing as: $(SIGN_ID)"
 	codesign --force --options runtime --timestamp \
 		--sign "$(SIGN_ID)" $(APP)/Contents/MacOS/codecat-hook
 	codesign --force --options runtime --timestamp \
 		--entitlements Resources/CodeCat.entitlements \
 		--sign "$(SIGN_ID)" $(APP)
 	codesign --verify --deep --strict --verbose=2 $(APP)
-	# Проверяет не «подписано ли», а «примет ли это Gatekeeper как приложение для
-	# раздачи». codesign --verify отвечает «да» и на ad-hoc подпись, поэтому сам по
-	# себе он от главной ошибки этого файла не защищает.
+	# This checks not "is it signed" but "would Gatekeeper accept this as an app for
+	# distribution". codesign --verify says yes to an ad-hoc signature too, so on its
+	# own it does not guard against this file's main mistake.
 	@codesign -dv $(APP) 2>&1 | grep -q "TeamIdentifier=T" \
-		|| (echo "ОШИБКА: TeamIdentifier не проставлен — подпись не Developer ID"; exit 1)
+		|| (echo "ERROR: TeamIdentifier is not set — this is not a Developer ID signature"; exit 1)
 	@codesign -d --entitlements - --xml $(APP) 2>/dev/null | grep -q "apple-events" \
-		|| (echo "ОШИБКА: entitlement на Apple events не попал в подпись —"; \
-		    echo "переход к сессии сломается в релизной сборке"; exit 1)
+		|| (echo "ERROR: the Apple-events entitlement did not reach the signature —"; \
+		    echo "jump-to-session will break in the release build"; exit 1)
 	@$(MAKE) --no-print-directory verify-skins
-	@echo "Подписано: $(APP) — версия $(VERSION) ($(BUILD))"
+	@echo "Signed: $(APP) — version $(VERSION) ($(BUILD))"
 
-# Нотаризация. Заверяется .zip, а прикрепляется тикет к .app: notarytool принимает
-# только контейнер, а stapler умеет писать тикет внутрь бандла. Без stapler
-# приложение на чужой машине проверялось бы онлайн и не открылось бы без сети.
+# Notarisation. A .zip is submitted and the ticket is stapled to the .app:
+# notarytool accepts only a container, while stapler can write the ticket inside the
+# bundle. Without stapling, the app would be checked online on someone else's
+# machine and would not open without a network.
 notarize: sign
 	rm -f $(ZIP)
 	ditto -c -k --keepParent $(APP) $(ZIP)
@@ -102,64 +108,67 @@ notarize: sign
 	xcrun stapler staple $(APP)
 	xcrun stapler validate $(APP)
 
-# Финальная проверка — единственная, которая отвечает на вопрос «откроется ли это
-# у человека, который скачал файл из интернета». Все предыдущие проверяют подпись,
-# а эта — вердикт самого Gatekeeper.
+# The final check — the only one that answers "will this open for a person who
+# downloaded the file from the internet". Everything before it checks the signature;
+# this one asks Gatekeeper itself.
 release: notarize
 	rm -f $(DMG) $(ZIP)
-	# Образ собирается из подготовленной папки, а не прямо из бандла, ради двух
-	# вещей: ссылки на /Applications (иначе установка — это «перетащи куда-нибудь
-	# сам») и иконки тома. Флаг «у тома своя иконка» ставит SetFile из инструментов
-	# Xcode; если его нет, образ всё равно собирается — просто с обычной иконкой.
+	# The image is built from a staged folder rather than straight from the bundle,
+	# for two things: the /Applications symlink (without which installing means "drag
+	# it somewhere yourself") and the volume icon. The "this volume has its own icon"
+	# flag is set by SetFile from Xcode's tools; without it the image still builds,
+	# just with the default icon.
 	rm -rf dist/dmg && mkdir -p dist/dmg
 	cp -R $(APP) dist/dmg/
 	ln -s /Applications dist/dmg/Applications
 	cp Resources/CodeCat.icns dist/dmg/.VolumeIcon.icns
 	@command -v SetFile >/dev/null && SetFile -a C dist/dmg \
-		|| echo "ПРЕДУПРЕЖДЕНИЕ: SetFile не найден — у образа будет обычная иконка тома"
+		|| echo "WARNING: SetFile not found — the image will have the default volume icon"
 	hdiutil create -volname "CodeCat $(VERSION)" -srcfolder dist/dmg \
 		-ov -format UDZO $(DMG)
 	rm -rf dist/dmg
 	codesign --force --timestamp --sign "$(SIGN_ID)" $(DMG)
 	xcrun notarytool submit $(DMG) --keychain-profile "$(NOTARY_PROFILE)" --wait
 	xcrun stapler staple $(DMG)
-	# `-t exec`, а не `-t install`: оценивается приложение, а не установщик, и
-	# вопрос ровно один — «откроется ли это у человека, который скачал файл».
-	# `-t install` на .app тоже что-то отвечает, поэтому подмена молчала бы.
+	# `-t exec`, not `-t install`: what is being assessed is an application, not an
+	# installer, and there is exactly one question — "will this open for a person who
+	# downloaded the file". `-t install` answers something for a .app too, so the
+	# substitution would have passed in silence.
 	@spctl -a -vvv -t exec $(APP) 2>&1 | grep -q "source=Notarized Developer ID" \
-		|| (echo "ОШИБКА: Gatekeeper не признал приложение нотаризованным"; \
+		|| (echo "ERROR: Gatekeeper did not recognise the app as notarised"; \
 		    spctl -a -vvv -t exec $(APP); exit 1)
 	@spctl -a -vvv -t open --context context:primary-signature $(DMG) 2>&1 \
 		| grep -q "source=Notarized Developer ID" \
-		|| (echo "ОШИБКА: Gatekeeper не признал сам образ нотаризованным"; \
+		|| (echo "ERROR: Gatekeeper did not recognise the image itself as notarised"; \
 		    spctl -a -vvv -t open --context context:primary-signature $(DMG); exit 1)
-	@echo "Готово к раздаче: $(DMG) — версия $(VERSION) ($(BUILD))"
+	@echo "Ready to distribute: $(DMG) — version $(VERSION) ($(BUILD))"
 
-# Проверяет не три файла, а КАЖДЫЙ лист, объявленный в реестре MascotSkins —
-# SkinAssetsTests перечисляет их из кода, а не из ручного списка, поэтому
-# новый облик, добавленный без своих файлов, тоже завалит эту проверку.
+# This checks not three files but EVERY sheet declared in the MascotSkins registry —
+# SkinAssetsTests enumerates them from the code rather than from a hand-written
+# list, so a new skin added without its files fails this check too.
 #
-# Код возврата `swift test --filter` тут недостаточен: он равен 0 и когда
-# фильтр не находит ни одного теста (переименуй SkinAssetsTests — и эта
-# строка молча перестанет что-либо проверять), и когда CODECAT_SKINS_DIR не
-# дошёл до теста (опечатка в имени переменной) — тогда skinsDirectory тихо
-# откатывается на путь к исходникам и проверяет их, а не собранный бандл.
-# Поэтому разбирается вывод: нужно и положительное число тестов с нулём
-# провалов, и напечатанный тестом путь, указывающий внутрь бандла.
+# The exit code of `swift test --filter` is not enough here: it is 0 both when the
+# filter matches no tests at all (rename SkinAssetsTests and this line silently
+# stops checking anything) and when CODECAT_SKINS_DIR never reached the test (a typo
+# in the variable name) — in which case skinsDirectory quietly falls back to the
+# source tree and checks that instead of the assembled bundle. So the output is
+# parsed: both a positive number of tests with zero failures, and a path printed by
+# the test that points inside the bundle.
 verify-skins:
 	@test -d "$(APP)/Contents/Resources/Skins" \
-		|| (echo "ОШИБКА: ассеты обликов не попали в бандл"; exit 1)
-	# Локализация проверяется здесь же, а не отдельной целью: пропущенный `.lproj`
-	# не роняет приложение — оно молча показывает английский, — и потому это ровно
-	# та ошибка сборки, которую никто не заметит без проверки.
-	@test -f "$(APP)/Contents/Resources/ru.lproj/Localizable.strings" \
-		|| (echo "ОШИБКА: локализация не попала в бандл"; exit 1)
+		|| (echo "ERROR: the skin assets did not reach the bundle"; exit 1)
+	# Localisation is checked here rather than in a target of its own: a missing
+	# `.lproj` does not crash the app — it silently shows the English written at the
+	# call sites — and so it is exactly the kind of build error nobody notices
+	# without a check.
+	@test -f "$(APP)/Contents/Resources/en.lproj/Localizable.strings" \
+		|| (echo "ERROR: the localisation did not reach the bundle"; exit 1)
 	@test -f "$(APP)/Contents/Resources/CodeCat.icns" \
-		|| (echo "ОШИБКА: иконка не попала в бандл"; exit 1)
+		|| (echo "ERROR: the icon did not reach the bundle"; exit 1)
 	@out=$$(CODECAT_SKINS_DIR="$(CURDIR)/$(APP)/Contents/Resources/Skins" swift test --filter SkinAssetsTests 2>&1); \
 		echo "$$out" | grep -qE "Executed [1-9][0-9]* tests?, with 0 failures" \
 		&& echo "$$out" | grep -q "SKINS DIR: .*Contents/Resources/Skins" \
-		|| (echo "$$out"; echo "ОШИБКА: проверка листов обликов в собранном .app не прошла"; exit 1)
+		|| (echo "$$out"; echo "ERROR: the skin-sheet check against the assembled .app failed"; exit 1)
 
 clean:
 	rm -rf .build dist

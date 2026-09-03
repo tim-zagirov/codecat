@@ -12,7 +12,7 @@ final class HooksInstallerTests: XCTestCase {
         let out = try HooksInstaller.install(into: nil, hookCommand: cmd)
         let hooks = obj(out)["hooks"] as! [String: Any]
         for event in HooksInstaller.events {
-            XCTAssertNotNil(hooks[event], "нет события \(event)")
+            XCTAssertNotNil(hooks[event], "missing event \(event)")
         }
         XCTAssertTrue(HooksInstaller.isInstalled(in: out, hookCommand: cmd))
     }
@@ -48,9 +48,9 @@ final class HooksInstallerTests: XCTestCase {
         XCTAssertFalse(HooksInstaller.isInstalled(in: out, hookCommand: cmd))
         let root = obj(out)
         let hooks = root["hooks"] as! [String: Any]
-        // чужой Stop-хук остался
+        // someone else's Stop hook survived
         XCTAssertNotNil(hooks["Stop"])
-        // события, где были только мы, вычищены полностью
+        // events that held only ours are cleared out entirely
         XCTAssertNil(hooks["SessionStart"])
     }
 
@@ -112,17 +112,17 @@ final class HooksInstallerTests: XCTestCase {
             from: "broken{".data(using: .utf8)!, hookCommand: cmd))
     }
 
-    /// Список событий закреплён целиком: каждое из них отвечает за конкретный
-    /// переход состояния, и молча выпавшее событие — это застрявший котик.
-    /// `UserPromptSubmit` — момент начала работы (см. доккоммент к `events`).
+    /// The event list is pinned in full: each one is responsible for a specific state
+    /// transition, and an event that silently dropped out means a stuck cat.
+    /// `UserPromptSubmit` is the moment work begins (see the doc comment on `events`).
     func testEventsListIsExactlyTheSubscribedFive() {
         XCTAssertEqual(HooksInstaller.events,
                        ["SessionStart", "UserPromptSubmit", "Stop", "Notification", "SessionEnd"])
     }
 
-    /// Установка, сделанная прежней версией (без `UserPromptSubmit`), обязана
-    /// читаться как неполная: иначе приложение решило бы, что всё на месте, и
-    /// никогда не предложило бы дописать недостающее событие.
+    /// An installation made by an older version (without `UserPromptSubmit`) must read
+    /// as incomplete: otherwise the app would decide everything was in place and never
+    /// offer to add the missing event.
     func testAnOlderPartialInstallDoesNotCountAsInstalled() throws {
         let older = try JSONSerialization.data(withJSONObject: ["hooks": [
             "SessionStart": [["hooks": [["type": "command", "command": cmd]]]],
@@ -131,7 +131,7 @@ final class HooksInstallerTests: XCTestCase {
             "SessionEnd": [["hooks": [["type": "command", "command": cmd]]]],
         ]])
         XCTAssertFalse(HooksInstaller.isInstalled(in: older, hookCommand: cmd))
-        // А после установки — на месте, и старые записи не продублированы.
+        // And after installing — present, with no old entries duplicated.
         let updated = try HooksInstaller.install(into: older, hookCommand: cmd)
         XCTAssertTrue(HooksInstaller.isInstalled(in: updated, hookCommand: cmd))
         let root = (try JSONSerialization.jsonObject(with: updated)) as? [String: Any]

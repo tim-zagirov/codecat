@@ -82,19 +82,19 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        // Симметрично `IslandController.deinit`: сегодня контроллер уничтожается
-        // только после того, как вызывающий сам сделал `setVisible(false)`, так
-        // что панели тут уже не на экране и это защита на будущее, а не действующий
-        // путь. Но она должна стоять на обоих контроллерах уничтожения — иначе
-        // читалось бы так, будто один из двух случаев опаснее другого.
+        // Symmetric with `IslandController.deinit`: today the controller is destroyed
+        // only after the caller has called `setVisible(false)` itself, so the panels
+        // are already off screen and this is insurance for the future rather than a
+        // live path. But it belongs on both deinits — otherwise it would read as though
+        // one of the two cases were more dangerous than the other.
         detailsPanel?.orderOut(nil)
         catPanel?.orderOut(nil)
     }
 
-    /// Учитывает обе причины спрятать кота: тумблер «Показывать котика» и
-    /// «Прятать котика, когда сессий нет». Вторую плавающий режим раньше не читал
-    /// вовсе — тумблер стоял включённым, а кот оставался на экране, и настройка
-    /// работала только в острове.
+    /// Accounts for both reasons to hide the cat: the "Show the cat" toggle and "Hide
+    /// the cat when nothing is running". Floating mode used to read neither the second
+    /// one at all — the toggle sat switched on while the cat stayed on screen, and the
+    /// setting worked only on the island.
     private var shouldShowMascot: Bool {
         appState.showMascot && !appState.mascotShouldHideNow
     }

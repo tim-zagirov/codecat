@@ -18,7 +18,7 @@ final class LidSleepControllerTests: XCTestCase {
         let (sut, calls) = makeSUT()
         sut.isEnabled = true
         sut.update(shouldPreventSleep: true)
-        sut.update(shouldPreventSleep: true) // повторно — без лишних вызовов
+        sut.update(shouldPreventSleep: true) // again — no extra calls
         sut.update(shouldPreventSleep: false)
         XCTAssertEqual(calls(), [
             ["/usr/bin/sudo", "-n", "/usr/bin/pmset", "-a", "disablesleep", "1"],
@@ -178,12 +178,12 @@ final class LidSleepControllerTests: XCTestCase {
     }
 }
 
-/// Мост от мгновенного сна при снятии `disablesleep`.
+/// The bridge against instant sleep when `disablesleep` is cleared.
 ///
-/// Замерено на живой машине: `pmset -a disablesleep 0` заставляет ядро перечитать
-/// настройки, оно видит накопленный за время флага простой и засыпает через 37 мс
-/// — `sleep reason Software Sleep`. Контрольный опыт с выключенным режимом крышки
-/// сна не даёт вовсе, то есть виноват именно этот вызов.
+/// Measured on a live machine: `pmset -a disablesleep 0` makes the kernel re-read
+/// its settings, it sees the idle time accumulated while the flag was up, and sleeps
+/// 37 ms later — `sleep reason Software Sleep`. A control run with lid mode off does
+/// not sleep at all, so this call is the culprit.
 final class LidSleepBridgeTests: XCTestCase {
 
     private func makeSUT(flagReader: @escaping () -> Bool? = { nil })
@@ -201,12 +201,12 @@ final class LidSleepBridgeTests: XCTestCase {
         let (sut, commands, bridges) = makeSUT()
         sut.isEnabled = true
         sut.update(shouldPreventSleep: true)
-        XCTAssertEqual(bridges(), [], "поднятие флага мостом не сопровождается")
+        XCTAssertEqual(bridges(), [], "raising the flag is not accompanied by a bridge")
 
         sut.update(shouldPreventSleep: false)
 
         XCTAssertEqual(bridges(), [LidSleepController.bridgeSeconds],
-                       "снятие флага обязано ставить мост")
+                       "clearing the flag must put a bridge in place")
         XCTAssertTrue(commands().last!.contains("disablesleep 0"))
     }
 
@@ -216,7 +216,7 @@ final class LidSleepBridgeTests: XCTestCase {
         sut.update(shouldPreventSleep: true)
         sut.resetOnExit()
         XCTAssertEqual(bridges(), [LidSleepController.bridgeSeconds],
-                       "выход из приложения — главный путь, ради которого мост и нужен")
+                       "quitting the app is the main path the bridge exists for")
     }
 
     func testTurningTheFeatureOffBridges() {
@@ -227,20 +227,20 @@ final class LidSleepBridgeTests: XCTestCase {
         XCTAssertEqual(bridges(), [LidSleepController.bridgeSeconds])
     }
 
-    /// Мост не должен ставиться там, где флага и не было: лишнее удержание держало
-    /// бы мак включённым минуту без всякой причины.
+    /// No bridge where there was no flag: a needless assertion would keep the Mac awake
+    /// for a minute for no reason at all.
     func testNoBridgeWhenThereWasNothingToClear() {
         let (sut, _, bridges) = makeSUT()
         sut.isEnabled = true
         sut.update(shouldPreventSleep: false)
         sut.resetOnExit()
         sut.isEnabled = false
-        XCTAssertEqual(bridges(), [], "флаг не стоял — снимать и мостить нечего")
+        XCTAssertEqual(bridges(), [], "the flag was not up — nothing to clear and nothing to bridge")
     }
 
-    /// Мост — удобство, а не корректность. Если caffeinate не запустился, флаг всё
-    /// равно обязан быть снят: оставить disablesleep поднятым куда хуже, чем
-    /// разбудить человека погасшим экраном.
+    /// The bridge is a convenience, not correctness. If caffeinate did not start, the
+    /// flag must still be cleared: leaving disablesleep up is far worse than waking
+    /// someone with a screen that went dark.
     func testFlagIsClearedEvenIfTheBridgeFails() {
         var commands: [String] = []
         let sut = LidSleepController(
@@ -252,7 +252,7 @@ final class LidSleepBridgeTests: XCTestCase {
         sut.update(shouldPreventSleep: false)
 
         XCTAssertTrue(commands.last!.contains("disablesleep 0"),
-                      "провал моста не имеет права оставить флаг поднятым")
+                      "a failed bridge has no right to leave the flag raised")
         XCTAssertFalse(sut.lidSleepDisabled)
     }
 }

@@ -5,20 +5,19 @@ public enum WaitReason: Equatable, Sendable {
 }
 
 public enum SessionStatus: Equatable, Sendable {
-    /// Сессия открыта, но агент в ней ничего не делает: её окно/вкладка живы, а
-    /// работы нет. Именно это состояние даёт `SessionStart` — событие означает
-    /// «сессия появилась», а не «агент взялся за задачу»: оно приходит и при
-    /// запуске, и при `--resume`, и при `/clear`, то есть в момент, когда
-    /// пользователь ещё даже не написал первую реплику.
+    /// The session is open but its agent is doing nothing: its window or tab is
+    /// alive and there is no work. This is the state `SessionStart` produces — the
+    /// event means "a session appeared", not "an agent took on a task": it arrives on
+    /// launch, on `--resume` and on `/clear`, at a moment when the user has not even
+    /// typed their first message.
     ///
-    /// Раньше `SessionStart` ставил `.working`, и открытая-но-простаивающая сессия
-    /// навсегда оседала в бейдже как работающий агент: `Stop` для неё не приходит
-    /// (турна не было), эвристика простоя выключена при установленных хуках, а
-    /// `reconcile` ждёт `longStaleAfter` (часы). Отсюда «ни один агент не запущен,
-    /// а на бейдже 1».
+    /// `SessionStart` used to set `.working`, and an open-but-idle session lodged in
+    /// the badge forever as a working agent: `Stop` never arrives for it (there was
+    /// no turn), the idle heuristic is off when hooks are installed, and `reconcile`
+    /// waits `longStaleAfter` (hours). Hence "no agent is running and the badge says 1".
     ///
-    /// `.idle` не попадает ни в `aggregate`, ни в `badgeCount`, ни в `anyWorking`:
-    /// показывать и считать нужно то, что реально происходит.
+    /// `.idle` reaches neither `aggregate` nor `badgeCount` nor `anyWorking`: what is
+    /// shown and counted has to be what is actually happening.
     case idle
     case working
     case waitingForYou(WaitReason)
@@ -55,25 +54,25 @@ public struct Session: Identifiable, Equatable, Sendable {
     /// so it was deleted before ever being shown as a problem.
     public var finishedAt: Date? = nil
 
-    /// PID процесса `claude`, которому принадлежит эта сессия — ближайший предок
-    /// хука с таким именем исполняемого файла (см. `ProcessTree.agent`). Это
-    /// единственный точный ответ на вопрос «сессия ещё существует?»: пока процесс
-    /// жив, сессия жива; как только он исчез — сессия закончилась, чем бы она ни
-    /// была занята по последнему известному событию.
+    /// PID of the `claude` process this session belongs to — the nearest ancestor of
+    /// the hook with that executable name (see `ProcessTree.agent`). It is the only
+    /// exact answer to "does this session still exist?": while the process lives the
+    /// session lives; the moment it is gone the session is over, whatever it was
+    /// doing as of the last event.
     ///
-    /// Не путать с `hostPID`: тот — приложение-владелец окна (Terminal.app,
-    /// Claude.app), одно на десяток сессий и живущее дольше любой из них; по нему
-    /// нельзя судить о судьбе конкретной сессии.
+    /// Not to be confused with `hostPID`, which is the application owning the window
+    /// (Terminal.app, Claude.app) — one for a dozen sessions and outliving all of
+    /// them, so it says nothing about any single session's fate.
     ///
-    /// `nil` у сессии, которую нашёл только наблюдатель транскриптов: хук по ней
-    /// не приходил, спросить не у кого — для таких остаются прежние эвристики по
-    /// времени тишины.
+    /// `nil` for a session only the transcript watcher found: no hook ever arrived
+    /// for it and there is nobody to ask, so those keep the old silence-duration
+    /// heuristics.
     ///
-    /// Живёт только в памяти и намеренно не попадает в `SessionRouteCache`:
-    /// после перезагрузки машины тот же номер PID почти наверняка занят чужим
-    /// процессом, и восстановленное из файла значение сообщало бы неправду с
-    /// уверенностью факта. После рестарта CodeCat поле заполнится заново первым
-    /// же хуком этой сессии.
+    /// Lives in memory only and deliberately never reaches `SessionRouteCache`: after
+    /// a reboot that same PID almost certainly belongs to someone else's process, and
+    /// a value restored from a file would state a falsehood with the confidence of
+    /// fact. After a CodeCat restart the field is refilled by this session's very
+    /// next hook.
     public var agentPID: pid_t? = nil
 
     /// Where this session lives, as recorded by `codecat-hook`. Nil for a session
@@ -108,7 +107,7 @@ public struct HookEvent: Codable, Equatable, Sendable {
     public let hostBundlePath: String?
     public let hostBundleID: String?
     public let tty: String?
-    /// PID процесса `claude` этой сессии — см. `Session.agentPID`.
+    /// PID of this session's `claude` process — see `Session.agentPID`.
     public let agentPID: pid_t?
     /// Claude Code's own field on `SessionStart`, documented values `startup`,
     /// `resume`, `clear`, `compact`. Confirmed by capturing a real payload from a
@@ -150,23 +149,24 @@ public struct TranscriptActivity: Equatable, Sendable {
     public let projectPath: String
     public let description: String
     public let timestamp: Date
-    /// Активность пришла из транскрипта субагента (`~/.claude/projects/.../subagents/agent-*.jsonl`),
-    /// а не из транскрипта самой сессии. Субагент несёт `sessionId` родительской сессии,
-    /// поэтому его работа корректно приписывается ей же — но неотличимо от собственной
-    /// работы сессии, что и путает пользователя, глядя на панель. Этот флаг даёт панели
-    /// способ отличить одно от другого, ничего не меняя в том, кому активность засчитана.
+    /// The activity came from a subagent's transcript
+    /// (`~/.claude/projects/.../subagents/agent-*.jsonl`) rather than the session's
+    /// own. A subagent carries its parent session's `sessionId`, so its work is
+    /// correctly attributed to that session — but indistinguishably from the
+    /// session's own work, which is what confuses someone reading the panel. This
+    /// flag lets the panel tell them apart without changing who the work counts for.
     public let isSubagent: Bool
 
-    /// Запись ассистента закрыла турн: `message.stop_reason == "end_turn"` — модель
-    /// вернула управление человеку. Это единственный признак конца работы, который
-    /// живёт в самом транскрипте, и он оказался нужен: хук `Stop` приходит не всегда.
-    /// Замерено на живой машине — сессия закончила турн в 01:02 (последняя запись
-    /// ассистента с `end_turn`, процесс без нагрузки и без детей), а хука приложение
-    /// так и не увидело, и сессия навсегда осталась «работает».
+    /// The assistant entry closed the turn: `message.stop_reason == "end_turn"` — the
+    /// model handed control back to the human. It is the only sign of work ending that
+    /// lives in the transcript itself, and it turned out to be necessary: the `Stop`
+    /// hook does not always arrive. Measured on a live machine — a session ended its
+    /// turn at 01:02 (last assistant entry with `end_turn`, process idle and with no
+    /// children) and the app never saw the hook, leaving the session "working" forever.
     ///
-    /// Противоположность — `stop_reason == "tool_use"`: модель вызвала инструмент,
-    /// работа продолжается. В разобранной сессии таких записей 426 против 19
-    /// `end_turn`, так что путать их нельзя ни в коем случае.
+    /// Its opposite is `stop_reason == "tool_use"`: the model called a tool and the
+    /// work continues. In the session that was examined there were 426 of those
+    /// against 19 `end_turn`, so confusing the two is out of the question.
     public let endsTurn: Bool
 
     public init(sessionId: String, projectPath: String, description: String, timestamp: Date,

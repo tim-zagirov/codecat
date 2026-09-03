@@ -35,7 +35,7 @@ final class SkinAssetsTests: XCTestCase {
         // didn't reach this test and it silently fell back to the source tree".
         print("SKINS DIR: \(skinsDirectory.path)")
         XCTAssertTrue(FileManager.default.fileExists(atPath: skinsDirectory.path),
-                      "Ассеты обликов не найдены: \(skinsDirectory.path)")
+                      "skin assets not found: \(skinsDirectory.path)")
     }
 
     /// A skin marked `bundled == false` is one whose author forbids redistributing
@@ -60,21 +60,21 @@ final class SkinAssetsTests: XCTestCase {
             for (sheet, highest) in maxIndex {
                 let url = directory.appendingPathComponent(sheet)
                 XCTAssertTrue(FileManager.default.fileExists(atPath: url.path),
-                              "\(skin.id): нет файла \(url.path)")
+                              "\(skin.id): missing file \(url.path)")
                 guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
                       let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-                    return XCTFail("\(skin.id): не читается PNG \(sheet)")
+                    return XCTFail("\(skin.id): cannot read the PNG \(sheet)")
                 }
                 let columns = image.width / skin.frameSize
                 let rows = image.height / skin.frameSize
-                XCTAssertGreaterThan(columns, 0, "\(skin.id)/\(sheet): ширина меньше кадра")
-                XCTAssertGreaterThan(rows, 0, "\(skin.id)/\(sheet): высота меньше кадра")
+                XCTAssertGreaterThan(columns, 0, "\(skin.id)/\(sheet): narrower than one frame")
+                XCTAssertGreaterThan(rows, 0, "\(skin.id)/\(sheet): shorter than one frame")
                 XCTAssertLessThan(highest, columns * rows,
-                                  "\(skin.id)/\(sheet): кадр \(highest) вне листа \(columns)x\(rows)")
+                                  "\(skin.id)/\(sheet): frame \(highest) is outside a \(columns)x\(rows) sheet")
                 XCTAssertEqual(image.width % skin.frameSize, 0,
-                               "\(skin.id)/\(sheet): ширина не кратна кадру \(skin.frameSize)")
+                               "\(skin.id)/\(sheet): width is not a multiple of the frame size \(skin.frameSize)")
                 XCTAssertEqual(image.height % skin.frameSize, 0,
-                               "\(skin.id)/\(sheet): высота не кратна кадру \(skin.frameSize)")
+                               "\(skin.id)/\(sheet): height is not a multiple of the frame size \(skin.frameSize)")
             }
         }
     }

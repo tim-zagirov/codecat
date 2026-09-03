@@ -21,9 +21,10 @@ public enum CodeCatPaths {
         appSupport.appendingPathComponent("routes.json")
     }
 
-    /// Файл лога — рядом с сокетом и кэшем маршрутов. Пишут двое: приложение и
-    /// `codecat-hook` (см. `DiagnosticLog`). Приложение `LSUIElement`, у него нет ни
-    /// окна, ни консоли, и это единственный способ узнать, что внутри происходило.
+    /// The log file — next to the socket and the route cache. Two processes write to
+    /// it: the app and `codecat-hook` (see `DiagnosticLog`). The app is `LSUIElement`
+    /// with no window and no console, and this is the only way to learn what happened
+    /// inside it.
     public static var logURL: URL {
         appSupport.appendingPathComponent("codecat.log")
     }

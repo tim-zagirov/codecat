@@ -64,15 +64,13 @@ final class TranscriptParserTests: XCTestCase {
         XCTAssertNil(TranscriptParser.parseLine("not json at all"))
         XCTAssertNil(TranscriptParser.parseLine(#"{"type":"summary","summary":"x"}"#))
         XCTAssertNil(TranscriptParser.parseLine(""))
-        // без sessionId — тоже nil
+        // no sessionId — nil as well
         XCTAssertNil(TranscriptParser.parseLine(
             #"{"type":"assistant","timestamp":"2026-08-28T10:00:00.123Z"}"#))
     }
 
-    // Реальная строка субагента, взятая из архива этой же машины:
-    // ~/.claude/projects/-Users-dev-Projects-example--claude-worktrees-example-branch/
-    //   bbbbbbbb-cccc-dddd-eeee-ffffffffffff/subagents/agent-a1b2c3d4e5f60718.jsonl
-    // sessionId в ней — это UUID родительской сессии, а не отдельная сессия субагента.
+    // A real subagent line, taken from this machine's own archive. Its sessionId is
+    // the UUID of the PARENT session, not a session of the subagent's own.
     func testRealSubagentLineParsesAsSubagentWithParentSessionId() {
         let l = """
         {"parentUuid":"11111111-2222-3333-4444-555555555555","isSidechain":true,"agentId":"a1b2c3d4e5f60718","message":{"model":"claude-sonnet-5","id":"msg_01ExampleExampleExample","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01ExampleExampleExampl","name":"Bash","input":{"command":"cd /Users/dev/Projects/example/.claude/worktrees/example-branch\\nswift build 2>&1 | tail -80"},"caller":{"type":"direct"}}],"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":2,"cache_creation_input_tokens":465,"cache_read_input_tokens":91762,"cache_creation":{"ephemeral_5m_input_tokens":465,"ephemeral_1h_input_tokens":0},"output_tokens":3,"service_tier":"standard","inference_geo":"not_available"},"diagnostics":null},"requestId":"req_01ExampleExampleExample","attributionAgent":"general-purpose","type":"assistant","uuid":"66666666-7777-8888-9999-aaaaaaaaaaaa","timestamp":"2026-08-30T20:50:24.858Z","effort":"high","userType":"external","entrypoint":"claude-desktop","cwd":"/Users/dev/Projects/example/.claude/worktrees/example-branch","sessionId":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","version":"2.1.0","gitBranch":"claude/example-branch"}
@@ -101,7 +99,7 @@ final class TranscriptParserTests: XCTestCase {
         XCTAssertEqual(TranscriptParser.parseLine(l)?.isSubagent, false)
     }
 
-    // MARK: - Конец турна
+    // MARK: - End of turn
 
     private func assistant(stopReason: String?, tool: String? = nil, agentId: String? = nil) -> String {
         var message: [String: Any] = ["content": tool.map { [["type": "tool_use", "name": $0, "input": [:]]] } ?? []]
@@ -114,39 +112,39 @@ final class TranscriptParserTests: XCTestCase {
         return String(data: try! JSONSerialization.data(withJSONObject: obj), encoding: .utf8)!
     }
 
-    /// `stop_reason == "end_turn"` — модель вернула управление человеку. Единственный
-    /// признак конца работы, который лежит в самом транскрипте; на хук `Stop`
-    /// полагаться нельзя, он приходит не всегда.
+    /// `stop_reason == "end_turn"` — the model handed control back to the human. The
+    /// only sign of work ending that lives in the transcript itself; the `Stop` hook
+    /// cannot be relied on, it does not always arrive.
     func testAssistantEndTurnIsRecognisedAsTheEndOfWork() {
         let activity = TranscriptParser.parseLine(assistant(stopReason: "end_turn"))
         XCTAssertEqual(activity?.endsTurn, true)
         XCTAssertEqual(activity?.description, "finished the task")
     }
 
-    /// Противоположность: вызов инструмента. Таких записей в реальной сессии в
-    /// двадцать раз больше, так что спутать их с концом турна нельзя.
+    /// Its opposite: a tool call. A real session has twenty times more of those, so
+    /// confusing them with the end of a turn is out of the question.
     func testAssistantToolUseIsNotTheEndOfWork() {
         let activity = TranscriptParser.parseLine(assistant(stopReason: "tool_use", tool: "Bash"))
         XCTAssertEqual(activity?.endsTurn, false)
         XCTAssertEqual(activity?.description, "running a command")
     }
 
-    /// Запись без `stop_reason` (старая версия формата, промежуточный кусок) — это не
-    /// конец: молчание не считается утверждением.
+    /// An entry with no `stop_reason` (an older format, an intermediate chunk) is not
+    /// an ending: silence is not an assertion.
     func testAssistantWithoutAStopReasonIsNotTheEndOfWork() {
         XCTAssertEqual(TranscriptParser.parseLine(assistant(stopReason: nil, tool: "Read"))?.endsTurn, false)
     }
 
-    /// У записей пользователя (включая результаты инструментов) `stop_reason` не
-    /// бывает — и подавно не бывает конца турна.
+    /// User entries (including tool results) never have a `stop_reason` — and
+    /// certainly never end a turn.
     func testUserRecordNeverEndsTheTurn() {
         let line = #"{"type":"user","sessionId":"s1","cwd":"/proj","timestamp":"2026-09-01T00:00:00.000Z"}"#
         XCTAssertEqual(TranscriptParser.parseLine(line)?.endsTurn, false)
     }
 
-    /// Конец турна субагента остаётся концом турна *записи*; отличать его от конца
-    /// работы сессии — дело стора (см. `SessionStoreTests`), но флаг субагента при
-    /// этом обязан сохраниться.
+    /// A subagent's end of turn is still the end of *that entry's* turn; telling it
+    /// apart from the session's work ending is the store's job (see
+    /// `SessionStoreTests`), but the subagent marker has to survive.
     func testSubagentEndTurnKeepsTheSubagentMarker() {
         let activity = TranscriptParser.parseLine(assistant(stopReason: "end_turn", agentId: "a1"))
         XCTAssertEqual(activity?.endsTurn, true)

@@ -2,73 +2,58 @@ import XCTest
 @testable import CodeCatCore
 
 /// Guards the one failure mode a string catalog has that nothing else catches: it
-/// never crashes. A key missing from `ru.lproj` shows English, a key missing from
-/// the code is dead weight, and a `%d` that became `%@` in translation formats
-/// garbage — all silently, in a language the author may not read.
+/// never crashes. A key used in code but missing from the catalog silently falls
+/// back to the English written at the call site, and a key left in the catalog
+/// after its call site is gone is dead weight nobody notices.
 ///
-/// Everything is checked against the repository, not the test bundle: the `.lproj`
-/// directories are resources of the *app* bundle, which the Makefile assembles, so
-/// there is nothing for a test host to load. `#filePath` walks up to the repo root
+/// CodeCat ships one language. The catalog still earns its place: it is what makes
+/// every user-visible string reachable from one file, so the wording can be read
+/// and revised as a whole rather than hunted through view bodies — and adding a
+/// second language later is then a translation job, not a refactor.
+///
+/// Everything is checked against the repository, not the test bundle: `en.lproj`
+/// is a resource of the *app* bundle, which the Makefile assembles, so there is
+/// nothing for a test host to load. `#filePath` walks up to the repository root
 /// the same way `SkinAssetsTests` does.
 final class LocalizationCatalogTests: XCTestCase {
 
     private static let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()   // .../Tests/CodeCatCoreTests
         .deletingLastPathComponent()   // .../Tests
-        .deletingLastPathComponent()   // repo root
+        .deletingLastPathComponent()   // repository root
 
-    private func catalog(_ language: String) throws -> [String: String] {
-        let url = Self.repoRoot
-            .appendingPathComponent("Resources/\(language).lproj/Localizable.strings")
+    private func catalog() throws -> [String: String] {
+        let url = Self.repoRoot.appendingPathComponent("Resources/en.lproj/Localizable.strings")
         let data = try Data(contentsOf: url)
-        let parsed = try PropertyListSerialization.propertyList(
-            from: data, options: [], format: nil)
-        return try XCTUnwrap(parsed as? [String: String], "\(language): not a strings dictionary")
+        let parsed = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+        return try XCTUnwrap(parsed as? [String: String], "en.lproj is not a strings dictionary")
     }
 
-    /// Conversion specifiers in the order they appear, positional indices stripped:
-    /// `"%1$@ … %2$d"` becomes `["@", "d"]`. Positional forms are what let a
-    /// translation reorder arguments, so the *order* of the letters is not what
-    /// matters — the multiset is.
-    private func specifiers(in format: String) -> [String] {
-        let pattern = try! NSRegularExpression(pattern: "%(?:(\\d+)\\$)?([@dfs])")
-        let range = NSRange(format.startIndex..., in: format)
-        return pattern.matches(in: format, range: range).map { match in
-            String(format[Range(match.range(at: 2), in: format)!])
-        }.sorted()
-    }
-
-    func testRussianTranslatesEveryEnglishKeyAndInventsNone() throws {
-        let en = try catalog("en")
-        let ru = try catalog("ru")
-        XCTAssertFalse(en.isEmpty)
-        XCTAssertEqual(Set(en.keys).subtracting(ru.keys), [], "untranslated keys")
-        XCTAssertEqual(Set(ru.keys).subtracting(en.keys), [], "keys that exist only in Russian")
-    }
-
-    /// A translation whose placeholders do not match the English one is not a
-    /// cosmetic problem: `String(format:)` reads whatever is on the stack for a
-    /// `%@` the caller passed an `Int` for.
-    func testEveryTranslationTakesTheSameArgumentsAsTheEnglishText() throws {
-        let en = try catalog("en")
-        let ru = try catalog("ru")
-        for (key, english) in en {
-            guard let russian = ru[key] else { continue }  // reported by the test above
-            XCTAssertEqual(specifiers(in: english), specifiers(in: russian),
-                           "\(key): placeholders differ between en and ru")
-        }
-    }
-
-    /// Both directions. A key used in code but absent from the catalog silently
-    /// falls back to the English written at the call site — so the Russian build
-    /// loses one string and nothing says so. A key in the catalog that no longer
-    /// exists in code is a translator's wasted work.
+    /// Both directions. A key used in code but absent from the catalog means the
+    /// wording lives at the call site alone, out of reach of anyone revising the
+    /// copy; a key in the catalog with no call site is a string nobody will ever
+    /// see, kept alive by nothing.
     func testTheCatalogAndTheCallSitesAgreeOnWhichKeysExist() throws {
-        let en = try catalog("en")
+        let catalog = try catalog()
         let used = try keysUsedInSources()
+        XCTAssertFalse(catalog.isEmpty)
         XCTAssertFalse(used.isEmpty, "found no L10n call sites — did the helper get renamed?")
-        XCTAssertEqual(used.subtracting(en.keys), [], "used in code, missing from en.lproj")
-        XCTAssertEqual(Set(en.keys).subtracting(used), [], "in en.lproj, unused in code")
+        XCTAssertEqual(used.subtracting(catalog.keys), [], "used in code, missing from en.lproj")
+        XCTAssertEqual(Set(catalog.keys).subtracting(used), [], "in en.lproj, unused in code")
+    }
+
+    /// The catalog is loaded by `String(format:)` at runtime, so a stray `%` that
+    /// is not a real placeholder formats garbage rather than failing to build.
+    /// Every specifier has to be one the call sites actually pass.
+    func testEveryFormatSpecifierIsOneTheCodeCanSupply() throws {
+        let allowed = try NSRegularExpression(pattern: "%(?:(?:\\d+\\$)?[@d]|%)")
+        let anyPercent = try NSRegularExpression(pattern: "%")
+        for (key, text) in try catalog() {
+            let range = NSRange(text.startIndex..., in: text)
+            let valid = allowed.numberOfMatches(in: text, range: range)
+            let total = anyPercent.numberOfMatches(in: text, range: range)
+            XCTAssertEqual(valid, total, "\(key): contains a % that is not a supported placeholder")
+        }
     }
 
     private func keysUsedInSources() throws -> Set<String> {

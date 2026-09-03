@@ -32,7 +32,7 @@ final class SpriteScaleTests: XCTestCase {
                 if w * s > SpriteScale.maxWidth {
                     // Only a sprite too wide to fit even at 1x may exceed the limit;
                     // there is no smaller integer scale to fall back to.
-                    XCTAssertEqual(s, 1, "\(w)x\(h) вышел за предел ширины не на масштабе 1")
+                    XCTAssertEqual(s, 1, "\(w)x\(h) exceeded the width cap at a scale other than 1")
                 }
             }
         }
@@ -53,12 +53,12 @@ final class SpriteScaleTests: XCTestCase {
         XCTAssertEqual(SpriteScale.factor(boundsWidth: -5, boundsHeight: -5), 1)
     }
 
-    // MARK: - Островная нормировка (строка меню 32 pt)
+    // MARK: - Island normalisation (a 32 pt menu bar)
 
-    /// Все облики в строке меню обязаны получить один и тот же целочисленный
-    /// множитель, иначе коты разъедутся по высоте вдвое, как это уже было на
-    /// канве маскота. Рамки — те же, что в тесте выше: шесть котов LuizMelo не
-    /// делят одну рамку (cat-4 — 28x16, cat-5 — 27x16).
+    /// Every skin in the menu bar has to get the same integer multiplier, or the cats
+    /// end up twice each other's height — as already happened on the mascot's canvas.
+    /// The bounds are the same as in the test above: the six LuizMelo cats do not share
+    /// one bounding box (cat-4 is 28x16, cat-5 is 27x16).
     func testEverySkinLandsOnTimesTwoInTheMenuBar() {
         let bounds = [(27, 14), (28, 16), (27, 16), (18, 12), (16, 16)]
         for (w, h) in bounds {
@@ -69,14 +69,14 @@ final class SpriteScaleTests: XCTestCase {
         }
     }
 
-    /// Прямая причина, по которой islandTargetHeight равен именно 32: на 30 pt
-    /// mxmaze (16x16) падает до x1 и становится вдвое мельче остальных.
+    /// The direct reason islandTargetHeight is exactly 32: at 30 pt, mxmaze (16x16)
+    /// drops to x1 and becomes half the size of the others.
     func testALowerTargetWouldHalveTheSquareSkin() {
         XCTAssertEqual(SpriteScale.factor(boundsWidth: 16, boundsHeight: 16,
                                           targetHeight: 30, maxWidth: 60), 1)
     }
 
-    /// Ни один облик не должен вылезти за отведённую ширину крыла.
+    /// No skin may exceed the width allotted to the wing.
     func testIslandWidthsStayWithinTheCap() {
         let bounds = [(27, 14), (28, 16), (27, 16), (18, 12), (16, 16)]
         for (w, h) in bounds {
@@ -88,8 +88,8 @@ final class SpriteScaleTests: XCTestCase {
         }
     }
 
-    /// Плавающий кот не имеет права поменяться ни на пиксель: вызов без новых
-    /// параметров обязан давать ровно то же, что и раньше.
+    /// The floating cat must not change by a single pixel: a call with no new
+    /// parameters has to produce exactly what it did before.
     func testDefaultArgumentsReproduceTheFloatingMascot() {
         XCTAssertEqual(SpriteScale.factor(boundsWidth: 27, boundsHeight: 14), 4)
         XCTAssertEqual(SpriteScale.factor(boundsWidth: 18, boundsHeight: 12), 5)

@@ -139,9 +139,9 @@ downloaded copy run, and both must report `source=Notarized Developer ID`.
 | Symptom | Cause |
 | --- | --- |
 | `make sign` hangs with no output | The keychain dialog is waiting for an answer behind another window. |
-| `ОШИБКА: не найден сертификат Developer ID Application` | No such certificate in the keychain — step 1. |
-| `ОШИБКА: TeamIdentifier не проставлен` | `SIGN_ID` matched an *Apple Development* certificate instead. Pass it explicitly. |
-| `ОШИБКА: entitlement на Apple events не попал в подпись` | `Resources/CodeCat.entitlements` was moved or emptied. Jump-to-session would break in the shipped build. |
+| `ERROR: no Developer ID Application certificate found` | No such certificate in the keychain — step 1. |
+| `ERROR: TeamIdentifier is not set` | `SIGN_ID` matched an *Apple Development* certificate instead. Pass it explicitly. |
+| `ERROR: the Apple-events entitlement did not reach the signature` | `Resources/CodeCat.entitlements` was moved or emptied. Jump-to-session would break in the shipped build. |
 | `No Keychain password item found for profile` | Step 2 has not been done, or `NOTARY_PROFILE` names a different profile. |
 | Notary status `Invalid` | `xcrun notarytool log <submission-id> --keychain-profile codecat` prints exactly which file failed and why. |
 | App opens locally but not on another Mac | Almost always a missing staple. `xcrun stapler validate dist/CodeCat.app`. |

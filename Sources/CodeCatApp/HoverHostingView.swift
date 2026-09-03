@@ -1,11 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// `NSHostingView`, который сообщает о входе и выходе курсора.
+/// An `NSHostingView` that reports when the cursor enters and leaves.
 ///
-/// Наведение здесь ловится `NSTrackingArea`, а не SwiftUI-хавером, по двум
-/// причинам: окно острова не должно активироваться и перехватывать фокус, и
-/// событие нужно даже когда приложение не активно (`.activeAlways`).
+/// Hover is caught with `NSTrackingArea` rather than SwiftUI's hover for two
+/// reasons: the island's window must not activate and steal focus, and the event
+/// is needed even when the app is not active (`.activeAlways`).
 class HoverHostingView<Content: View>: NSHostingView<Content> {
     var onEnter: (() -> Void)?
     var onExit: (() -> Void)?
@@ -13,8 +13,8 @@ class HoverHostingView<Content: View>: NSHostingView<Content> {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
-        // `.inVisibleRect` избавляет от пересчёта прямоугольника при каждом
-        // изменении размера окна — а оно меняется при смене облика.
+        // `.inVisibleRect` avoids recomputing the rectangle every time the window
+        // resizes — and it resizes whenever the skin changes.
         addTrackingArea(NSTrackingArea(rect: .zero,
                                        options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                        owner: self, userInfo: nil))
@@ -24,37 +24,40 @@ class HoverHostingView<Content: View>: NSHostingView<Content> {
     override func mouseExited(with event: NSEvent) { onExit?() }
 }
 
-/// Хост острова: вдобавок к наведению отдаёт клик — но только по самой полосе
-/// острова.
+/// The island's host view: on top of hover it reports a click — but only on the
+/// island strip itself.
 ///
-/// Окно одно на остров и меню, поэтому «клик по острову» больше не равен «клик по
-/// окну». Всё, что ниже полосы, принадлежит содержимому меню: тумблерам, выбору
-/// облика, строкам сессий, — и туда события обязаны доходить нетронутыми, иначе
-/// внутри меню перестанет работать всё сразу.
+/// One window holds both the island and the menu, so "a click on the island" is no
+/// longer the same as "a click on the window". Everything below the strip belongs
+/// to the menu's content — toggles, the skin picker, session rows — and events
+/// must reach it untouched, or everything inside the menu stops working at once.
 ///
-/// `mouseDown` по полосе намеренно проглатывается, а действие висит на `mouseUp`:
-/// так клик не срабатывает, если пользователь нажал на острове и отпустил в стороне.
+/// `mouseDown` on the strip is swallowed deliberately and the action hangs off
+/// `mouseUp`, so a click does not fire if the user pressed on the island and
+/// released somewhere else.
 final class IslandHostingView: HoverHostingView<IslandView> {
     var onClick: (() -> Void)?
-    /// Высота полосы острова, считая от верхней кромки окна.
+    /// Height of the island strip, measured from the window's top edge.
     var islandStripHeight: CGFloat = 0
 
-    /// Контур закрашенной площади в координатах SwiftUI (ось Y вниз, начало —
-    /// левый верхний угол окна). Ставится контроллером вместе с рамкой окна.
+    /// Outline of the painted area in SwiftUI coordinates (y grows downward, origin
+    /// at the window's top-left). Set by the controller together with the window frame.
     ///
-    /// Нужен, потому что окно прямоугольное, а остров — нет. Форма уже вся в
-    /// `IslandLayout.silhouettePath`, и без этой проверки прямоугольник окна
-    /// перехватывает клики на площади, где не нарисовано ничего. Заметнее всего это
-    /// в двух местах:
+    /// Needed because the window is a rectangle and the island is not. The shape
+    /// already exists in `IslandLayout.silhouettePath`, and without this test the
+    /// window's rectangle intercepts clicks over area where nothing is drawn. Two
+    /// places make it obvious:
     ///
-    ///  * **Галтели у кромки.** Верхние углы окна не закрашены НИКОГДА — форма там
-    ///    вогнутая. Окно шире корпуса на `edgeRadius` с каждой стороны, и в этой
-    ///    зоне клики по меню приложения слева и по статус-иконкам справа доставались
-    ///    острову. Это было постоянным раздражителем, а не мгновением.
-    ///  * **Раскрытие меню.** Окно встаёт в конечный размер сразу, а маска догоняет
-    ///    пружиной (`revealedHeight`), поэтому доли секунды окно шире рисунка снизу.
+    ///  * **The fillets at the screen edge.** The window's top corners are NEVER
+    ///    painted — the shape is concave there. The window is wider than the body by
+    ///    `edgeRadius` on each side, and in that zone clicks on the app menu to the
+    ///    left and the status icons to the right were going to the island. That was
+    ///    a permanent irritant, not a momentary one.
+    ///  * **The menu expanding.** The window jumps to its final size at once while
+    ///    the mask catches up on a spring (`revealedHeight`), so for a fraction of a
+    ///    second the window is wider than the drawing beneath it.
     ///
-    /// `nil` — проверка выключена, окно ведёт себя как обычный прямоугольник.
+    /// `nil` turns the test off and the window behaves as an ordinary rectangle.
     var silhouette: CGPath?
 
     private func isInStrip(_ event: NSEvent) -> Bool {
@@ -66,19 +69,19 @@ final class IslandHostingView: HoverHostingView<IslandView> {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// Точка в координатах SwiftUI-контура: ось Y вниз от верхней кромки окна.
-    /// `NSHostingView` перевёрнут, но полагаться на это молча нельзя — форма
-    /// поехала бы вверх ногами, если это когда-нибудь изменится.
+    /// A point in the outline's SwiftUI coordinates: y grows downward from the
+    /// window's top edge. `NSHostingView` is flipped, but relying on that silently
+    /// is not safe — the shape would end up upside down if it ever changed.
     private func silhouettePoint(_ pointInSelf: NSPoint) -> CGPoint {
         CGPoint(x: pointInSelf.x,
                 y: isFlipped ? pointInSelf.y : bounds.height - pointInSelf.y)
     }
 
-    /// Возвращает `nil` для точек вне закрашенной формы — тогда событие уходит
-    /// туда, где оно и должно быть: в строку меню, в окно под островом, куда угодно.
+    /// Returns `nil` for points outside the painted shape, so the event goes where
+    /// it belongs: the menu bar, the window under the island, wherever.
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let silhouette else { return super.hitTest(point) }
-        // `hitTest` получает точку в координатах НАДвида, а не своих собственных.
+        // `hitTest` is handed a point in the SUPERVIEW's coordinates, not its own.
         let local = superview.map { convert(point, from: $0) } ?? point
         guard bounds.contains(local) else { return super.hitTest(point) }
         guard silhouette.contains(silhouettePoint(local)) else { return nil }
