@@ -55,9 +55,9 @@ if !input.isEmpty {
     CodeCatPaths.ensureAppSupportExists()
     let log = DiagnosticLog(url: CodeCatPaths.logURL, source: "hook")
     _ = log.writeIfWithinHardLimit(
-        sent ? "отправлено \(event), \(payload.count) Б"
-             : "ОШИБКА: \(event) не ушло в сокет \(CodeCatPaths.socketURL.path) "
-               + "(приложение не запущено?)")
+        sent ? "sent \(event), \(payload.count) B"
+             : "ERROR: \(event) did not reach the socket at \(CodeCatPaths.socketURL.path) "
+               + "(app not running?)")
     log.close()
 }
 exit(0)

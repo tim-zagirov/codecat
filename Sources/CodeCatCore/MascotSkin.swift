@@ -100,7 +100,7 @@ public enum AggregateStatusKey: String, CaseIterable, Sendable {
 public struct MascotSkin: Equatable, Sendable, Identifiable {
     /// Persisted in `UserDefaults` — never rename one of these.
     public let id: String
-    /// The label the user sees, in Russian.
+    /// The label the user sees, already localised.
     public let name: String
     public let author: String
     public let license: SkinLicense

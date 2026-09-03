@@ -236,7 +236,8 @@ final class SystemJumpExecutor: JumpExecuting {
             case -600, -609:
                 return .hostGone
             default:
-                let message = (error[NSAppleScript.errorMessage] as? String) ?? "код \(code)"
+                let message = (error[NSAppleScript.errorMessage] as? String)
+                    ?? L10n.f("jump.applescript.code", "code %d", code)
                 return .failed(JumpMessages.appleScriptFailureDetail(message))
             }
         }

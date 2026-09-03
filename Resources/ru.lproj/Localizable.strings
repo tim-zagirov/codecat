@@ -1,0 +1,143 @@
+/* CodeCat — русская локализация.
+
+   Базовый язык — английский (Resources/en.lproj/Localizable.strings). Ключи
+   здесь обязаны совпадать с ним один в один: ключ, которого тут нет, покажется
+   по-английски, а лишний — просто никогда не найдётся. */
+
+/* MARK: - Меню-бар */
+
+"menubar.asleep" = "спит";
+"menubar.working" = "работает: %d";
+"menubar.waiting" = "ждёт: %d";
+"menubar.done" = "готово";
+"menubar.problem" = "проблема";
+
+"menu.view" = "Вид: %@";
+"menu.hooks.install" = "Установить хуки Claude Code…";
+"menu.hooks.remove" = "Убрать хуки Claude Code…";
+"menu.login.item" = "Запускать при логине";
+"menu.quit" = "Выйти";
+
+/* MARK: - Как показывать маскота */
+
+"display.mode.floating" = "Кот";
+"display.mode.island" = "Остров";
+
+/* MARK: - Настройки */
+
+"settings.title" = "Настройки";
+"settings.view" = "Вид";
+"setting.keep.awake" = "Не давать маку спать";
+"setting.lid.mode" = "Режим закрытой крышки";
+"setting.sounds" = "Звуки";
+"setting.show.cat" = "Показывать котика";
+"setting.hide.when.idle" = "Прятать котика, когда сессий нет";
+"settings.no.notch" = "На этом экране нет выреза — остров не появится.";
+"settings.lid.password.hint" = "Первое включение попросит пароль администратора (разовая настройка).";
+"settings.hooks.install" = "Установить хуки Claude Code";
+
+/* MARK: - Список сессий */
+
+"panel.no.sessions" = "Нет активных сессий";
+"panel.away.title" = "Пока тебя не было";
+"panel.running.for" = "длится %@";
+"duration.minutes" = "%d мин";
+"duration.hours.minutes" = "%d ч %d мин";
+
+"session.status.idle" = "открыта";
+"session.status.working" = "работает";
+"session.status.waiting" = "ждёт тебя";
+"session.status.done" = "закончил";
+"session.status.crashed" = "оборвалась";
+
+/* MARK: - Чем занят агент */
+
+"activity.working" = "работает над задачей";
+"activity.done" = "закончил";
+"activity.thinking" = "думает";
+"activity.editing.file" = "редактирует %@";
+"activity.editing" = "редактирует файлы";
+"activity.running" = "выполняет команду";
+"activity.reading.file" = "читает %@";
+"activity.reading" = "читает файлы";
+"activity.searching" = "ищет по коду";
+"activity.subagent.started" = "запустил субагента";
+"activity.tool" = "использует %@";
+"activity.session.opened" = "открыта, ждёт задачу";
+"activity.session.started" = "взялся за задачу";
+"activity.session.stopped" = "сессия оборвалась";
+"activity.waiting" = "ждёт тебя";
+"activity.waiting.maybe" = "похоже, ждёт тебя";
+"activity.subagent" = "субагент %@";
+
+/* MARK: - Сводка «Пока тебя не было» */
+
+"away.waiting" = "агент ждёт тебя";
+"away.done" = "агент закончил работу";
+"away.crashed" = "сессия оборвалась";
+
+/* MARK: - Облики */
+
+"skins.title" = "Облик";
+"skins.credits" = "Об ассетах";
+"license.cc0" = "CC0 1.0 — общественное достояние";
+"skin.luizmelo.1" = "Рыжий";
+"skin.luizmelo.2" = "Чёрный";
+"skin.luizmelo.3" = "Сиамский";
+"skin.luizmelo.4" = "Дымчатый";
+"skin.luizmelo.5" = "Белый";
+"skin.luizmelo.6" = "Полосатый";
+"skin.luizmelo.other" = "Кот %d";
+"skin.elthen" = "Серебристый";
+"skin.elthen.terms" = "Разрешено использовать в проектах; сами ассеты нельзя перепродавать и раздавать.";
+"skin.mxmaze" = "Плюшевый";
+"skin.load.failed.title" = "Не удалось загрузить облик «%@»";
+"skin.load.failed.body" = "Файлы набора не читаются. Переключились на другой облик.";
+
+/* MARK: - Хуки */
+
+"hooks.install.failed.title" = "Не удалось установить хуки";
+"hooks.remove.failed.title" = "Не удалось убрать хуки";
+"hooks.settings.unreadable" = "Не удалось прочитать файл настроек %@. Проверьте права доступа и попробуйте снова.";
+"hooks.settings.unwritable" = "Не удалось обновить файл настроек %@. Проверьте, что файл корректен.";
+"hooks.settings.write.error" = "Не удалось записать в %@: %@";
+"hooks.remove.confirm.title" = "Убрать хуки CodeCat?";
+"hooks.remove.confirm.body" = "Из %1$@ будут удалены записи CodeCat для событий: %2$@. Чужие хуки и остальные настройки останутся как есть.\n\nБез хуков котик продолжит работать, но о состоянии сессий будет узнавать с задержкой — по транскриптам, а не по событиям.";
+"hooks.remove.confirm.button" = "Убрать";
+"button.cancel" = "Отмена";
+
+/* MARK: - Режим закрытой крышки */
+
+"lid.script.missing.title" = "Скрипт установки не найден";
+"lid.script.missing.body" = "Запусти вручную: sudo bash scripts/install-lid-mode.sh";
+"lid.enable.failed.title" = "Не удалось включить режим закрытой крышки";
+"lid.enable.failed.body" = "Установка завершилась, но правило всё ещё не найдено. Попробуй ещё раз или установи вручную: sudo bash scripts/install-lid-mode.sh";
+"lid.setup.needed.title" = "Нужна разовая установка";
+"lid.setup.needed.body" = "Режиму закрытой крышки требуется один раз разрешение администратора. Его можно включить позже — просто попробуй ещё раз, когда будешь готов ввести пароль.";
+"lid.install.failed.title" = "Установка не удалась";
+"lid.install.failed.body" = "Скрипт установки завершился с ошибкой (%@). Попробуй установить вручную: sudo bash scripts/install-lid-mode.sh";
+"lid.osascript.failed" = "Не удалось запустить osascript: %@";
+"lid.exit.code" = "код завершения %d";
+"lid.exit.code.detail" = "код завершения %d: %@";
+
+/* MARK: - Переход к вкладке терминала */
+
+"jump.automation.denied.title" = "Нет разрешения на автоматизацию";
+"jump.automation.denied.body" = "Чтобы попадать сразу во вкладку терминала, нужно разрешение на автоматизацию — его можно выдать в Системных настройках, «Конфиденциальность и безопасность» → «Автоматизация».";
+"jump.tab.notfound.title" = "Вкладку найти не удалось";
+"jump.tab.notfound.body" = "Похоже, вкладку с этой сессией уже закрыли.";
+"jump.host.gone.title" = "Сессия закрыта";
+"jump.host.gone.body" = "Приложение, в котором работала эта сессия, больше не запущено.";
+"jump.failed.title" = "Не удалось перейти к сессии";
+"jump.failed.body" = "Ошибка: %@";
+"jump.fallback.done" = "Вывел приложение вперёд.";
+"jump.fallback.failed" = "Вывести приложение вперёд тоже не удалось — переключитесь на него сами.";
+"jump.detail.activation.refused" = "не удалось вывести приложение вперёд";
+"jump.detail.script.build.failed" = "не удалось собрать AppleScript";
+"jump.detail.timeout" = "терминал не ответил";
+"jump.detail.timeout.consent" = "терминал пока не ответил — возможно, ещё открыт диалог разрешения на автоматизацию: ответьте на него и нажмите строку сессии снова";
+"jump.detail.unexpected.reply" = "неожиданный ответ терминала";
+"jump.detail.busy" = "Предыдущий переход в терминал ещё не завершился.";
+"jump.applescript.code" = "код %d";
+"jump.hint.no.host" = "переход недоступен — сессия запущена до CodeCat";
+"jump.hint.host.gone" = "переход недоступен — приложение сессии закрыто";

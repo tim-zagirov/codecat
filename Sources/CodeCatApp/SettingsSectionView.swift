@@ -27,8 +27,8 @@ struct SettingsSectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: style.blockSpacing) {
-            sectionTitle("Вид")
-            Picker("Вид", selection: $appState.displayMode) {
+            sectionTitle(L10n.t("settings.view", "View"))
+            Picker(L10n.t("settings.view", "View"), selection: $appState.displayMode) {
                 ForEach(MascotDisplayMode.allCases, id: \.self) { mode in
                     Text(mode.title).tag(mode)
                 }
@@ -37,7 +37,8 @@ struct SettingsSectionView: View {
             .labelsHidden()
 
             if appState.displayMode == .island, !Self.hasScreenWithNotch {
-                Text("На этом экране нет выреза — остров не появится.")
+                Text(L10n.t("settings.no.notch",
+                            "This display has no notch, so the island won't appear."))
                     .font(.system(size: 10))
                     .foregroundStyle(style.tertiary)
             }
@@ -46,7 +47,7 @@ struct SettingsSectionView: View {
             // кота. Дубликат этого же пункта есть в меню-баре, и он там обязателен:
             // включи тумблер здесь, пока сессий нет, и маскот вместе с этим меню
             // исчезнет с экрана — выключить обратно было бы неоткуда.
-            SettingToggle("Прятать котика, когда сессий нет",
+            SettingToggle(L10n.t("setting.hide.when.idle", "Hide the cat when nothing is running"),
                           isOn: $appState.hidesWhenNoSessions)
 
             MenuSeparator()
@@ -58,20 +59,23 @@ struct SettingsSectionView: View {
             // сюда — значит менять плавающий режим, чего эта работа не делает.
             // `MenuSectionHeader` рисует себя только там, где заголовки секций
             // предусмотрены стилем, то есть на острове.
-            MenuSectionHeader(title: "Настройки")
-            SettingToggle("Не давать маку спать", isOn: $appState.keepAwakeEnabled)
-            SettingToggle("Режим закрытой крышки", isOn: Binding(
+            MenuSectionHeader(title: L10n.t("settings.title", "Settings"))
+            SettingToggle(L10n.t("setting.keep.awake", "Keep the Mac awake"),
+                          isOn: $appState.keepAwakeEnabled)
+            SettingToggle(L10n.t("setting.lid.mode", "Closed-lid mode"), isOn: Binding(
                 get: { appState.lidModeEnabled },
                 set: { appState.requestLidModeChange(to: $0) }
             ))
             if !LidSleepController.isHelperInstalled {
-                Text("Первое включение попросит пароль администратора (разовая настройка).")
+                Text(L10n.t("settings.lid.password.hint",
+                            "Turning this on the first time asks for an administrator password. "
+                            + "One-time setup."))
                     .font(.system(size: 10))
                     .foregroundStyle(style.tertiary)
             }
-            SettingToggle("Звуки", isOn: $appState.soundsEnabled)
+            SettingToggle(L10n.t("setting.sounds", "Sounds"), isOn: $appState.soundsEnabled)
             if !appState.hooksInstalled {
-                Button("Установить хуки Claude Code") {
+                Button(L10n.t("settings.hooks.install", "Install Claude Code hooks")) {
                     appState.installHooksIfNeeded()
                 }
                 .font(.system(size: 11))

@@ -126,7 +126,7 @@ public final class SessionStore: ObservableObject {
                 // же момент, когда пользователь отправляет реплику), и `apply(activity:)`
                 // переведёт сессию в `.working`.
                 s.status = .idle
-                s.activityDescription = "открыта, ждёт задачу"
+                s.activityDescription = L10n.t("activity.session.opened", "open, waiting for a task")
             }
         case "UserPromptSubmit":
             // Единственный сигнал «работа началась», который приходит мгновенно и
@@ -135,19 +135,19 @@ public final class SessionStore: ObservableObject {
             // к тому моменту уже верный.
             upsert(event: event, now: now) { s in
                 s.status = .working
-                s.activityDescription = "взялся за задачу"
+                s.activityDescription = L10n.t("activity.session.started", "started on the task")
             }
         case "Notification":
             let text = (event.message ?? "").lowercased()
             let reason: WaitReason = text.contains("permission") ? .permission : .question
             upsert(event: event, now: now) { s in
                 s.status = .waitingForYou(reason)
-                s.activityDescription = "ждёт тебя"
+                s.activityDescription = L10n.t("activity.waiting", "waiting for you")
             }
         case "Stop":
             upsert(event: event, now: now) { s in
                 s.status = .done
-                s.activityDescription = "закончил"
+                s.activityDescription = L10n.t("activity.done", "done")
             }
         case "SessionEnd":
             sessions.removeValue(forKey: event.sessionId)
@@ -176,7 +176,7 @@ public final class SessionStore: ObservableObject {
         // работать, разбирая его результат.
         if activity.endsTurn && !activity.isSubagent {
             s.status = .done
-            s.activityDescription = "закончил"
+            s.activityDescription = L10n.t("activity.done", "done")
             s.finishedAt = activity.timestamp
             s.lastActivity = activity.timestamp
             if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
@@ -189,7 +189,8 @@ public final class SessionStore: ObservableObject {
         // работы сессии. Единственное отличие — пометка в описании, чтобы строка в панели
         // не выглядела загадочно, когда сама сессия молчит, а работу ведёт подчинённый агент.
         s.activityDescription = activity.isSubagent
-            ? "субагент \(activity.description)" : activity.description
+            ? L10n.f("activity.subagent", "subagent %@", activity.description)
+            : activity.description
         s.lastActivity = activity.timestamp
         s.finishedAt = nil
         if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
@@ -231,7 +232,7 @@ public final class SessionStore: ObservableObject {
                 guard !isAgentAlive(agentPID) else { continue }
                 if s.status == .working {
                     s.status = .crashed
-                    s.activityDescription = "сессия оборвалась"
+                    s.activityDescription = L10n.t("activity.session.stopped", "the session stopped")
                     s.finishedAt = now
                     sessions[id] = s
                 } else {
@@ -246,7 +247,7 @@ public final class SessionStore: ObservableObject {
             }()
             if active && now.timeIntervalSince(s.lastActivity) >= threshold {
                 s.status = .crashed
-                s.activityDescription = "сессия оборвалась"
+                s.activityDescription = L10n.t("activity.session.stopped", "the session stopped")
                 s.finishedAt = now
                 sessions[id] = s
             }
@@ -298,7 +299,7 @@ public final class SessionStore: ObservableObject {
         for (id, var s) in sessions where s.status == .working {
             if now.timeIntervalSince(s.lastActivity) >= threshold {
                 s.status = .waitingForYou(.idle)
-                s.activityDescription = "похоже, ждёт тебя"
+                s.activityDescription = L10n.t("activity.waiting.maybe", "looks like it is waiting for you")
                 sessions[id] = s
             }
         }

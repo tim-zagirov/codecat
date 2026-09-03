@@ -38,12 +38,14 @@ struct SkinPickerView: View {
         }
     }
 
+    private static var title: String { L10n.t("skins.title", "Skin") }
+
     @ViewBuilder
     private var header: some View {
         if style.separator == nil {
-            Text("Облик").font(.system(size: 12, weight: .medium))
+            Text(Self.title).font(.system(size: 12, weight: .medium))
         } else {
-            MenuSectionHeader(title: "Облик")
+            MenuSectionHeader(title: Self.title)
         }
     }
 
@@ -97,7 +99,8 @@ struct SkinPickerView: View {
     }
 
     private var credits: some View {
-        DisclosureGroup("Об ассетах", isExpanded: $appState.creditsExpanded) {
+        DisclosureGroup(L10n.t("skins.credits", "About the assets"),
+                        isExpanded: $appState.creditsExpanded) {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(creditedPacks, id: \.author) { pack in
                     VStack(alignment: .leading, spacing: 1) {
@@ -138,7 +141,7 @@ struct SkinPickerView: View {
 
     private func licenseText(_ license: SkinLicense) -> String {
         switch license {
-        case .cc0: return "CC0 1.0 — общественное достояние"
+        case .cc0: return L10n.t("license.cc0", "CC0 1.0 — public domain")
         // The full attribution string (e.g. "Maze.Bit.Boutique (mxmaze), CC BY
         // 4.0") is deliberately not printed here: the author name it repeats is
         // already the heading directly above this line (`pack.author`), so

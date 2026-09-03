@@ -1,0 +1,3 @@
+/* Shown in the macOS permission prompt when CodeCat first asks to control a
+   terminal app. Base language: the English text also lives in Info.plist. */
+"NSAppleEventsUsageDescription" = "CodeCat switches you to the terminal tab where a Claude Code agent is waiting for you.";

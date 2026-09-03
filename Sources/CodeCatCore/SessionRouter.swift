@@ -91,7 +91,7 @@ public protocol JumpExecuting {
     func perform(_ route: JumpRoute, completion: @escaping (JumpOutcome) -> Void)
 }
 
-/// User-facing Russian text for jump outcomes. Kept next to the outcomes so the
+/// User-facing text for jump outcomes. Kept next to the outcomes so the
 /// "no silent refusals" rule can be enforced by a test over every case.
 public enum JumpMessages {
 
@@ -102,22 +102,40 @@ public enum JumpMessages {
         case .switchedToTab, .switchedToApplication:
             return nil
         case .automationDenied(let fellBack):
-            let permission = "Чтобы попадать сразу во вкладку терминала, нужно разрешение на автоматизацию — его можно выдать в Системных настройках, «Конфиденциальность и безопасность» → «Автоматизация»."
-            return ("Нет разрешения на автоматизацию",
+            let permission = L10n.t("jump.automation.denied.body",
+                "To open the terminal tab directly, CodeCat needs automation permission. "
+                + "Grant it in System Settings, under Privacy & Security → Automation.")
+            return (L10n.t("jump.automation.denied.title", "No automation permission"),
                     fellBack
-                        ? permission + " Пока вывел приложение вперёд."
-                        : permission + " Вывести приложение вперёд тоже не удалось — переключитесь на него сами.")
+                        ? permission + " " + broughtForward
+                        : permission + " " + couldNotBringForward)
         case .tabNotFound(let fellBack):
-            return ("Вкладку найти не удалось",
+            let closed = L10n.t("jump.tab.notfound.body", "That session's tab looks closed.")
+            return (L10n.t("jump.tab.notfound.title", "Couldn't find the tab"),
                     fellBack
-                        ? "Похоже, вкладку с этой сессией уже закрыли. Вывел приложение вперёд."
-                        : "Похоже, вкладку с этой сессией уже закрыли. Вывести приложение вперёд не удалось — переключитесь на него сами.")
+                        ? closed + " " + broughtForward
+                        : closed + " " + couldNotBringForward)
         case .hostGone:
-            return ("Сессия закрыта",
-                    "Приложение, в котором работала эта сессия, больше не запущено.")
+            return (L10n.t("jump.host.gone.title", "Session closed"),
+                    L10n.t("jump.host.gone.body",
+                           "The app this session was running in is no longer open."))
         case .failed(let detail):
-            return ("Не удалось перейти к сессии", "Ошибка: \(detail)")
+            return (L10n.t("jump.failed.title", "Couldn't jump to the session"),
+                    L10n.f("jump.failed.body", "Error: %@", detail))
         }
+    }
+
+    /// The two endings every recoverable outcome needs: whether CodeCat managed to
+    /// bring the terminal forward instead. Written once because four different
+    /// messages end with one or the other, and a translation that drifted between
+    /// them would read as two different promises about the same fallback.
+    private static var broughtForward: String {
+        L10n.t("jump.fallback.done", "Brought the app forward instead.")
+    }
+
+    private static var couldNotBringForward: String {
+        L10n.t("jump.fallback.failed",
+               "Bringing the app forward didn't work either — switch to it yourself.")
     }
 
     // MARK: - Details carried inside `.failed`
@@ -126,10 +144,14 @@ public enum JumpMessages {
     // executor produces, so the "no silent refusals" test can see all of them.
 
     /// The app exists but macOS refused to bring it forward.
-    public static let activationRefusedDetail = "не удалось вывести приложение вперёд"
+    public static var activationRefusedDetail: String {
+        L10n.t("jump.detail.activation.refused", "couldn't bring the app forward")
+    }
 
     /// The tab-selection script could not even be compiled.
-    public static let scriptBuildFailedDetail = "не удалось собрать AppleScript"
+    public static var scriptBuildFailedDetail: String {
+        L10n.t("jump.detail.script.build.failed", "couldn't compile the AppleScript")
+    }
 
     /// A deadline expired. Which deadline matters: one set because the automation
     /// permission had not been decided yet may have run out with the consent panel
@@ -139,22 +161,24 @@ public enum JumpMessages {
     /// makes both true, and it still tells the user the one thing worth trying.
     public static func timedOutDetail(awaitingConsent: Bool) -> String {
         awaitingConsent
-            ? "терминал пока не ответил — возможно, ещё открыт диалог разрешения на автоматизацию: ответьте на него и нажмите строку сессии снова"
-            : "терминал не ответил"
+            ? L10n.t("jump.detail.timeout.consent",
+                     "the terminal hasn't answered yet — the automation permission dialog "
+                     + "may still be open: answer it and click the session again")
+            : L10n.t("jump.detail.timeout", "the terminal didn't answer")
     }
 
     /// A previous tab-selection script is still stuck, so this jump could not even be
     /// attempted. Says whether the app was brought forward instead, so the message
     /// never claims a switch that did not happen.
     public static func terminalStillBusyDetail(fellBack: Bool) -> String {
-        let head = "Предыдущий переход в терминал ещё не завершился."
-        return fellBack
-            ? head + " Вывел приложение вперёд."
-            : head + " Вывести приложение вперёд тоже не удалось — переключитесь на него сами."
+        let head = L10n.t("jump.detail.busy", "The previous jump to the terminal hasn't finished.")
+        return fellBack ? head + " " + broughtForward : head + " " + couldNotBringForward
     }
 
     /// The script ran but returned something neither marker matches.
-    public static let unexpectedTerminalReplyDetail = "неожиданный ответ терминала"
+    public static var unexpectedTerminalReplyDetail: String {
+        L10n.t("jump.detail.unexpected.reply", "unexpected reply from the terminal")
+    }
 
     /// An AppleScript error that is none of the classified ones.
     public static func appleScriptFailureDetail(_ message: String) -> String {
@@ -163,21 +187,21 @@ public enum JumpMessages {
 
     /// Appends what the fallback actually did to a `.failed` detail. `.failed` owes
     /// the user a destination just as much as the two recoverable outcomes do, and
-    /// a detail like "терминал не ответил" on its own leaves a user whose fallback
-    /// was refused with nothing to do next.
+    /// a detail like "the terminal didn't answer" on its own leaves a user whose
+    /// fallback was refused with nothing to do next.
     public static func failureDetail(_ detail: String, fellBack: Bool) -> String {
-        fellBack
-            ? detail + ". Вывел приложение вперёд."
-            : detail + ". Вывести приложение вперёд тоже не удалось — переключитесь на него сами."
+        detail + ". " + (fellBack ? broughtForward : couldNotBringForward)
     }
 
     /// The small caption under a row that cannot be clicked.
     public static func rowHint(for reason: UnavailableReason) -> String {
         switch reason {
         case .noHostRecorded:
-            return "переход недоступен — сессия запущена до CodeCat"
+            return L10n.t("jump.hint.no.host",
+                          "can't jump — this session started before CodeCat did")
         case .hostGone:
-            return "переход недоступен — приложение сессии закрыто"
+            return L10n.t("jump.hint.host.gone",
+                          "can't jump — this session's app is closed")
         }
     }
 }

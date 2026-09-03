@@ -151,12 +151,13 @@ extension SessionRouterTests {
     }
 
     /// Every failure is reported: the spec forbids silent refusals.
-    func testEveryFailingOutcomeHasARussianMessage() {
+    func testEveryFailingOutcomeHasAMessage() {
         let outcomes: [JumpOutcome] = [
             .automationDenied(fellBack: true), .automationDenied(fellBack: false),
             .tabNotFound(fellBack: true), .tabNotFound(fellBack: false),
             .hostGone, .failed("boom"),
         ]
+        var bodies: [String] = []
         for outcome in outcomes {
             // `continue`, not `return`: one missing message must not hide the rest.
             guard let alert = JumpMessages.alert(for: outcome) else {
@@ -165,17 +166,21 @@ extension SessionRouterTests {
             }
             XCTAssertFalse(alert.title.isEmpty)
             XCTAssertFalse(alert.body.isEmpty)
-            XCTAssertTrue(alert.body.range(of: "\\p{Cyrillic}", options: .regularExpression) != nil,
-                          "message for \(outcome) is not in Russian: \(alert.body)")
+            bodies.append(alert.body)
         }
+        // Distinct, not merely non-empty. Six outcomes sharing one apologetic
+        // sentence would pass an "is there a message?" check while telling the user
+        // nothing about which of six different things went wrong — which is the
+        // silent refusal the spec forbids, just with an alert in front of it.
+        XCTAssertEqual(Set(bodies).count, bodies.count, "two outcomes share a message: \(bodies)")
     }
 
     /// Denied automation is not the end of the road: the executor still brings the
     /// app forward, and the message must say what happened and what to do.
     func testAutomationDeniedMentionsThePermissionAndTheFallback() {
         let alert = JumpMessages.alert(for: .automationDenied(fellBack: true))
-        XCTAssertTrue(alert!.body.contains("разрешение"))
-        XCTAssertTrue(alert!.body.contains("Пока вывел приложение вперёд"))
+        XCTAssertTrue(alert!.body.localizedCaseInsensitiveContains("automation permission"))
+        XCTAssertTrue(alert!.body.contains("Brought the app forward"))
     }
 
     /// The fallback activation can be refused (CodeCat is an accessory app behind a
@@ -183,30 +188,30 @@ extension SessionRouterTests {
     /// was not is a lie the user can see through — it must say so plainly instead.
     func testAutomationDeniedWithoutAFallbackDoesNotClaimTheAppCameForward() {
         let alert = JumpMessages.alert(for: .automationDenied(fellBack: false))
-        XCTAssertTrue(alert!.body.contains("разрешение"))
-        XCTAssertFalse(alert!.body.contains("вывел приложение вперёд"))
-        XCTAssertTrue(alert!.body.contains("не удалось"))
+        XCTAssertTrue(alert!.body.localizedCaseInsensitiveContains("automation permission"))
+        XCTAssertFalse(alert!.body.localizedCaseInsensitiveContains("brought the app forward"))
+        XCTAssertTrue(alert!.body.localizedCaseInsensitiveContains("didn't work"))
     }
 
     func testTabNotFoundMentionsTheClosedTab() {
         let alert = JumpMessages.alert(for: .tabNotFound(fellBack: true))
-        XCTAssertTrue(alert!.body.contains("вкладк"))
-        XCTAssertTrue(alert!.body.contains("Вывел приложение вперёд"))
+        XCTAssertTrue(alert!.body.localizedCaseInsensitiveContains("tab"))
+        XCTAssertTrue(alert!.body.contains("Brought the app forward"))
     }
 
     func testTabNotFoundWithoutAFallbackDoesNotClaimTheAppCameForward() {
         let alert = JumpMessages.alert(for: .tabNotFound(fellBack: false))
-        XCTAssertTrue(alert!.body.contains("вкладк"))
-        XCTAssertFalse(alert!.body.contains("Вывел приложение вперёд"))
-        XCTAssertTrue(alert!.body.contains("не удалось"))
+        XCTAssertTrue(alert!.body.localizedCaseInsensitiveContains("tab"))
+        XCTAssertFalse(alert!.body.contains("Brought the app forward"))
+        XCTAssertTrue(alert!.body.localizedCaseInsensitiveContains("didn't work"))
     }
 
     /// Finding 4: a terminal that never answers must still produce a message, and it
-    /// has to be a Russian one describing what actually happened.
-    func testTimedOutTerminalHasItsOwnRussianDetail() {
+    /// has to describe what actually happened rather than just failing.
+    func testTimedOutTerminalHasItsOwnDetail() {
         XCTAssertFalse(JumpMessages.timedOutDetail(awaitingConsent: false).isEmpty)
         XCTAssertTrue(JumpMessages.timedOutDetail(awaitingConsent: false)
-            .range(of: "\\p{Cyrillic}", options: .regularExpression) != nil)
+            .localizedCaseInsensitiveContains("terminal"))
         XCTAssertTrue(JumpMessages.alert(for: .failed(JumpMessages.timedOutDetail(awaitingConsent: false)))!
             .body.contains(JumpMessages.timedOutDetail(awaitingConsent: false)))
     }
@@ -224,16 +229,15 @@ extension SessionRouterTests {
         let didNot = JumpMessages.terminalStillBusyDetail(fellBack: false)
         XCTAssertNotEqual(fellBack, didNot)
         for detail in [fellBack, didNot] {
-            XCTAssertTrue(detail.range(of: "\\p{Cyrillic}", options: .regularExpression) != nil)
-            XCTAssertTrue(detail.localizedCaseInsensitiveContains("предыдущ"))
+            XCTAssertTrue(detail.localizedCaseInsensitiveContains("previous jump"))
         }
-        XCTAssertTrue(fellBack.contains("вперёд"))
-        XCTAssertTrue(didNot.contains("не удалось"))
+        XCTAssertTrue(fellBack.contains("Brought the app forward"))
+        XCTAssertTrue(didNot.localizedCaseInsensitiveContains("didn't work"))
     }
 
     /// A `.failed` outcome still owes the user a destination, so its detail has to
     /// say what the fallback actually did — the same honesty the two recoverable
-    /// outcomes already carry. Without this, "терминал не ответил" leaves a user
+    /// outcomes already carry. Without this, "the terminal didn't answer" leaves a user
     /// whose fallback was refused with nothing to do next.
     func testFailureDetailSaysWhetherTheAppCameForward() {
         let fellBack = JumpMessages.failureDetail(JumpMessages.timedOutDetail(awaitingConsent: false), fellBack: true)
@@ -242,13 +246,13 @@ extension SessionRouterTests {
         for detail in [fellBack, didNot] {
             XCTAssertTrue(detail.hasPrefix(JumpMessages.timedOutDetail(awaitingConsent: false)))
         }
-        XCTAssertTrue(fellBack.localizedCaseInsensitiveContains("вывел приложение вперёд"))
-        XCTAssertTrue(didNot.localizedCaseInsensitiveContains("не удалось"))
-        XCTAssertFalse(didNot.localizedCaseInsensitiveContains("Вывел приложение вперёд"))
+        XCTAssertTrue(fellBack.contains("Brought the app forward"))
+        XCTAssertTrue(didNot.localizedCaseInsensitiveContains("didn't work"))
+        XCTAssertFalse(didNot.localizedCaseInsensitiveContains("brought the app forward"))
     }
 
     func testRowHintsExplainWhyAJumpIsUnavailable() {
-        XCTAssertTrue(JumpMessages.rowHint(for: .noHostRecorded).contains("до CodeCat"))
+        XCTAssertTrue(JumpMessages.rowHint(for: .noHostRecorded).contains("before CodeCat"))
         XCTAssertFalse(JumpMessages.rowHint(for: .hostGone).isEmpty)
     }
 }

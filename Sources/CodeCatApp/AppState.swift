@@ -104,7 +104,7 @@ final class AppState: ObservableObject {
         return !store.hasSessions
     }
 
-    /// Whether the "Об ассетах" credits disclosure in `SkinPickerView` is expanded.
+    /// Whether the "About the assets" credits disclosure in `SkinPickerView` is expanded.
     /// Lives here rather than as local `@State` on that view so toggling it
     /// publishes through `objectWillChange` like every other piece of visible
     /// state: `OverlayController.handleStateChange()` resizes the details panel to
@@ -200,14 +200,14 @@ final class AppState: ObservableObject {
         // жить недолго, и тогда 15-секундный тик до предела просто не доживёт.
         log.rotateIfNeeded()
         let info = Bundle.main.infoDictionary
-        log.write("запуск — версия \(info?["CFBundleShortVersionString"] as? String ?? "?") "
-            + "(\(info?["CFBundleVersion"] as? String ?? "?")), вид: \(displayMode.rawValue), "
-            + "облик: \(skinID)")
+        log.write("launch — version \(info?["CFBundleShortVersionString"] as? String ?? "?") "
+            + "(\(info?["CFBundleVersion"] as? String ?? "?")), display: \(displayMode.rawValue), "
+            + "skin: \(skinID)")
 
         hooksInstalled = HooksInstaller.isInstalled(
             in: try? Data(contentsOf: CodeCatPaths.claudeSettings),
             hookCommand: hookBinaryPath())
-        log.write("хуки установлены: \(hooksInstalled), бинарник: \(hookBinaryPath())")
+        log.write("hooks installed: \(hooksInstalled), binary: \(hookBinaryPath())")
 
         let server = HookSocketServer(path: CodeCatPaths.socketURL) { [weak self] event in
             guard let self else { return }
@@ -215,18 +215,18 @@ final class AppState: ObservableObject {
             // хук перед отправкой, это единственный способ отличить «Claude Code не
             // позвал хук» от «позвал, но до приложения не дошло»: снаружи обе
             // неисправности выглядят одинаково — котик просто не шевелится.
-            self.log.write("событие \(event.hookEventName) сессия=\(event.sessionId.prefix(8)) "
+            self.log.write("event \(event.hookEventName) session=\(event.sessionId.prefix(8)) "
                 + "cwd=\(event.cwd ?? "—") tty=\(event.tty ?? "—")")
             self.store.apply(hook: event, now: Date())
             self.refresh()
         }
         do {
             try server.start()
-            log.write("сокет слушает: \(CodeCatPaths.socketURL.path)")
+            log.write("socket listening: \(CodeCatPaths.socketURL.path)")
         } catch {
             // Раньше это уходило в FileHandle.standardError, то есть в никуда:
             // бандл запускают из Finder, и стандартного вывода у него нет.
-            log.write("ОШИБКА: не удалось поднять сокет на \(CodeCatPaths.socketURL.path): \(error)")
+            log.write("ERROR: could not open the socket at \(CodeCatPaths.socketURL.path): \(error)")
         }
         socketServer = server
 
@@ -285,16 +285,16 @@ final class AppState: ObservableObject {
         // рядом с событиями хука, он отвечает на главный вопрос ручной проверки:
         // «кот показывает не то — событие не пришло или пришло, но состояние
         // посчиталось иначе?»
-        log.write("состояние: \(lastAggregate) → \(agg), сессий: \(store.ordered.count)")
+        log.write("state: \(lastAggregate) → \(agg), sessions: \(store.ordered.count)")
         switch agg {
         case .waiting:
-            awayLog.record("агент ждёт тебя", at: Date())
+            awayLog.record(L10n.t("away.waiting", "an agent is waiting for you"), at: Date())
             if soundsEnabled { NSSound(named: "Purr")?.play() }
         case .done:
-            awayLog.record("агент закончил работу", at: Date())
+            awayLog.record(L10n.t("away.done", "an agent finished its work"), at: Date())
             if soundsEnabled { NSSound(named: "Glass")?.play() }
         case .problem:
-            awayLog.record("сессия оборвалась", at: Date())
+            awayLog.record(L10n.t("away.crashed", "a session stopped"), at: Date())
         default:
             break
         }
@@ -339,8 +339,10 @@ final class AppState: ObservableObject {
             // settings (permission allowlist, MCP config, model settings, other hooks) by
             // writing a document containing only CodeCat's hooks over it.
             let alert = NSAlert()
-            alert.messageText = "Не удалось установить хуки"
-            alert.informativeText = "Не удалось прочитать файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте права доступа и попробуйте снова."
+            alert.messageText = L10n.t("hooks.install.failed.title", "Couldn't install the hooks")
+            alert.informativeText = L10n.f("hooks.settings.unreadable",
+                "Couldn't read the settings file %@. Check its permissions and try again.",
+                CodeCatPaths.claudeSettings.path)
             alert.runModal()
             return
         }
@@ -348,8 +350,10 @@ final class AppState: ObservableObject {
         guard let updated = try? HooksInstaller.install(
             into: existing, hookCommand: hookBinaryPath()) else {
             let alert = NSAlert()
-            alert.messageText = "Не удалось установить хуки"
-            alert.informativeText = "Не удалось обновить файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте, что файл корректен."
+            alert.messageText = L10n.t("hooks.install.failed.title", "Couldn't install the hooks")
+            alert.informativeText = L10n.f("hooks.settings.unwritable",
+                "Couldn't update the settings file %@. Check that the file is valid.",
+                CodeCatPaths.claudeSettings.path)
             alert.runModal()
             return
         }
@@ -365,8 +369,9 @@ final class AppState: ObservableObject {
             hooksInstalled = true
         } catch {
             let alert = NSAlert()
-            alert.messageText = "Не удалось установить хуки"
-            alert.informativeText = "Не удалось записать в \(CodeCatPaths.claudeSettings.path): \(error.localizedDescription)"
+            alert.messageText = L10n.t("hooks.install.failed.title", "Couldn't install the hooks")
+            alert.informativeText = L10n.f("hooks.settings.write.error", "Couldn't write to %@: %@",
+                CodeCatPaths.claudeSettings.path, error.localizedDescription)
             alert.runModal()
         }
     }
@@ -396,23 +401,33 @@ final class AppState: ObservableObject {
             // `remove` трактует nil как пустой документ, и запись такого результата
             // затёрла бы реальные настройки пользователя целиком.
             presentHooksAlert(
-                title: "Не удалось убрать хуки",
-                message: "Не удалось прочитать файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте права доступа и попробуйте снова.")
+                title: L10n.t("hooks.remove.failed.title", "Couldn't remove the hooks"),
+                message: L10n.f("hooks.settings.unreadable",
+                    "Couldn't read the settings file %@. Check its permissions and try again.",
+                    CodeCatPaths.claudeSettings.path))
             return
         }
 
         let confirm = NSAlert()
-        confirm.messageText = "Убрать хуки CodeCat?"
-        confirm.informativeText = "Из \(CodeCatPaths.claudeSettings.path) будут удалены записи CodeCat для событий: \(HooksInstaller.events.joined(separator: ", ")). Чужие хуки и остальные настройки останутся как есть.\n\nБез хуков котик продолжит работать, но о состоянии сессий будет узнавать с задержкой — по транскриптам, а не по событиям."
-        confirm.addButton(withTitle: "Убрать")
-        confirm.addButton(withTitle: "Отмена")
+        confirm.messageText = L10n.t("hooks.remove.confirm.title", "Remove CodeCat's hooks?")
+        confirm.informativeText = L10n.f("hooks.remove.confirm.body",
+            "CodeCat's entries for these events will be removed from %1$@: %2$@. "
+            + "Other hooks and the rest of your settings are left alone."
+            + "\n\nWithout hooks the cat keeps working, but it learns about session "
+            + "changes late — from transcripts rather than from events.",
+            CodeCatPaths.claudeSettings.path,
+            HooksInstaller.events.joined(separator: ", "))
+        confirm.addButton(withTitle: L10n.t("hooks.remove.confirm.button", "Remove"))
+        confirm.addButton(withTitle: L10n.t("button.cancel", "Cancel"))
         guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
         guard let updated = try? HooksInstaller.remove(
             from: existing, hookCommand: hookBinaryPath()) else {
             presentHooksAlert(
-                title: "Не удалось убрать хуки",
-                message: "Не удалось обновить файл настроек \(CodeCatPaths.claudeSettings.path). Проверьте, что файл корректен.")
+                title: L10n.t("hooks.remove.failed.title", "Couldn't remove the hooks"),
+                message: L10n.f("hooks.settings.unwritable",
+                    "Couldn't update the settings file %@. Check that the file is valid.",
+                    CodeCatPaths.claudeSettings.path))
             return
         }
 
@@ -423,8 +438,9 @@ final class AppState: ObservableObject {
             hooksInstalled = false
         } catch {
             presentHooksAlert(
-                title: "Не удалось убрать хуки",
-                message: "Не удалось записать в \(CodeCatPaths.claudeSettings.path): \(error.localizedDescription)")
+                title: L10n.t("hooks.remove.failed.title", "Couldn't remove the hooks"),
+                message: L10n.f("hooks.settings.write.error", "Couldn't write to %@: %@",
+                    CodeCatPaths.claudeSettings.path, error.localizedDescription))
         }
     }
 
@@ -462,8 +478,9 @@ final class AppState: ObservableObject {
         guard !lidHelperInstallInFlight else { return }
         guard let scriptURL = locateScript("install-lid-mode.sh") else {
             presentLidAlert(
-                title: "Скрипт установки не найден",
-                message: "Запусти вручную: sudo bash scripts/install-lid-mode.sh")
+                title: L10n.t("lid.script.missing.title", "Installer script not found"),
+                message: L10n.t("lid.script.missing.body",
+                    "Run it yourself: sudo bash scripts/install-lid-mode.sh"))
             return
         }
         lidHelperInstallInFlight = true
@@ -492,17 +509,23 @@ final class AppState: ObservableObject {
                 enableLidModeNowThatHelperIsReady()
             } else {
                 presentLidAlert(
-                    title: "Не удалось включить режим закрытой крышки",
-                    message: "Установка завершилась, но правило всё ещё не найдено. Попробуй ещё раз или установи вручную: sudo bash scripts/install-lid-mode.sh")
+                    title: L10n.t("lid.enable.failed.title", "Couldn't turn on closed-lid mode"),
+                    message: L10n.t("lid.enable.failed.body",
+                        "The installer finished but the rule still isn't there. Try again, or "
+                        + "install it yourself: sudo bash scripts/install-lid-mode.sh"))
             }
         case .cancelled:
             presentLidAlert(
-                title: "Нужна разовая установка",
-                message: "Режиму закрытой крышки требуется один раз разрешение администратора. Его можно включить позже — просто попробуй ещё раз, когда будешь готов ввести пароль.")
+                title: L10n.t("lid.setup.needed.title", "One-time setup needed"),
+                message: L10n.t("lid.setup.needed.body",
+                    "Closed-lid mode needs an administrator password once. You can turn it on "
+                    + "later — try again when you're ready to enter it."))
         case .failed(let detail):
             presentLidAlert(
-                title: "Установка не удалась",
-                message: "Скрипт установки завершился с ошибкой (\(detail)). Попробуй установить вручную: sudo bash scripts/install-lid-mode.sh")
+                title: L10n.t("lid.install.failed.title", "Setup didn't finish"),
+                message: L10n.f("lid.install.failed.body",
+                    "The installer exited with an error (%@). Try installing it yourself: "
+                    + "sudo bash scripts/install-lid-mode.sh", detail))
         }
     }
 
@@ -529,7 +552,8 @@ final class AppState: ObservableObject {
         do {
             try task.run()
         } catch {
-            return (-1, "Не удалось запустить osascript: \(error.localizedDescription)")
+            return (-1, L10n.f("lid.osascript.failed", "Couldn't run osascript: %@",
+                               error.localizedDescription))
         }
         // Drain both pipes BEFORE waiting for exit. Waiting first deadlocks if the
         // child fills a 64 KB pipe buffer: it blocks writing while we block waiting.
@@ -560,7 +584,7 @@ final class AppState: ObservableObject {
     func shutdown() {
         guard !didShutdown else { return }
         didShutdown = true
-        log.write("выход")
+        log.write("shutdown")
         lidController.resetOnExit()
         socketServer?.stop()
         watcher?.stop()
@@ -659,13 +683,14 @@ final class AppState: ObservableObject {
         // and its windows do not come forward on their own.
         NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = "Не удалось загрузить облик «\(skin.name)»"
+        alert.messageText = L10n.f("skin.load.failed.title", "Couldn't load the %@ skin", skin.name)
         // Must not claim which skin ended up on screen: if the whole `Skins`
         // directory is missing, the default skin's own sheets fail to load too, and
         // the user is looking at `CatView`'s drawn-cat fallback, not the default
-        // skin. Naming only the skin that failed and saying "мы переключились" keeps
+        // skin. Naming only the skin that failed and saying "switched" keeps
         // this true in both cases.
-        alert.informativeText = "Файлы набора не читаются. Переключились на другой облик."
+        alert.informativeText = L10n.t("skin.load.failed.body",
+            "Its files couldn't be read. Switched to another skin.")
         alert.window.level = .modalPanel
         alert.window.orderFrontRegardless()
         alert.runModal()

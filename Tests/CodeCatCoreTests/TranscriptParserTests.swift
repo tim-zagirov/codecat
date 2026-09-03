@@ -13,7 +13,7 @@ final class TranscriptParserTests: XCTestCase {
         let l = line("assistant", content:
             #"{"type":"tool_use","name":"Edit","input":{"file_path":"/Users/x/proj/src/api.ts"}}"#)
         let a = TranscriptParser.parseLine(l)
-        XCTAssertEqual(a?.description, "редактирует api.ts")
+        XCTAssertEqual(a?.description, "editing api.ts")
         XCTAssertEqual(a?.sessionId, "s1")
         XCTAssertEqual(a?.projectPath, "/Users/x/proj")
     }
@@ -21,35 +21,35 @@ final class TranscriptParserTests: XCTestCase {
     func testBashToolProducesCommandDescription() {
         let l = line("assistant", content:
             #"{"type":"tool_use","name":"Bash","input":{"command":"ls"}}"#)
-        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "выполняет команду")
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "running a command")
     }
 
     func testReadToolProducesReadDescription() {
         let l = line("assistant", content:
             #"{"type":"tool_use","name":"Read","input":{"file_path":"/a/b/config.json"}}"#)
-        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "читает config.json")
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "reading config.json")
     }
 
     func testSearchToolsProduceSearchDescription() {
         let l = line("assistant", content:
             #"{"type":"tool_use","name":"Grep","input":{"pattern":"x"}}"#)
-        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "ищет по коду")
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "searching the code")
     }
 
     func testUnknownToolProducesGenericToolDescription() {
         let l = line("assistant", content:
             #"{"type":"tool_use","name":"WebSearch","input":{}}"#)
-        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "использует WebSearch")
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "using WebSearch")
     }
 
     func testTextOnlyAssistantMessageMeansThinking() {
         let l = line("assistant", content: #"{"type":"text","text":"hello"}"#)
-        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "думает")
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "thinking")
     }
 
     func testUserMessageMeansGotTask() {
         let l = line("user", content: #"{"type":"text","text":"do it"}"#)
-        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "работает над задачей")
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.description, "working on the task")
     }
 
     func testTimestampParsed() {
@@ -120,7 +120,7 @@ final class TranscriptParserTests: XCTestCase {
     func testAssistantEndTurnIsRecognisedAsTheEndOfWork() {
         let activity = TranscriptParser.parseLine(assistant(stopReason: "end_turn"))
         XCTAssertEqual(activity?.endsTurn, true)
-        XCTAssertEqual(activity?.description, "закончил")
+        XCTAssertEqual(activity?.description, "done")
     }
 
     /// Противоположность: вызов инструмента. Таких записей в реальной сессии в
@@ -128,7 +128,7 @@ final class TranscriptParserTests: XCTestCase {
     func testAssistantToolUseIsNotTheEndOfWork() {
         let activity = TranscriptParser.parseLine(assistant(stopReason: "tool_use", tool: "Bash"))
         XCTAssertEqual(activity?.endsTurn, false)
-        XCTAssertEqual(activity?.description, "выполняет команду")
+        XCTAssertEqual(activity?.description, "running a command")
     }
 
     /// Запись без `stop_reason` (старая версия формата, промежуточный кусок) — это не

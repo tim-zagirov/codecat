@@ -66,7 +66,7 @@ final class TranscriptWatcherTests: XCTestCase {
         let received = expectation(description: "активность доехала обходом")
         let watcher = TranscriptWatcher(root: root) { activity in
             XCTAssertEqual(activity.sessionId, "s1")
-            XCTAssertEqual(activity.description, "выполняет команду")
+            XCTAssertEqual(activity.description, "running a command")
             received.fulfill()
         }
         // Первый проход знакомится с файлом и встаёт на его конец: историю чужих
