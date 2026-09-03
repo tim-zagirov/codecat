@@ -48,6 +48,13 @@ a build a stranger can trust.
   from git history, so this release requires a force-push.
 
 ### Fixed
+- **The island no longer swallows clicks where it is not drawn.** The window is a
+  rectangle and the island is not: clicks over the concave corners at the screen
+  edge — where the app menu on the left and the status icons on the right live —
+  were being taken by the island rather than the menu bar, permanently; and for a
+  fraction of a second while the menu expanded, the window was wider than the
+  drawing beneath it. Hit-testing now follows the same `IslandLayout.silhouettePath`
+  the view builds its mask from.
 - A skin whose sheets are missing no longer produces an error alert on launch —
   it is filtered out of the picker instead, and a stored selection pointing at it
   migrates silently to the default.

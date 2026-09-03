@@ -17,3 +17,7 @@ Sources/CodeCatApp/Skins/elthen/
 # The saved review diffs are the one exception: they are `git diff` output,
 # reproducible from the history they were taken against, and half a megabyte of it.
 .superpowers/sdd/*.diff
+
+# A working document the author generated but never committed; it describes the
+# pre-0.3.0 state (Russian UI, 151 commits) and would publish as stale.
+PRODUCT_CONTEXT.md
