@@ -3,3 +3,9 @@
 dist/
 .DS_Store
 *.xcodeproj
+
+# Elthen's sprite sheet is fetched at build time, never committed: the author's
+# terms allow using the sprites in a project but forbid passing the assets
+# themselves on, and a public repository does exactly that.
+# See scripts/fetch-optional-assets.sh and THIRD_PARTY_NOTICES.md.
+Sources/CodeCatApp/Skins/elthen/

@@ -52,6 +52,7 @@ final class SpriteSheetStore {
     private var sheets: [String: CGImage] = [:]      // keyed by "<directory>/<sheet>"
     private var loaded: [String: LoadedSkin] = [:]   // keyed by skin id
     private var failed: Set<String> = []             // skin ids already known to be broken
+    private var assetsPresent: [String: Bool] = [:]  // keyed by skin id, see hasAssets(for:)
 
     /// Directory that holds `Skins/`, resolved once.
     ///
@@ -78,7 +79,7 @@ final class SpriteSheetStore {
     ///   output places `CodeCat_CodeCatApp.bundle` in (confirmed by inspecting
     ///   `.build/<triple>/debug/`), so this is exactly the layout the generated
     ///   accessor's own `mainPath` resolves to, without hardcoding any absolute path.
-    private static let skinsRoot: URL? = {
+    private nonisolated static let skinsRoot: URL? = {
         let candidates = [
             Bundle.main.resourceURL?.appendingPathComponent("Skins"),
             Bundle.main.bundleURL.appendingPathComponent("CodeCat_CodeCatApp.bundle/Skins"),
@@ -89,10 +90,39 @@ final class SpriteSheetStore {
         return nil
     }()
 
-    private static func isDirectory(_ url: URL) -> Bool {
+    private nonisolated static func isDirectory(_ url: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
             && isDirectory.boolValue
+    }
+
+    /// Whether every sheet this skin declares is present on disk.
+    ///
+    /// A file-existence check, not a load: this is asked once per skin to decide
+    /// what the picker shows, and decoding eight PNGs to answer it would make
+    /// opening the panel visibly slower. A skin that passes this and still fails to
+    /// decode is handled where it always was — `load` returns nil and
+    /// `AppState.reportSkinLoadFailure` reverts to the default with an alert.
+    ///
+    /// The answer is cached because it decides what the picker draws on every
+    /// rebuild, and the set of files on disk does not change while the app runs.
+    func hasAssets(for skin: MascotSkin) -> Bool {
+        if let known = assetsPresent[skin.id] { return known }
+        let present = Self.assetsExist(for: skin)
+        assetsPresent[skin.id] = present
+        return present
+    }
+
+    /// The uncached, actor-free form of `hasAssets(for:)`. It touches nothing but
+    /// the file system and the resolved skins root, so `AppState.init` — which runs
+    /// before any view exists and has no main-actor context to borrow — can ask the
+    /// same question without hopping actors.
+    nonisolated static func assetsExist(for skin: MascotSkin) -> Bool {
+        guard let root = skinsRoot else { return false }
+        let directory = root.appendingPathComponent(skin.directory)
+        return skin.declaredSheets.allSatisfy {
+            FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path)
+        }
     }
 
     /// Reads, measures and caches a skin. Returns nil if any declared sheet is
