@@ -4,26 +4,41 @@ Everything below landed on `master` as separate commits between `83d777f` and
 HEAD. **Tests: 390 before, 404 after, all green.** The version is now 0.3.0;
 `v0.2.0` tags the state this pass started from.
 
-**Read the force-push section before you push anything.**
+---
+
+## Status as of 2026-09-03, after the ship pass
+
+| Step | State |
+| --- | --- |
+| History rewrite + force-push | **done** — `origin/master` is the rewritten history |
+| Tags `v0.2.0`, `v0.3.0` | **done**, pushed |
+| Repository renamed to `codecat` | **done** — https://github.com/tim-zagirov/codecat |
+| Repository visibility | **still private**, by the author's decision |
+| PR #1 | already merged on GitHub; the old checklist was out of date about it |
+| Island click-through fix | **merged** into master |
+| CI | **green** on macOS 14 (`swift test` + `make bundle`) |
+| `make sign` | **done** — Developer ID, hardened runtime, timestamped, entitlement in the signature |
+| `make notarize` / `make release` | **blocked** — the `codecat` keychain profile does not exist yet |
+| DMG | **not built** — `make release` runs it only after notarisation |
+
+Gatekeeper's verdict on the signed bundle right now is
+`source=Unnotarized Developer ID`. That is correct and expected, and it is the
+reason notarisation is the last thing standing between this and a download link.
 
 ---
 
-## ⚠️ A force-push is required
+## The force-push (done)
 
 Elthen's sprite sheet was purged from git history with `git filter-branch`
 (`git-filter-repo` is not installed on this machine, and installing it would
 have changed your environment without asking). Every commit hash from
-`fd34a4c` onward has changed, so the rewritten `master` cannot fast-forward
-onto the remote:
+`fd34a4c` onward changed, so the rewritten `master` could not fast-forward onto
+the remote. It was pushed with `--force-with-lease` — which refuses if the
+remote moved since the last fetch, the one accident this is exposed to — and
+both tags went with it. **Nothing needs force-pushing again.**
 
-```bash
-git push --force-with-lease origin master
-git push --force-with-lease origin claude/codecat-release-prep-20e944
-git push origin v0.2.0 v0.3.0
-```
-
-`--force-with-lease` rather than `--force`: it refuses if the remote moved since
-you last fetched, which is the one accident this is exposed to.
+If another clone of this repository exists anywhere, it still holds the old
+history and will fight this one. Re-clone it rather than pulling.
 
 Three follow-ups:
 
