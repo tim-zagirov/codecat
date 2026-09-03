@@ -1,49 +1,51 @@
 import SwiftUI
 import CodeCatCore
 
-/// Содержимое острова: кот в левом крыле, счётчик в правом, между ними — дырка
-/// под физический вырез.
+/// The island's content: the cat in the left wing, the counter in the right, and
+/// between them a hole for the physical notch.
 ///
-/// Крылья одинаковой ширины, и это главное правило композиции. Кот — объект с
-/// габаритом, счётчик — штрих; уравнять их кеглем или цветом нельзя, только
-/// геометрией. Пока крыло считалось по спрайту, всё чёрное пятно уезжало от
-/// центра экрана и перевешивало котом.
+/// The wings are equally wide, and that is the composition's main rule. The cat is
+/// an object with bulk, the counter is a mark; they cannot be balanced with type
+/// size or colour, only with geometry. While the wing was sized from the sprite, the
+/// whole black shape drifted off the screen's centre and was cat-heavy.
 struct IslandView: View {
     @ObservedObject var appState: AppState
     let notchWidth: CGFloat
     let wingWidth: CGFloat
     let spriteSize: CGSize
-    /// Высота полосы острова — она же высота выреза.
+    /// Height of the island strip — the same as the notch's height.
     let height: CGFloat
-    /// Какое меню показывать под островом. `nil` — только полоса.
+    /// Which menu to show under the island. `nil` means the strip alone.
     var menuLevel: IslandMenuLevel?
-    /// Меню закрывается: силуэт едет обратно к высоте острова той же пружиной.
-    /// Содержимое при этом остаётся смонтированным — иначе схлопывать было бы
-    /// нечего, — и снимается уже после того, как анимация доехала.
+    /// The menu is closing: the silhouette travels back to the island's height on the
+    /// same spring. Its content stays mounted meanwhile — otherwise there would be
+    /// nothing to collapse — and is taken down once the animation has arrived.
     var isCollapsing: Bool = false
     var onJump: () -> Void = {}
 
-    /// Высота содержимого меню, измеренная по факту вёрстки, и признак того, что
-    /// раскрытие состоялось. Пара нужна вместе: пока высота неизвестна, раскрывать
-    /// нечего, а запуск анимации раньше поехал бы от нуля к нулю.
+    /// Height of the menu's content as the layout actually measured it, and a flag
+    /// that the reveal has happened. The pair is needed together: while the height is
+    /// unknown there is nothing to reveal, and starting the animation earlier would
+    /// run from zero to zero.
     @State private var menuHeight: CGFloat = 0
     @State private var revealed = false
 
-    /// Пружина без отскока. Отскок в строке меню читается не как живость, а как
-    /// дребезг: форма стоит вплотную к кромке экрана, и любое перелетание за
-    /// конечную высоту выглядит браком.
+    /// A spring with no overshoot. Overshoot in the menu bar reads not as liveliness
+    /// but as rattle: the shape sits flush against the screen's edge, and any overrun
+    /// past the final height looks like a defect.
     static let reveal = Animation.spring(response: 0.28, dampingFraction: 1.0)
 
-    /// Сколько ждать, прежде чем убирать содержимое меню и сжимать окно: пружина
-    /// без отскока укладывается в это время с запасом. Знает и контроллер.
+    /// How long to wait before taking the menu's content down and shrinking the
+    /// window: a spring with no overshoot settles well within this. The controller
+    /// knows it too.
     static let revealDuration: TimeInterval = 0.32
 
-    /// Ширина корпуса — без места под галтели.
+    /// Width of the body — without the room for the fillets.
     private var bodyWidth: CGFloat { 2 * wingWidth + notchWidth }
 
-    /// До какой высоты открыт силуэт прямо сейчас. Это и есть вся анимация: у
-    /// одной формы растёт высота, а её скруглённая нижняя кромка едет вниз вместе
-    /// с ней. Ни шва, ни второй формы, ни подгонки радиусов друг под друга.
+    /// How far the silhouette is open right now. This is the whole animation: one
+    /// shape's height grows and its rounded bottom edge travels down with it. No seam,
+    /// no second shape, no matching radii to each other.
     private var revealedHeight: CGFloat { height + (revealed ? menuHeight : 0) }
 
     var body: some View {
@@ -54,14 +56,15 @@ struct IslandView: View {
                                width: bodyWidth, onJump: onJump)
             }
         }
-        // Место под галтели у кромки экрана: они лежат снаружи корпуса, поэтому
-        // окно шире корпуса на `edgeRadius` с каждой стороны, а содержимое остаётся
-        // ровно в корпусе. См. `IslandLayout.edgeRadius`.
+        // Room for the fillets at the screen edge: they lie outside the body, so the
+        // window is wider than the body by `edgeRadius` on each side while the content
+        // stays exactly within the body. See `IslandLayout.edgeRadius`.
         .padding(.horizontal, IslandLayout.edgeRadius)
         .background(Color.black)
-        // Одна маска на остров и меню разом — та самая общая подложка. Форма
-        // рисуется маской, а не обрезкой фона: `clipShape` резал бы прямоугольник
-        // фона, а закрашивать надо в том числе площадь снаружи корпуса (галтели).
+        // One mask for the island and the menu at once — the shared backing. The shape
+        // is drawn by a mask rather than by clipping the background: `clipShape` would
+        // cut the background's rectangle, and the area outside the body (the fillets)
+        // has to be painted too.
         .mask(alignment: .top) {
             IslandShape(bottomRadius: IslandLayout.cornerRadius)
                 .frame(height: revealedHeight)
@@ -69,8 +72,8 @@ struct IslandView: View {
         .onPreferenceChange(IslandContentHeightKey.self) { measured in
             guard measured > 0 else { return }
             if revealed {
-                // Переход «короткое → полное»: раскрытие уже состоялось, той же
-                // пружиной доезжаем до новой высоты, не схлопывая список сессий.
+                // Going from short to full: the reveal already happened, so travel to
+                // the new height on the same spring without collapsing the session list.
                 withAnimation(Self.reveal) { menuHeight = measured }
             } else {
                 menuHeight = measured
@@ -83,21 +86,21 @@ struct IslandView: View {
             withAnimation(Self.reveal) { revealed = false }
         }
         .onChange(of: menuLevel == nil) { _, gone in
-            // Содержимое сняли — сбрасываем без анимации: силуэт уже стоит на
-            // высоте острова, анимировать нечего.
+            // The content was taken down — reset without animation: the silhouette is
+            // already at the island's height and there is nothing to animate.
             guard gone else { return }
             revealed = false
             menuHeight = 0
         }
     }
 
-    /// Полоса острова: кот в левом крыле, счётчик в правом, между ними — дырка
-    /// под физический вырез.
+    /// The island strip: the cat in the left wing, the counter in the right, and
+    /// between them a hole for the physical notch.
     private var strip: some View {
         HStack(spacing: 0) {
             cat
                 .frame(width: wingWidth, height: height)
-            // Физический вырез: сюда ничего не кладём, там дырка в матрице.
+            // The physical notch: nothing goes here, there is a hole in the panel.
             Color.clear
                 .frame(width: notchWidth, height: height)
             counter
@@ -117,21 +120,21 @@ struct IslandView: View {
                    onLoadFailure: { [appState] skin in appState.reportSkinLoadFailure(skin) })
     }
 
-    /// Счётчик в капсуле, а не голой цифрой.
+    /// The counter in a capsule rather than a bare digit.
     ///
-    /// Капсула здесь несёт вес, а не украшает: одиночный глиф против плотного
-    /// спрайта читается как штрих, и правая сторона визуально проваливается.
-    /// Ограниченная форма уравнивает стороны. Подпись («1 сессия», «3 сессии»)
-    /// отпала по другой причине: русское счётное слово склоняется по числу, и
-    /// ширина капсулы прыгала бы при каждом изменении счёта.
+    /// The capsule carries weight here, it does not decorate: a single glyph against a
+    /// dense sprite reads as a mark, and the right-hand side visually caves in. A
+    /// bounded shape evens the two sides out. A label ("1 session", "3 sessions") was
+    /// dropped for a different reason: the word's width changes with the number, so
+    /// the capsule would jump every time the count changed.
     @ViewBuilder
     private var counter: some View {
         let count = appState.store.badgeCount
         if count > 0 {
             HStack(spacing: 4) {
                 statusDot
-                // Цифра всегда белая: состояние несёт точка. Красная цифра рядом
-                // с красной точкой — это два сигнала об одном и том же.
+                // The digit is always white: the dot carries the state. A red digit next
+                // to a red dot is two signals for one thing.
                 Text("\(count)")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
@@ -141,17 +144,17 @@ struct IslandView: View {
             .frame(height: 20)
             .background(Capsule().fill(Color.white.opacity(0.10)))
         } else {
-            // Считать нечего — но остров остаётся на месте, иначе на него нельзя
-            // будет навести мышь. Точка без капсулы: держать пустую форму не за чем.
+            // Nothing to count — but the island stays put, or there would be nothing to
+            // hover. A dot without the capsule: an empty shape earns nothing.
             Circle()
                 .fill(Color.white.opacity(0.35))
                 .frame(width: 6, height: 6)
         }
     }
 
-    /// Цвет точки повторяет цвета статусов в списке сессий один в один: точка на
-    /// острове и точка в строке меню обязаны значить одно и то же, иначе система
-    /// цветов распадается на две.
+    /// The dot's colour repeats the status colours in the session list exactly: a dot
+    /// on the island and a dot in a menu row have to mean the same thing, or the colour
+    /// system falls apart into two.
     private var statusDot: some View {
         Circle()
             .fill(color(for: appState.store.aggregate))
@@ -169,13 +172,13 @@ struct IslandView: View {
     }
 }
 
-/// Силуэт острова: вогнутые галтели у верхней кромки экрана, скруглённые углы
-/// снизу. Вся геометрия — в `IslandLayout.silhouettePath`, здесь только обёртка для
-/// SwiftUI.
+/// The island's silhouette: concave fillets against the screen's top edge, rounded
+/// corners at the bottom. All the geometry lives in `IslandLayout.silhouettePath`;
+/// this is only the SwiftUI wrapper.
 ///
-/// `animatableData` — нижний радиус: он меняется при раскрытии меню, и без этого
-/// углы щёлкали бы мгновенно, пока сама форма едет пружиной. Галтели у кромки не
-/// анимируются: кромка экрана никуда не двигается.
+/// `animatableData` is the bottom radius: it changes as the menu reveals, and
+/// without this the corners would snap while the shape itself travelled on a spring.
+/// The fillets at the edge are not animated: the screen's edge does not move.
 struct IslandShape: Shape {
     var bottomRadius: CGFloat
 

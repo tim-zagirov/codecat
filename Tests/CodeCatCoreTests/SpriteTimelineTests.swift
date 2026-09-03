@@ -1,7 +1,7 @@
 import XCTest
 @testable import CodeCatCore
 
-/// Хронология движения: что показывать через N секунд после входа в состояние.
+/// A movement's chronology: what to show N seconds after a state is entered.
 final class SpriteTimelineTests: XCTestCase {
 
     private func frame(_ index: Int) -> SpriteFrame { SpriteFrame(sheet: "s.png", index: index) }
@@ -10,65 +10,65 @@ final class SpriteTimelineTests: XCTestCase {
         SpritePhase(frames: indices.map(frame), framesPerSecond: fps, repeats: repeats)
     }
 
-    /// Обычная петля из одной фазы ведёт себя как раньше — крутится вечно.
+    /// An ordinary single-phase loop behaves as before — it runs forever.
     func testASingleEndlessPhaseLoopsForever() {
         let animation = SpriteAnimation(frames: [frame(0), frame(1), frame(2)], framesPerSecond: 1)
         XCTAssertEqual(SpriteTimeline.frame(at: 0, in: animation), frame(0))
         XCTAssertEqual(SpriteTimeline.frame(at: 1.5, in: animation), frame(1))
-        XCTAssertEqual(SpriteTimeline.frame(at: 3, in: animation), frame(0), "пошла по второму кругу")
-        XCTAssertEqual(SpriteTimeline.frame(at: 3001, in: animation), frame(1), "и через час тоже")
+        XCTAssertEqual(SpriteTimeline.frame(at: 3, in: animation), frame(0), "round two")
+        XCTAssertEqual(SpriteTimeline.frame(at: 3001, in: animation), frame(1), "and an hour later too")
     }
 
-    /// То, о чём просили: действие проигрывается заданное число раз, а потом кот
-    /// укладывается и остаётся лежать.
+    /// What was asked for: the action plays a given number of times, and then the cat
+    /// lies down and stays there.
     func testAnIntroPlaysItsRepeatsAndThenGivesWayToRest() {
-        // 2 кадра при 1 fps = 2 секунды за проход, два прохода = 4 секунды.
+        // 2 frames at 1 fps = 2 seconds per pass, two passes = 4 seconds.
         let animation = SpriteAnimation(phases: [
             phase([0, 1], fps: 1, repeats: 2),
             phase([8, 9], fps: 1),
         ])
         XCTAssertEqual(SpriteTimeline.frame(at: 0, in: animation), frame(0))
         XCTAssertEqual(SpriteTimeline.frame(at: 1, in: animation), frame(1))
-        XCTAssertEqual(SpriteTimeline.frame(at: 2, in: animation), frame(0), "второй проход")
+        XCTAssertEqual(SpriteTimeline.frame(at: 2, in: animation), frame(0), "second pass")
         XCTAssertEqual(SpriteTimeline.frame(at: 3.9, in: animation), frame(1))
-        XCTAssertEqual(SpriteTimeline.frame(at: 4, in: animation), frame(8), "действие отыграно — покой")
+        XCTAssertEqual(SpriteTimeline.frame(at: 4, in: animation), frame(8), "the action is done — rest")
         XCTAssertEqual(SpriteTimeline.frame(at: 5, in: animation), frame(9))
-        XCTAssertEqual(SpriteTimeline.frame(at: 600, in: animation), frame(8), "и остаётся в покое")
+        XCTAssertEqual(SpriteTimeline.frame(at: 600, in: animation), frame(8), "and it stays at rest")
     }
 
-    /// Три фазы — ровно форма «потянулся, улёгся, спит».
+    /// Three phases — exactly the "stretched, lay down, sleeping" shape.
     func testThreePhasesRunInOrder() {
         let animation = SpriteAnimation(phases: [
-            phase([0], fps: 1, repeats: 2),   // 2 с
-            phase([1], fps: 1, repeats: 1),   // 1 с
+            phase([0], fps: 1, repeats: 2),   // 2 s
+            phase([1], fps: 1, repeats: 1),   // 1 s
             phase([2, 3], fps: 1),
         ])
         XCTAssertEqual(SpriteTimeline.frame(at: 0, in: animation), frame(0))
         XCTAssertEqual(SpriteTimeline.frame(at: 1.9, in: animation), frame(0))
-        XCTAssertEqual(SpriteTimeline.frame(at: 2, in: animation), frame(1), "переход")
+        XCTAssertEqual(SpriteTimeline.frame(at: 2, in: animation), frame(1), "transition")
         XCTAssertEqual(SpriteTimeline.frame(at: 2.9, in: animation), frame(1))
-        XCTAssertEqual(SpriteTimeline.frame(at: 3, in: animation), frame(2), "покой")
+        XCTAssertEqual(SpriteTimeline.frame(at: 3, in: animation), frame(2), "rest")
     }
 
-    /// Фазы бывают разной скорости — длительность считается по своей.
+    /// Phases run at different speeds — a phase's duration is measured at its own rate.
     func testPhaseDurationUsesItsOwnFrameRate() {
         let animation = SpriteAnimation(phases: [
-            phase([0, 1, 2, 3], fps: 8, repeats: 1),  // 0.5 с
+            phase([0, 1, 2, 3], fps: 8, repeats: 1),  // 0.5 s
             phase([9], fps: 1),
         ])
         XCTAssertEqual(SpriteTimeline.frame(at: 0.4, in: animation), frame(3))
         XCTAssertEqual(SpriteTimeline.frame(at: 0.5, in: animation), frame(9))
     }
 
-    /// Часы перевели назад — показываем начало, а не середину перехода.
+    /// The clock was set back — show the beginning, not the middle of a transition.
     func testNegativeElapsedShowsTheVeryFirstFrame() {
         let animation = SpriteAnimation(phases: [phase([0, 1], fps: 1, repeats: 1), phase([5], fps: 1)])
         XCTAssertEqual(SpriteTimeline.frame(at: -3600, in: animation), frame(0))
     }
 
-    /// Все фазы конечны (в реестре так быть не должно — это проверяет
-    /// `MascotSkinsTests`, — но функция обязана оставаться тотальной): замираем на
-    /// последнем кадре, а не начинаем сначала.
+    /// Every phase is finite (the registry must never be like that — `MascotSkinsTests`
+    /// checks it — but the function has to stay total): hold on the last frame rather
+    /// than start over.
     func testAllFinitePhasesHoldTheLastFrame() {
         let animation = SpriteAnimation(phases: [phase([0, 1], fps: 1, repeats: 1)])
         XCTAssertEqual(SpriteTimeline.frame(at: 100, in: animation), frame(1))
@@ -79,7 +79,7 @@ final class SpriteTimelineTests: XCTestCase {
         XCTAssertNil(SpriteTimeline.frame(at: 5, in: SpriteAnimation(frames: [], framesPerSecond: 4)))
     }
 
-    /// Пустая или остановленная фаза пропускается, а не съедает движение целиком.
+    /// An empty or stopped phase is skipped rather than eating the whole movement.
     func testAPhaseWithNoFramesOrNoSpeedIsSkipped() {
         let animation = SpriteAnimation(phases: [
             SpritePhase(frames: [], framesPerSecond: 4, repeats: 1),
@@ -89,15 +89,15 @@ final class SpriteTimelineTests: XCTestCase {
         XCTAssertEqual(SpriteTimeline.frame(at: 0, in: animation), frame(3))
     }
 
-    /// Настоящий облик пользователя, по секундам: «Плюшевый» после конца работы
-    /// садится, укладывается и остаётся лежать — той же позой, что и во сне.
+    /// A real shipped skin, second by second: "Plush" sits down after work is over,
+    /// lies down and stays there — in the same pose it sleeps in.
     func testTheShippedDoneAnimationSitsThenLiesDownThenRests() throws {
         let skin = MascotSkins.skin(withID: "mxmaze-kitty")
         let done = try XCTUnwrap(skin.animation(for: .done))
         let sleeping = try XCTUnwrap(skin.animation(for: .sleeping))
         let start = try XCTUnwrap(SpriteTimeline.frame(at: 0, in: done))
-        XCTAssertEqual(start, done.phases[0].frames[0], "начинается с действия")
+        XCTAssertEqual(start, done.phases[0].frames[0], "it begins with the action")
         let atRest = try XCTUnwrap(SpriteTimeline.frame(at: 60, in: done))
-        XCTAssertTrue(sleeping.frames.contains(atRest), "через минуту кот лежит, как во сне")
+        XCTAssertTrue(sleeping.frames.contains(atRest), "a minute later the cat lies as if asleep")
     }
 }

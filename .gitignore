@@ -9,14 +9,9 @@ dist/
 # See scripts/fetch-optional-assets.sh and THIRD_PARTY_NOTICES.md.
 Sources/CodeCatApp/Skins/elthen/
 
-# The spec-driven-development record is kept on purpose: per-task briefs, the
-# reports the subagents wrote back, and the progress ledger. See
-# docs/how-this-was-built.md. Everything else the tooling leaves behind is not.
-.superpowers/*
-!.superpowers/sdd/
-# The saved review diffs are the one exception: they are `git diff` output,
-# reproducible from the history they were taken against, and half a megabyte of it.
-.superpowers/sdd/*.diff
+# The author's own working notes. They are not documentation and they are not
+# for users; they stay out of the repository entirely.
+.superpowers/
 
 # A working document the author generated but never committed; it describes the
 # pre-0.3.0 state (Russian UI, 151 commits) and would publish as stale.

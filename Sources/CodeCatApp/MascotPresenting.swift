@@ -1,14 +1,15 @@
 import Foundation
 
-/// Один способ показывать маскота. Реализаций две — плавающее окно
-/// (`OverlayController`) и остров в вырезе (`IslandController`), — и на экране
-/// одновременно живёт ровно одна: `AppDelegate` уничтожает предыдущую при смене
-/// режима.
+/// One way of showing the mascot. There are two implementations — the floating
+/// window (`OverlayController`) and the island in the notch (`IslandController`) —
+/// and exactly one lives on screen at a time: `AppDelegate` destroys the previous
+/// one when the mode changes.
 ///
-/// Протокол намеренно узкий. Всё остальное — позиция, наведение, меню — у режимов
-/// разное настолько, что общий интерфейс поверх этого был бы выдумкой.
+/// The protocol is deliberately narrow. Everything else — position, hover, menu —
+/// differs between the modes far too much for a shared interface over it to be
+/// anything but an invention.
 protocol MascotPresenting: AnyObject {
-    /// Показать или скрыть весь режим целиком, вместе с его меню.
+    /// Show or hide the whole mode, menu included.
     func setVisible(_ visible: Bool)
 
     /// Opens the mascot's menu without a click.

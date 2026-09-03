@@ -20,12 +20,12 @@ final class MascotSkinsTests: XCTestCase {
     func testOnlyCCBYRequiresAttribution() {
         XCTAssertTrue(SkinLicense.ccBy4.requiresAttribution)
         XCTAssertFalse(SkinLicense.cc0.requiresAttribution)
-        XCTAssertFalse(SkinLicense.authorTerms(summary: "условия автора").requiresAttribution)
+        XCTAssertFalse(SkinLicense.authorTerms(summary: "author's terms").requiresAttribution)
     }
 
     func testAnimationLookupReturnsNilForAMissingState() {
         let skin = MascotSkin(
-            id: "test", name: "Тестовый", author: "никто", license: .cc0,
+            id: "test", name: "Test", author: "nobody", license: .cc0,
             sourceURL: "https://example.com", directory: "test", frameSize: 16,
             animations: [.sleeping: SpriteAnimation(
                 frames: [SpriteFrame(sheet: "a.png", index: 0)], framesPerSecond: 1)])
@@ -50,60 +50,60 @@ extension MascotSkinsTests {
         for skin in MascotSkins.all {
             for key in AggregateStatusKey.allCases {
                 XCTAssertNotNil(skin.animation(for: key),
-                                "\(skin.id) не знает состояния \(key.rawValue)")
+                                "\(skin.id) does not know the state \(key.rawValue)")
             }
         }
     }
 
-    /// Проверяется каждая фаза, а не только первая: у движений с переходом
-    /// («потянулся — улёгся — спит») пустая или слишком быстрая фаза в середине
-    /// осталась бы незамеченной ровно там, где её никто не разглядывает глазами.
+    /// Every phase is checked, not only the first: in movements with a transition
+    /// ("stretch — lie down — sleep") an empty or too-fast phase in the middle would go
+    /// unnoticed exactly where nobody is looking at it.
     func testNoAnimationPhaseIsEmptyOrHasFPSOutsideTheAllowedRange() {
         for skin in MascotSkins.all {
             for (key, animation) in skin.animations {
                 XCTAssertFalse(animation.phases.isEmpty, "\(skin.id)/\(key.rawValue)")
                 for (index, phase) in animation.phases.enumerated() {
-                    let where_ = "\(skin.id)/\(key.rawValue) фаза \(index)"
+                    let where_ = "\(skin.id)/\(key.rawValue) phase \(index)"
                     XCTAssertFalse(phase.frames.isEmpty, where_)
                     // The mascot sits on screen all day; anything faster is battery spent
                     // on redrawing a transparent panel.
                     XCTAssertLessThanOrEqual(phase.framesPerSecond, 8, where_)
                     XCTAssertGreaterThanOrEqual(phase.framesPerSecond, 0.6, where_)
-                    XCTAssertNotEqual(phase.repeats, 0, "\(where_): нулевое повторение — мёртвая фаза")
+                    XCTAssertNotEqual(phase.repeats, 0, "\(where_): zero repeats — a dead phase")
                 }
             }
         }
     }
 
-    /// Последняя фаза обязана крутиться бесконечно, а все предыдущие — быть
-    /// конечными. Иначе движение либо замирает на последнем кадре навсегда, либо
-    /// никогда не доходит до покоя, ради которого фазы и заведены.
+    /// The last phase must loop forever and every earlier one must be finite.
+    /// Otherwise the movement either freezes on its last frame for good, or never
+    /// reaches the rest the phases exist for.
     func testEveryAnimationEndsInAnEndlessPhaseAndNoneIsUnreachable() {
         for skin in MascotSkins.all {
             for (key, animation) in skin.animations {
                 XCTAssertNil(animation.phases.last?.repeats,
-                             "\(skin.id)/\(key.rawValue): последняя фаза должна крутиться бесконечно")
+                             "\(skin.id)/\(key.rawValue): the last phase must loop forever")
                 for (index, phase) in animation.phases.dropLast().enumerated() {
                     XCTAssertNotNil(phase.repeats,
-                                    "\(skin.id)/\(key.rawValue): фаза \(index) бесконечна, всё за ней недостижимо")
+                                    "\(skin.id)/\(key.rawValue): phase \(index) is endless, everything after it is unreachable")
                 }
             }
         }
     }
 
-    /// Смысловая проверка того, о чём просили: «закончил» обязано приводить кота к
-    /// покою, а не крутить действие без конца. Кадры последней фазы «закончил»
-    /// должны совпадать с кадрами сна — то есть кот действительно ложится отдыхать.
+    /// The meaning-level check of what was asked for: "done" has to bring the cat to
+    /// rest rather than loop an action forever. The last phase of "done" must use the
+    /// same frames as sleep — that is, the cat really does lie down to rest.
     func testDoneSettlesIntoTheRestingPose() {
         for skin in MascotSkins.all {
             guard let done = skin.animation(for: .done),
                   let sleeping = skin.animation(for: .sleeping) else {
-                XCTFail("\(skin.id): нет «закончил» или «спит»"); continue
+                XCTFail("\(skin.id): no \"done\" or no \"sleeping\""); continue
             }
             XCTAssertGreaterThan(done.phases.count, 1,
-                                 "\(skin.id): «закончил» должно быть переходом, а не петлёй")
+                                 "\(skin.id): \"done\" must be a transition, not a loop")
             XCTAssertEqual(done.phases.last?.frames, sleeping.phases.last?.frames,
-                           "\(skin.id): «закончил» должно заканчиваться позой покоя")
+                           "\(skin.id): \"done\" must end in the resting pose")
         }
     }
 
@@ -132,7 +132,7 @@ extension MascotSkinsTests {
         // detail: pin it directly so a change to `MascotSkins.default` shows up here
         // rather than being absorbed by the relative assertions below.
         XCTAssertEqual(MascotSkins.default.id, "luizmelo-cat-1")
-        XCTAssertEqual(MascotSkins.skin(withID: "мусор-из-настроек").id, MascotSkins.default.id)
+        XCTAssertEqual(MascotSkins.skin(withID: "garbage-from-settings").id, MascotSkins.default.id)
         XCTAssertEqual(MascotSkins.skin(withID: "").id, MascotSkins.default.id)
         XCTAssertEqual(MascotSkins.skin(withID: "elthen-cat").id, "elthen-cat")
         // Every existing user's `UserDefaults` still says "drawn" — the hand-drawn
@@ -160,7 +160,7 @@ extension MascotSkinsTests {
         let done = try? XCTUnwrap(mx.animation(for: .done))
         for frame in done?.frames ?? [] {
             XCTAssertFalse(closedEyeIndices.contains(frame.index),
-                           "«закончил» не должен брать кадр с закрытыми глазами")
+                           "\"done\" must not take a closed-eye frame")
         }
         XCTAssertEqual(mx.animation(for: .sleeping)?.frames.map(\.index), [7, 8])
     }

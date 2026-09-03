@@ -11,9 +11,9 @@ import CodeCatCore
 final class AppState: ObservableObject {
     let store: SessionStore
     let awayLog = AwayLog()
-    /// Единственный способ узнать, что происходило внутри: приложение `LSUIElement`,
-    /// у него нет ни окна, ни консоли, и инструменты управления экраном его не видят.
-    /// До появления этого файла разбор приходилось вести внешним двойником на
+    /// The only way to learn what happened inside: this is an `LSUIElement` app with
+    /// no window and no console, and screen-control tools cannot see it. Before this
+    /// file existed, investigating anything meant building an external stand-in on
     /// `CodeCatCore`.
     let log = DiagnosticLog(url: CodeCatPaths.logURL, source: "app")
     let powerManager: PowerManager
@@ -25,10 +25,10 @@ final class AppState: ObservableObject {
     private var timer: Timer?
     private var cancellables: Set<AnyCancellable> = []
     private var lastAggregate: AggregateStatus = .sleeping
-    /// Выход зовётся дважды: из `applicationWillTerminate` и из `atexit` в main.swift
-    /// (страховка на случай сигнала). Видно было прямо в логе — две строки «выход»
-    /// на один выход, с разницей в 38 мс. Само по себе безобидно, но `resetOnExit()`
-    /// теперь запускает мост через `caffeinate`, и запускать его дважды незачем.
+    /// Shutdown is called twice: from `applicationWillTerminate` and from `atexit` in
+    /// main.swift (a backstop for signals). It was visible in the log — two "shutdown"
+    /// lines for one exit, 38 ms apart. Harmless in itself, but `resetOnExit()` now
+    /// starts a bridge through `caffeinate`, and starting that twice earns nothing.
     private var didShutdown = false
 
     @Published var keepAwakeEnabled: Bool {
@@ -53,14 +53,15 @@ final class AppState: ObservableObject {
     }
     @Published var hooksInstalled = false
 
-    /// Когда маскот вошёл в то состояние, которое показывает сейчас. Движение из
-    /// нескольких фаз («потянулся — улёгся — спит») без этой точки отсчёта не знает,
-    /// отыграна ли уже одноразовая часть, а хранить счётчик в самом виде нельзя: он
-    /// пересоздаётся при каждом открытии панели и смене облика.
+    /// When the mascot entered the state it is showing now. A movement made of several
+    /// phases ("stretch — lie down — sleep") has no way of knowing whether its one-shot
+    /// part has already played without this reference point, and keeping a counter in
+    /// the view itself is not possible: the view is recreated every time the panel
+    /// opens and every time the skin changes.
     ///
-    /// Считается по `AggregateStatusKey`, а не по `AggregateStatus`: число сессий на
-    /// движение не влияет, и переход «работает 1» → «работает 2» не должен дёргать
-    /// анимацию с начала.
+    /// Compared by `AggregateStatusKey` rather than `AggregateStatus`: the number of
+    /// sessions does not affect the movement, and going from "working 1" to
+    /// "working 2" must not restart the animation.
     @Published private(set) var statusSince = Date()
 
     /// Id of the selected skin. Persisted so the choice survives a restart; read
@@ -70,35 +71,36 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(skinID, forKey: "mascotSkin") }
     }
 
-    /// Как показывать маскота. Персистится, чтобы выбор пережил перезапуск;
-    /// читается через `MascotDisplayMode.mode(withID:)`, который откатывает
-    /// незнакомую строку к режиму по умолчанию.
+    /// How to show the mascot. Persisted so the choice survives a restart; read back
+    /// through `MascotDisplayMode.mode(withID:)`, which falls back to the default mode
+    /// for anything it does not recognise.
     @Published var displayMode: MascotDisplayMode {
         didSet { UserDefaults.standard.set(displayMode.rawValue, forKey: "mascotDisplayMode") }
     }
 
-    /// Прятать маскота, когда сессий нет вовсе. По умолчанию выключено.
+    /// Hide the mascot when there are no sessions at all. Off by default.
     ///
-    /// Настройка про МАСКОТА, а не про остров: сначала её читал только
-    /// `IslandController`, и в плавающем режиме тумблер стоял мёртвым — включён, а
-    /// кот всё равно на экране. Обещание подписи важнее режима отображения.
+    /// A setting about the MASCOT, not about the island: at first only
+    /// `IslandController` read it, and in floating mode the toggle sat dead — switched
+    /// on, with the cat still on screen. What the label promises outranks the display
+    /// mode.
     ///
-    /// Ключ в UserDefaults остался прежним (`islandHidesWhenIdle`) намеренно: у тех,
-    /// кто уже включил тумблер, он должен пережить обновление. Переименование ключа
-    /// молча вернуло бы им «выключено».
+    /// The UserDefaults key is deliberately unchanged (`islandHidesWhenIdle`): for
+    /// anyone who already turned the toggle on, it has to survive the update. Renaming
+    /// the key would silently give them "off".
     @Published var hidesWhenNoSessions: Bool {
         didSet { UserDefaults.standard.set(hidesWhenNoSessions, forKey: "islandHidesWhenIdle") }
     }
 
-    /// Должен ли остров прямо сейчас быть скрыт по настройке «прятать, когда
-    /// сессий нет».
+    /// Whether the island should be hidden right now under the "hide when nothing is
+    /// running" setting.
     ///
-    /// Условие — именно отсутствие сессий, а не «кот спит». Раньше здесь стоял
-    /// `aggregate == .sleeping`, и это совпадало с подписью ровно до тех пор, пока
-    /// всякая известная сессия считалась работающей. Теперь открытая, но
-    /// простаивающая сессия даёт `.sleeping` — и остров исчезал с экрана, хотя
-    /// сессии были и были видны в панели. Обещание подписи важнее: прячем, когда
-    /// прятать действительно нечего.
+    /// The condition is the absence of sessions, not "the cat is asleep". This used to
+    /// read `aggregate == .sleeping`, which matched the label exactly as long as every
+    /// known session counted as working. Now an open but idle session yields
+    /// `.sleeping` — and the island vanished from the screen while sessions existed and
+    /// were visible in the panel. What the label promises outranks that: hide when
+    /// there is genuinely nothing to hide.
     var mascotShouldHideNow: Bool {
         guard hidesWhenNoSessions else { return false }
         return !store.hasSessions
@@ -195,9 +197,9 @@ final class AppState: ObservableObject {
 
     func start() {
         CodeCatPaths.ensureAppSupportExists()
-        // Ротация именно здесь, а не только в обслуживании: приложение может
-        // проработать без перезапуска сутками, но и наоборот — запускаться часто и
-        // жить недолго, и тогда 15-секундный тик до предела просто не доживёт.
+        // Rotation here and not only in maintenance: the app may run for days without
+        // a restart, but equally it may be launched often and live briefly, in which
+        // case the 15-second tick never survives long enough to reach the limit.
         log.rotateIfNeeded()
         let info = Bundle.main.infoDictionary
         log.write("launch — version \(info?["CFBundleShortVersionString"] as? String ?? "?") "
@@ -211,10 +213,10 @@ final class AppState: ObservableObject {
 
         let server = HookSocketServer(path: CodeCatPaths.socketURL) { [weak self] event in
             guard let self else { return }
-            // Строка на каждое ПРИНЯТОЕ событие. Вместе со строкой, которую пишет сам
-            // хук перед отправкой, это единственный способ отличить «Claude Code не
-            // позвал хук» от «позвал, но до приложения не дошло»: снаружи обе
-            // неисправности выглядят одинаково — котик просто не шевелится.
+            // A line for every event RECEIVED. Together with the line the hook itself
+            // writes before sending, it is the only way to tell "Claude Code never
+            // called the hook" from "it called it, but it never reached the app": from
+            // the outside both failures look identical — the cat simply does not move.
             self.log.write("event \(event.hookEventName) session=\(event.sessionId.prefix(8)) "
                 + "cwd=\(event.cwd ?? "—") tty=\(event.tty ?? "—")")
             self.store.apply(hook: event, now: Date())
@@ -224,8 +226,8 @@ final class AppState: ObservableObject {
             try server.start()
             log.write("socket listening: \(CodeCatPaths.socketURL.path)")
         } catch {
-            // Раньше это уходило в FileHandle.standardError, то есть в никуда:
-            // бандл запускают из Finder, и стандартного вывода у него нет.
+            // This used to go to FileHandle.standardError, which is nowhere: the bundle
+            // is launched from Finder and has no standard output.
             log.write("ERROR: could not open the socket at \(CodeCatPaths.socketURL.path): \(error)")
         }
         socketServer = server
@@ -238,7 +240,7 @@ final class AppState: ObservableObject {
         watcher.start()
         self.watcher = watcher
 
-        // периодическое обслуживание
+        // periodic maintenance
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             guard let self else { return }
             let now = Date()
@@ -248,8 +250,8 @@ final class AppState: ObservableObject {
                 self.store.applyIdleHeuristic(now: now)
             }
             self.powerManager.tick(now: now)
-            // Ротацию делает только приложение — см. DiagnosticLog: хук, переименовав
-            // файл, увёл бы его из-под уже открытого здесь дескриптора.
+            // Rotation is the app's job alone — see DiagnosticLog: the hook, by renaming
+            // the file, would pull it out from under the descriptor already open here.
             self.log.rotateIfNeeded()
             // Reconciles against the real `SleepDisabled` flag on this slower cadence only —
             // `refresh()` below still drives the cheap, cache-only `update(shouldPreventSleep:)`
@@ -323,10 +325,10 @@ final class AppState: ObservableObject {
 
     private func notifyTransition(to agg: AggregateStatus) {
         guard agg != lastAggregate else { return }
-        // Переход состояния — это то, что видно глазами как поза котика. Записанный
-        // рядом с событиями хука, он отвечает на главный вопрос ручной проверки:
-        // «кот показывает не то — событие не пришло или пришло, но состояние
-        // посчиталось иначе?»
+        // A state transition is what is visible to the eye as the cat's pose. Recorded
+        // next to the hook events, it answers the main question of a manual check: "the
+        // cat is showing the wrong thing — did the event not arrive, or did it arrive
+        // and the state was computed differently?"
         log.write("state: \(lastAggregate) → \(agg), sessions: \(store.ordered.count)")
         switch agg {
         case .waiting:
@@ -418,30 +420,30 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Убирает хуки CodeCat из `~/.claude/settings.json`.
+    /// Removes CodeCat's hooks from `~/.claude/settings.json`.
     ///
-    /// Зеркало `installHooksIfNeeded()` и обязательное условие честной деинсталляции:
-    /// без него утилита, стёртая из /Applications, оставляла бы в настройках Claude
-    /// Code пять записей, зовущих несуществующий бинарник — на каждое событие каждой
-    /// сессии. `HooksInstaller.remove` вычищает только записи с нашей командой,
-    /// оставляя чужие хуки и все прочие ключи нетронутыми.
+    /// The mirror of `installHooksIfNeeded()` and a precondition for honest
+    /// uninstallation: without it, a utility deleted from /Applications would leave
+    /// five entries in Claude Code's settings calling a binary that no longer exists —
+    /// on every event of every session. `HooksInstaller.remove` clears only entries
+    /// carrying our own command, leaving other people's hooks and every other key
+    /// untouched.
     ///
-    /// Спрашивает подтверждение: это правка пользовательского файла настроек, а не
-    /// нашего собственного состояния.
+    /// It asks for confirmation: this edits the user's settings file, not our own state.
     func removeHooks() {
         let existing: Data?
         switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
         case .notFound:
-            // Файла нет — убирать нечего, и это не ошибка. Но флаг сбрасываем:
-            // раз настроек нет, то и наших хуков в них нет.
+            // No file means nothing to remove, and that is not an error. The flag is
+            // still cleared: with no settings, our hooks are not in them either.
             hooksInstalled = false
             return
         case .data(let data):
             existing = data
         case .unreadable:
-            // Ровно та же осторожность, что и при установке, и по той же причине:
-            // `remove` трактует nil как пустой документ, и запись такого результата
-            // затёрла бы реальные настройки пользователя целиком.
+            // Exactly the same caution as on install, and for the same reason: `remove`
+            // treats nil as an empty document, and writing that result would wipe the
+            // user's real settings entirely.
             presentHooksAlert(
                 title: L10n.t("hooks.remove.failed.title", "Couldn't remove the hooks"),
                 message: L10n.f("hooks.settings.unreadable",
@@ -474,8 +476,8 @@ final class AppState: ObservableObject {
         }
 
         do {
-            // .atomic по той же причине, что и при установке: оборванная запись не
-            // имеет права оставить пользователя с обрезанным settings.json.
+            // .atomic for the same reason as on install: an interrupted write has no
+            // right to leave the user with a truncated settings.json.
             try updated.write(to: CodeCatPaths.claudeSettings, options: .atomic)
             hooksInstalled = false
         } catch {
@@ -617,8 +619,8 @@ final class AppState: ObservableObject {
         let exeDir = URL(fileURLWithPath: CommandLine.arguments[0])
             .resolvingSymlinksInPath().deletingLastPathComponent()
         let candidates = [
-            exeDir.appendingPathComponent("../Resources/\(name)"),  // внутри .app
-            exeDir.appendingPathComponent("../../../scripts/\(name)"), // swift run из корня
+            exeDir.appendingPathComponent("../Resources/\(name)"),  // inside the .app
+            exeDir.appendingPathComponent("../../../scripts/\(name)"), // swift run from the root
         ]
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
     }
@@ -631,7 +633,7 @@ final class AppState: ObservableObject {
         socketServer?.stop()
         watcher?.stop()
         timer?.invalidate()
-        // Последним: всё, что выше, ещё может захотеть записаться.
+        // Last: everything above may still want to write something.
         log.close()
     }
 

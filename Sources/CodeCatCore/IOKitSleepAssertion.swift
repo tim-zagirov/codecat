@@ -34,7 +34,8 @@ public final class IOKitSleepAssertion: SleepAssertionHolding {
 }
 
 public enum Battery {
-    /// nil — уровень неизвестен или мак на проводе (тогда ограничение не применяем).
+    /// nil means the level is unknown, or the Mac is on mains power (in which case the
+    /// limit is not applied).
     public static func currentLevelIfOnBattery() -> Int? {
         guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef]

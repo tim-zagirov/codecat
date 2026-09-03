@@ -1,24 +1,24 @@
 import Foundation
 
-/// Способ показывать маскота на экране. Режимы взаимоисключающие: одновременно
-/// на экране всегда ровно один.
+/// How the mascot is shown on screen. The modes are mutually exclusive: exactly one
+/// is on screen at any time.
 public enum MascotDisplayMode: String, CaseIterable, Sendable {
-    /// Плавающее окно, которое пользователь таскает мышью. Поведение с MVP.
+    /// A floating window the user drags with the mouse. Behaviour from the MVP.
     case floating
-    /// Чёрная плашка вокруг физического выреза встроенного экрана.
+    /// A black slab around the physical notch of the built-in display.
     case island
 
-    /// Установка новой версии не должна менять вид сама по себе.
+    /// Installing a new version must not change the display mode by itself.
     public static let `default` = MascotDisplayMode.floating
 
-    /// Читает значение из настроек. Всё, чего не знаем, — режим по умолчанию:
-    /// в `UserDefaults` может лежать строка от старой или будущей версии.
+    /// Reads the value from the settings. Anything unrecognised means the default:
+    /// `UserDefaults` may hold a string from an older or a newer version.
     public static func mode(withID id: String?) -> MascotDisplayMode {
         guard let id, let mode = MascotDisplayMode(rawValue: id) else { return .default }
         return mode
     }
 
-    /// Подпись в интерфейсе.
+    /// The label shown in the interface.
     public var title: String {
         switch self {
         case .floating: return L10n.t("display.mode.floating", "Cat")

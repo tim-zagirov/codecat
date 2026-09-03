@@ -1,86 +1,85 @@
 import SwiftUI
 
-/// Оформление меню. Один и тот же список сессий, та же сетка обликов и те же
-/// тумблеры показываются на двух совершенно разных поверхностях, и правила
-/// читаемости у них противоположные.
+/// How the menu looks. The same session list, the same grid of skins and the same
+/// toggles are drawn on two completely different surfaces, and their legibility
+/// rules are opposites.
 ///
-/// Панель плавающего режима лежит на `.regularMaterial`, то есть на системном
-/// фоне: там уместны системные семантические цвета (`.secondary`, `.tertiary`,
-/// `Color.primary`, акцентный синий), которые сами подстраиваются под светлую и
-/// тёмную тему.
+/// The floating panel sits on `.regularMaterial` — a system background — where
+/// system semantic colours (`.secondary`, `.tertiary`, `Color.primary`, the accent
+/// blue) are exactly right: they adapt to light and dark on their own.
 ///
-/// Меню острова лежит на **чистом чёрном** — не на системном фоне, а на цвете,
-/// подобранном под физический вырез экрана. Системная семантика там врёт:
-/// `.secondary` считает, что знает фон, и на светлой теме выдаёт почти чёрный
-/// текст на чёрном. Поэтому у острова уровни белого заданы числами, цвет живёт
-/// только в точках статуса, а выделение — белой рамкой, потому что системный
-/// синий уже занят статусом «закончил».
+/// The island menu sits on **pure black** — not a system background but a colour
+/// matched to the display's physical notch. System semantics lie there:
+/// `.secondary` believes it knows the background and, in light mode, produces
+/// near-black text on black. So the island states its whites as numbers, colour
+/// lives only in the status dots, and selection is a white border — the system
+/// blue is already spoken for by the "done" status.
 ///
-/// Стиль передаётся через `Environment`, а не параметром в каждый вид: он нужен
-/// вглубь, до строки сессии и ячейки облика, и протаскивать его руками через все
-/// уровни — значит гарантированно где-то забыть.
+/// The style travels through `Environment` rather than as a parameter on every
+/// view: it is needed all the way down, to the session row and the skin cell, and
+/// threading it by hand through every level means forgetting it somewhere.
 struct MenuStyle {
 
-    /// Как раскладывается строка сессии.
+    /// How a session row is laid out.
     enum RowLayout {
-        /// Три строки: проект / статус · активность / длительность. Вид панели
-        /// плавающего режима, каким он был с самого начала.
+        /// Three lines: project / status · activity / duration. The floating
+        /// panel's layout, as it has been from the start.
         case threeLine
-        /// Две строки: проект, под ним статус · активность слева и длительность,
-        /// прижатая вправо. Длительности выстраиваются в колонку у правого края —
-        /// это и есть сетка, которая держит список.
+        /// Two lines: the project, and under it status · activity on the left with
+        /// the duration pushed right. The durations line up in a column at the
+        /// right edge — that column is the grid holding the list together.
         case twoLine
     }
 
     var rowLayout: RowLayout
 
-    // MARK: - Текст
+    // MARK: - Text
 
-    /// То, ради чего смотрят: имя проекта, число, подпись тумблера.
+    /// What people are looking for: the project name, the count, a toggle's label.
     var primary: Color
-    /// Пояснение к нему: статус, активность.
+    /// What explains it: status, activity.
     var secondary: Color
-    /// Справка: длительность, подсказки, заголовки секций, недоступная строка.
+    /// Reference: duration, hints, section headings, an unavailable row.
     var tertiary: Color
 
-    // MARK: - Поверхности
+    // MARK: - Surfaces
 
-    /// Строка сессии под курсором.
+    /// The session row under the cursor.
     var rowHover: Color
     var rowRadius: CGFloat
-    /// Подложка ячейки облика и её состояния.
+    /// The skin cell's background, and its states.
     var cellFill: Color
     var cellHover: Color
     var cellSelected: Color
     var cellRadius: CGFloat
-    /// Размер ячейки облика и зазор между ячейками. Ячейка шире, чем высока: коты
-    /// в наборах четвероногие и низкие, и в квадрате они висят в пустоте.
+    /// Size of a skin cell and the gap between cells. The cell is wider than it is
+    /// tall: these cats are four-legged and low, and in a square they float in space.
     var cellSize: CGSize
     var cellSpacing: CGFloat
-    /// Обводка выбранного облика.
+    /// Outline of the selected skin.
     var selectionBorder: Color
     var selectionBorderWidth: CGFloat
-    /// Толщина и цвет разделителя. `nil` — использовать системный `Divider()`.
+    /// Separator colour and weight. `nil` means use the system `Divider()`.
     var separator: Color?
-    /// Цвет включённого тумблера. `nil` — системный акцентный.
+    /// Colour of a toggle that is on. `nil` means the system accent.
     var toggleTint: Color?
-    /// Растягивать ли строку тумблера на всю ширину. Без этого `Toggle` ужимается
-    /// по своей подписи, и переключатели встают лесенкой — каждый там, где кончился
-    /// его текст. Колонка справа собирает их в одну вертикаль.
+    /// Whether a toggle's row stretches the full width. Without this a `Toggle`
+    /// shrinks to fit its own label, and the switches end up in a staircase — each
+    /// one wherever its text happened to end. A right-hand column lines them up.
     var togglesFillWidth: Bool
 
-    // MARK: - Отступы
+    // MARK: - Spacing
 
-    /// Поля формы.
+    /// The form's margins.
     var padding: CGFloat
-    /// Расстояние между смысловыми блоками.
+    /// Between blocks that mean different things.
     var blockSpacing: CGFloat
-    /// Расстояние между строками текста внутри блока.
+    /// Between lines of text within a block.
     var lineSpacing: CGFloat
 
-    /// Панель плавающего режима. Значения переписаны один в один с того, как она
-    /// выглядела до появления стилей: этот пресет обязан быть тождественным
-    /// прежнему виду, иначе смысл разделения теряется.
+    /// The floating panel. Every value is copied one for one from how it looked
+    /// before styles existed: this preset has to be identical to the old appearance,
+    /// or splitting the two surfaces apart was pointless.
     static let panel = MenuStyle(
         rowLayout: .threeLine,
         primary: .primary,
@@ -103,8 +102,8 @@ struct MenuStyle {
         blockSpacing: 10,
         lineSpacing: 2)
 
-    /// Меню острова. Уровни белого заданы числами: фон здесь не системный, и
-    /// системная семантика о нём ничего не знает.
+    /// The island menu. Its whites are stated as numbers: the background here is
+    /// not a system one, and system semantics know nothing about it.
     static let island = MenuStyle(
         rowLayout: .twoLine,
         primary: .white,
@@ -129,8 +128,8 @@ struct MenuStyle {
 }
 
 private struct MenuStyleKey: EnvironmentKey {
-    /// Панель плавающего режима — исходная поверхность проекта, поэтому она же и
-    /// значение по умолчанию: вид, не объявивший стиль, выглядит как раньше.
+    /// The floating panel is the project's original surface, so it is also the
+    /// default: a view that declares no style looks the way it always did.
     static let defaultValue = MenuStyle.panel
 }
 
@@ -141,9 +140,9 @@ extension EnvironmentValues {
     }
 }
 
-/// Разделитель, знающий про стиль: у панели — системный `Divider()`, у острова —
-/// линия заданного цвета во всю ширину формы. Разделитель во всю ширину читается
-/// как членение плашки, а вставленный с отступами — как украшение списка.
+/// A separator that knows about the style: the system `Divider()` in the panel, a
+/// line of a given colour spanning the full width on the island. Full width reads
+/// as dividing the slab; inset with margins it reads as list decoration.
 struct MenuSeparator: View {
     @Environment(\.menuStyle) private var style
 
@@ -159,9 +158,9 @@ struct MenuSeparator: View {
     }
 }
 
-/// Заголовок смысловой секции меню. У панели его не было вовсе — там секции
-/// разделялись только линиями, — поэтому вид ничего не рисует, пока стиль не
-/// попросит: `title` показывается только там, где заголовки предусмотрены.
+/// Heading for a meaningful section of the menu. The panel never had these — its
+/// sections were separated by lines alone — so this view draws nothing until the
+/// style asks: `title` appears only where headings are part of the design.
 struct MenuSectionHeader: View {
     let title: String
     @Environment(\.menuStyle) private var style

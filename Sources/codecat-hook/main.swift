@@ -1,57 +1,59 @@
 import Foundation
 import CodeCatCore
 
-// Claude Code передаёт JSON события на stdin. Пересылаем в сокет приложения,
-// добавив то, что знает только этот процесс: он — потомок `claude`, поэтому
-// может пройти по предкам и найти приложение-владелец и терминал сессии.
-// Приложение не запущено / любая ошибка → тихий выход 0: хук не имеет права
-// мешать работе Claude Code.
+// Claude Code passes the event JSON on stdin. It is forwarded to the app's socket
+// with what only this process knows added: the hook is a descendant of `claude`, so
+// it can walk its ancestors and find the owning application and the session's
+// terminal. App not running, or any error at all → a silent exit 0: the hook has no
+// right to get in Claude Code's way.
 let input = FileHandle.standardInput.readDataToEndOfFile()
 if !input.isEmpty {
     let tree = LiveProcessTree()
-    // Идём от РОДИТЕЛЯ, а не от себя: сам хук лежит внутри CodeCat.app, и старт с
-    // getpid() записал бы владельцем сессии сам CodeCat всякий раз, когда выше по
-    // цепочке нет ни одного .app (tmux, screen, ssh, нативно установленный claude).
-    // По спецификации host_pid — первый ПРЕДОК внутри .app-бандла; сам хук предком
-    // себе не является. Плюс подстраховка: свой бандл исключаем в любом случае.
+    // Start from the PARENT, not from ourselves: the hook lives inside CodeCat.app,
+    // and starting at getpid() would record CodeCat itself as the session's owner
+    // whenever there is no .app higher up the chain (tmux, screen, ssh, a natively
+    // installed claude). By its definition host_pid is the first ANCESTOR inside an
+    // .app bundle; the hook is not its own ancestor. Plus a backstop: our own bundle
+    // is excluded either way.
     let parent = getppid()
     let host = ProcessTree.host(startingAt: parent, provider: tree,
                                 excludingBundlePath: Bundle.main.bundlePath)
     let fields = HookPayload.RouteFields(
         hostPID: host?.pid,
         hostBundlePath: host?.bundlePath,
-        // Чтение Info.plist бандла — одно обращение к маленькому файлу; опознание
-        // терминала идёт по идентификатору, а не по имени файла бандла.
+        // Reading a bundle's Info.plist is one access to a small file; a terminal is
+        // recognised by its identifier, not by the bundle's file name.
         hostBundleID: host.flatMap { Bundle(path: $0.bundlePath)?.bundleIdentifier },
-        // А вот tty ищем от себя: контролирующий терминал наследуется, у хука он
-        // тот же, что у родителя, и старт от getpid() переживает случай, когда хук
-        // осиротел (getppid() == 1) — иначе сессия молча потеряла бы вкладку.
+        // The tty, though, is looked up from ourselves: the controlling terminal is
+        // inherited, so the hook's is the same as its parent's, and starting at
+        // getpid() survives the case where the hook was orphaned (getppid() == 1) —
+        // otherwise the session would silently lose its tab.
         tty: ProcessTree.tty(startingAt: getpid(), provider: tree),
-        // Процесс самой сессии — ближайший предок с именем `claude` (обычно через
-        // `sh -c`, которым Claude Code запускает хук). Ищем от родителя по той же
-        // причине, что и host: сам хук предком себе не является. По этому pid
-        // приложение потом точно знает, жива ли сессия, вместо того чтобы гадать по
-        // общему числу процессов `claude` в системе.
+        // The session's own process is the nearest ancestor named `claude` (usually
+        // through the `sh -c` Claude Code launches the hook with). Searched from the
+        // parent for the same reason as host: the hook is not its own ancestor. With
+        // that pid the app later knows for certain whether the session is alive,
+        // instead of guessing from the total number of `claude` processes.
         agentPID: ProcessTree.agent(startingAt: parent, provider: tree))
     let payload = HookPayload.enriched(input, with: fields)
     let sent = HookSocketClient.send(payload, to: CodeCatPaths.socketURL)
 
-    // Хук по замыслу молчит и всегда выходит с нулём — он не имеет права мешать
-    // работе Claude Code. Побочный эффект: неудачная отправка не оставляла следа
-    // нигде, и «Claude Code не позвал хук» было неотличимо от «позвал, но
-    // приложение не получило» — снаружи обе неисправности выглядят одинаково.
-    // Одна строка в общий лог закрывает эту дыру, ничего не ломая: писать
-    // по-прежнему необязательно, ошибки записи глухие.
+    // By design the hook is silent and always exits zero — it has no right to get in
+    // Claude Code's way. The side effect was that a failed send left no trace
+    // anywhere, and "Claude Code never called the hook" was indistinguishable from
+    // "it called it and the app never received it" — from the outside both failures
+    // look identical. One line in the shared log closes that gap without breaking
+    // anything: writing is still optional and write errors are still silent.
     //
-    // writeIfWithinHardLimit, а не write: ротировать файл хук не может (он увёл бы
-    // его из-под дескриптора приложения), поэтому у него единственная защита —
-    // замолчать на разросшемся файле. Это тот случай, когда приложение снесли, а
-    // хуки в настройках остались.
+    // writeIfWithinHardLimit rather than write: the hook cannot rotate the file (that
+    // would pull it out from under the app's descriptor), so its only defence is to
+    // fall silent once the file has grown. That is the case where the app was
+    // uninstalled and the hooks stayed in the settings.
     let event = (try? JSONSerialization.jsonObject(with: input) as? [String: Any])
         .flatMap { $0?["hook_event_name"] as? String } ?? "?"
-    // Каталога может не быть вовсе — если приложение ещё ни разу не запускалось.
-    // Это ровно тот случай, который интереснее всего записать (сокета тоже нет,
-    // отправка только что провалилась), поэтому создаём каталог, а не сдаёмся.
+    // The directory may not exist at all — if the app has never been launched. That
+    // is exactly the case most worth recording (there is no socket either, and the
+    // send has just failed), so the directory is created rather than given up on.
     CodeCatPaths.ensureAppSupportExists()
     let log = DiagnosticLog(url: CodeCatPaths.logURL, source: "hook")
     _ = log.writeIfWithinHardLimit(

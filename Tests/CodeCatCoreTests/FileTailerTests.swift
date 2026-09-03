@@ -31,7 +31,7 @@ final class FileTailerTests: XCTestCase {
         try h.write(contentsOf: "one\ntwo\npartial".data(using: .utf8)!)
         try h.close()
         XCTAssertEqual(tailer.newLines(of: f), ["one", "two"])
-        // partial без \n не возвращается, но вернётся после дописывания
+        // a partial with no \n is not returned, but will be once more is appended
         let h2 = try FileHandle(forWritingTo: f)
         try h2.seekToEnd()
         try h2.write(contentsOf: " done\n".data(using: .utf8)!)
@@ -44,18 +44,18 @@ final class FileTailerTests: XCTestCase {
         XCTAssertEqual(tailer.newLines(of: dir.appendingPathComponent("nope.jsonl")), [])
     }
 
-    /// Finding 1: атомарная замена файла (delete+rename, как делает
-    /// String.write(to:atomically:true)) меняет inode. Если новый файл
-    /// не меньше старого смещения, наивная проверка `size < known` не
-    /// срабатывает, и тейлер сикает в середину нового файла, отдавая
-    /// обрезанный фрагмент вместо строк с начала нового файла.
+    /// Finding 1: an atomic replacement (delete+rename, as
+    /// String.write(to:atomically:true) does) changes the inode. If the new file is not
+    /// smaller than the old offset, the naive `size < known` check does not fire and
+    /// the tailer seeks into the middle of the new file, handing out a truncated
+    /// fragment instead of lines from its beginning.
     func testAtomicReplacementLargerThanKnownOffsetIsReadFromStart() throws {
         let f = dir.appendingPathComponent("a.jsonl")
         try "old line one\nold line two\nold line three\n".write(to: f, atomically: true, encoding: .utf8)
         let tailer = FileTailer()
         XCTAssertEqual(tailer.newLines(of: f), []) // seed: known offset == old file size
 
-        // Атомарная замена (temp file + rename) — новый inode, размер БОЛЬШЕ старого known offset.
+        // An atomic replacement (temp file + rename) — new inode, size LARGER than the old known offset.
         let newContent = "brand new line A\nbrand new line B\nbrand new line C\nbrand new line D\n"
         XCTAssertGreaterThan(newContent.utf8.count, "old line one\nold line two\nold line three\n".utf8.count)
         try newContent.write(to: f, atomically: true, encoding: .utf8)
@@ -65,9 +65,9 @@ final class FileTailerTests: XCTestCase {
         ])
     }
 
-    /// Finding 1 (доп. кейс): усечение файла до пустого (тот же inode) и
-    /// дозапись — тейлер должен заметить усечение (size < known) и вернуть
-    /// только вновь дописанные строки, а не путаться со старым смещением.
+    /// Finding 1 (extra case): truncating a file to empty (same inode) and appending —
+    /// the tailer has to notice the truncation (size < known) and return only the newly
+    /// appended lines rather than getting confused by the old offset.
     func testTruncateToEmptyThenAppendReturnsNewLines() throws {
         let f = dir.appendingPathComponent("a.jsonl")
         try "old line\n".write(to: f, atomically: true, encoding: .utf8)
@@ -77,7 +77,7 @@ final class FileTailerTests: XCTestCase {
         let h = try FileHandle(forWritingTo: f)
         try h.truncate(atOffset: 0)
         try h.close()
-        XCTAssertEqual(tailer.newLines(of: f), []) // усечение замечено, offset сброшен
+        XCTAssertEqual(tailer.newLines(of: f), []) // truncation noticed, offset reset
 
         let h2 = try FileHandle(forWritingTo: f)
         try h2.seekToEnd()

@@ -19,13 +19,13 @@ public struct SpriteFrame: Equatable, Sendable {
     }
 }
 
-/// Один отрезок движения: кадры, скорость и сколько раз его проиграть.
+/// One stretch of movement: frames, speed, and how many times to play it.
 public struct SpritePhase: Equatable, Sendable {
     public let frames: [SpriteFrame]
     public let framesPerSecond: Double
-    /// Сколько раз проиграть фазу, прежде чем уступить следующей. `nil` — крутиться
-    /// бесконечно; так может быть помечена только последняя фаза, иначе всё, что за
-    /// ней, недостижимо.
+    /// How many times to play the phase before yielding to the next. `nil` means loop
+    /// forever; only the last phase may be marked that way, or everything after it is
+    /// unreachable.
     public let repeats: Int?
 
     public init(frames: [SpriteFrame], framesPerSecond: Double, repeats: Int? = nil) {
@@ -35,20 +35,19 @@ public struct SpritePhase: Equatable, Sendable {
     }
 }
 
-/// Движение для одного состояния — последовательность фаз, последняя из которых
-/// крутится бесконечно.
+/// The movement for one state — a sequence of phases, the last of which loops forever.
 ///
-/// Одной петли мало: часть движений в наборах спрайтов одноразовые по своей природе.
-/// Потягивание — это потягивание, а не то, что кот делает без остановки десять минут;
-/// у LuizMelo для этого есть отдельный лист `Laying` — переход «сесть и лечь»,
-/// который в петле выглядел бы как бесконечное вставание и укладывание. Поэтому
-/// «закончил» описывается как «потянулся пару раз → улёгся → дышит во сне»: пара
-/// кадров действия, переход, покой.
+/// One loop is not enough: some movements in these sprite packs are one-shot by
+/// nature. A stretch is a stretch, not something a cat does without stopping for ten
+/// minutes; LuizMelo has a separate `Laying` sheet for exactly this — a sit-down-then-
+/// lie-down transition that in a loop would look like endless getting up and lying
+/// down again. So "done" is described as "stretch a couple of times → lie down →
+/// breathe in sleep": a few frames of action, a transition, rest.
 public struct SpriteAnimation: Equatable, Sendable {
     public let phases: [SpritePhase]
 
-    /// Кадры первой фазы. Оставлено ради вызывающих, которым нужна не хронология, а
-    /// «как это выглядит» — превью в панели, проверки реестра.
+    /// The first phase's frames. Kept for callers that want not the chronology but
+    /// "what it looks like" — the panel's previews, the registry's checks.
     public var frames: [SpriteFrame] { phases.first?.frames ?? [] }
     public var framesPerSecond: Double { phases.first?.framesPerSecond ?? 1 }
 
@@ -56,7 +55,7 @@ public struct SpriteAnimation: Equatable, Sendable {
         self.phases = phases
     }
 
-    /// Обычная бесконечная петля — как было до появления фаз.
+    /// An ordinary endless loop — as it was before phases existed.
     public init(frames: [SpriteFrame], framesPerSecond: Double) {
         self.phases = [SpritePhase(frames: frames, framesPerSecond: framesPerSecond)]
     }

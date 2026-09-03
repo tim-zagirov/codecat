@@ -23,23 +23,23 @@ public enum SpriteScale {
     /// (128pt); the remaining slack is left for the badge and the edges.
     public static let maxWidth = 120
 
-    /// Высота, к которой нормируется облик в строке меню на экране с вырезом
-    /// (`safeAreaInsets.top` = 32 pt). Меньше нельзя: на 30 pt квадратный облик
-    /// mxmaze (16x16) падает до x1 — см. `SpriteScaleTests`.
+    /// The height a skin is normalised to in the menu bar on a notched display
+    /// (`safeAreaInsets.top` = 32 pt). No lower: at 30 pt mxmaze's square skin (16x16)
+    /// drops to x1 — see `SpriteScaleTests`.
     public static let islandTargetHeight = 32
 
-    /// Предел ширины спрайта в крыле острова. Крыло перекрывает строку меню,
-    /// поэтому оно не должно разрастаться ради широких четвероногих котов.
+    /// Width limit for a sprite in the island's wing. The wing overlaps the menu bar,
+    /// so it must not grow to accommodate wide four-legged cats.
     public static let islandMaxWidth = 60
 
     /// Integer magnification for a skin whose union bounding box is
     /// `boundsWidth` x `boundsHeight` pixels. Never returns less than 1: a sprite
     /// too large to fit is drawn at 1x rather than vanishing.
     ///
-    /// Нормировка задаётся параметрами, потому что мест теперь два: канва
-    /// плавающего маскота (значения по умолчанию — 64/120) и строка меню
-    /// (`islandTargetHeight`/`islandMaxWidth`). Значения по умолчанию обязаны
-    /// оставаться прежними: от них зависит вид плавающего кота.
+    /// The normalisation is parameterised because there are two places now: the
+    /// floating mascot's canvas (the defaults — 64/120) and the menu bar
+    /// (`islandTargetHeight`/`islandMaxWidth`). The defaults must stay as they are:
+    /// the floating cat's appearance depends on them.
     public static func factor(boundsWidth: Int,
                               boundsHeight: Int,
                               targetHeight: Int = SpriteScale.targetHeight,

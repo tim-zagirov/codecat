@@ -20,9 +20,9 @@ struct LoadedSkin {
         CGSize(width: bounds.width * CGFloat(scale), height: bounds.height * CGFloat(scale))
     }
 
-    /// Размер отрисовки при другой нормировке — для острова, где строка меню
-    /// всего 32 pt. `scale` посчитан при загрузке под канву плавающего маскота,
-    /// поэтому здесь множитель пересчитывается из той же измеренной рамки.
+    /// The drawing size under a different normalisation — for the island, where the
+    /// menu bar is only 32 pt. `scale` was computed at load time for the floating
+    /// mascot's canvas, so the factor here is recomputed from the same measured bounds.
     func drawingSize(targetHeight: Int, maxWidth: Int) -> CGSize {
         let factor = SpriteScale.factor(boundsWidth: Int(bounds.width),
                                         boundsHeight: Int(bounds.height),
