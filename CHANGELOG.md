@@ -128,4 +128,7 @@ The MVP. Everything the product promises, working end to end.
 
 [0.3.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.3.0
 [0.2.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.2.0
-[0.1.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.1.0
+
+0.1.0 has no tag: it predates tagging, and inventing one now would put a
+version marker on a commit that never shipped under that name. Its entry above
+is reconstructed from the history.

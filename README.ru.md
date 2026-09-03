@@ -146,7 +146,7 @@ CodeCat запущен? Если да — не делает ничего воо�
 ```bash
 git clone https://github.com/tim-zagirov/codecat.git
 cd codecat
-swift test        # 394 теста
+swift test        # 400 тестов
 make app          # dist/CodeCat.app, подпись ad-hoc — для работы на своей машине
 ```
 
