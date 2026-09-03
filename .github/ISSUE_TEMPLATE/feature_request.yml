@@ -1,0 +1,33 @@
+name: Feature request
+description: Something CodeCat should do and does not.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Some things are deliberately absent — analytics, networking, an
+        auto-updater, a Mac App Store build. See
+        [CONTRIBUTING.md](../blob/master/CONTRIBUTING.md#things-that-are-deliberately-absent).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: >
+        The situation, not the solution. What were you doing when CodeCat got in
+        the way or failed to help?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today
+      description: Including "nothing, I just live with it" — that is useful too.

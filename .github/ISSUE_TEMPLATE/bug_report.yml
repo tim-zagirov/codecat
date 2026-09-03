@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in CodeCat does not do what it says it does.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        CodeCat has no window and no console, so the log is usually the fastest
+        route to an answer:
+        `tail -100 ~/Library/Application\ Support/CodeCat/codecat.log`
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: CodeCat version
+      description: The menu-bar menu prints it, as "CodeCat <version> (<build>)".
+      placeholder: 0.3.0 (153)
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac model
+      placeholder: macOS 15.3, MacBook Pro M3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: display-mode
+    attributes:
+      label: Display mode
+      options:
+        - Floating cat
+        - Island
+        - Both / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: >
+        The relevant lines from
+        ~/Library/Application Support/CodeCat/codecat.log. It records hook
+        events, state transitions and errors, and it never leaves your machine
+        unless you paste it here — so read it before you do.
+      render: text
+
+  - type: checkboxes
+    id: hooks
+    attributes:
+      label: Hooks
+      options:
+        - label: >
+            `grep codecat ~/.claude/settings.json` shows the hook under all five
+            events (SessionStart, UserPromptSubmit, Stop, Notification,
+            SessionEnd)
+        - label: The path in those entries points at the app I am actually running

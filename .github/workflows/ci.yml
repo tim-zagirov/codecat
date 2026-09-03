@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: swift test
+    # macOS 14 is CodeCat's LSMinimumSystemVersion, and half of CodeCatCore talks
+    # to AppKit and IOKit — there is no Linux build to fall back on.
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+  # Deliberately does NOT sign or notarise. Both need a Developer ID private key,
+  # and putting one in CI means putting it in a secret that every workflow run can
+  # read. Releases are cut from a human's machine — see docs/release.md.
+  bundle:
+    name: make bundle
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # Elthen's sheet is not in the repository and is not fetched here: the
+      # download is best-effort by design, and a CI job must not depend on
+      # itch.io being up. The app simply builds with seven skins instead of
+      # eight, which is a state the code supports and the tests cover.
+      - name: Build the app bundle
+        run: make bundle
+
+      - name: Check what landed in the bundle
+        run: |
+          set -e
+          test -d dist/CodeCat.app/Contents/Resources/Skins
+          test -f dist/CodeCat.app/Contents/Resources/CodeCat.icns
+          test -f dist/CodeCat.app/Contents/Resources/en.lproj/Localizable.strings
+          test -f dist/CodeCat.app/Contents/Resources/ru.lproj/Localizable.strings
+          test -x dist/CodeCat.app/Contents/MacOS/CodeCat
+          test -x dist/CodeCat.app/Contents/MacOS/codecat-hook

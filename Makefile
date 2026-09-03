@@ -123,9 +123,16 @@ release: notarize
 	codesign --force --timestamp --sign "$(SIGN_ID)" $(DMG)
 	xcrun notarytool submit $(DMG) --keychain-profile "$(NOTARY_PROFILE)" --wait
 	xcrun stapler staple $(DMG)
-	@spctl -a -vvv -t install $(APP) 2>&1 | grep -q "source=Notarized Developer ID" \
-		|| (echo "ОШИБКА: Gatekeeper не признал сборку нотаризованной"; \
-		    spctl -a -vvv -t install $(APP); exit 1)
+	# `-t exec`, а не `-t install`: оценивается приложение, а не установщик, и
+	# вопрос ровно один — «откроется ли это у человека, который скачал файл».
+	# `-t install` на .app тоже что-то отвечает, поэтому подмена молчала бы.
+	@spctl -a -vvv -t exec $(APP) 2>&1 | grep -q "source=Notarized Developer ID" \
+		|| (echo "ОШИБКА: Gatekeeper не признал приложение нотаризованным"; \
+		    spctl -a -vvv -t exec $(APP); exit 1)
+	@spctl -a -vvv -t open --context context:primary-signature $(DMG) 2>&1 \
+		| grep -q "source=Notarized Developer ID" \
+		|| (echo "ОШИБКА: Gatekeeper не признал сам образ нотаризованным"; \
+		    spctl -a -vvv -t open --context context:primary-signature $(DMG); exit 1)
 	@echo "Готово к раздаче: $(DMG) — версия $(VERSION) ($(BUILD))"
 
 # Проверяет не три файла, а КАЖДЫЙ лист, объявленный в реестре MascotSkins —
