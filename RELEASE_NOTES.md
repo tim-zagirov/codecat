@@ -18,12 +18,33 @@ HEAD. **Tests: 390 before, 404 after, all green.** The version is now 0.3.0;
 | Island click-through fix | **merged** into master |
 | CI | **green** on macOS 14 (`swift test` + `make bundle`) |
 | `make sign` | **done** — Developer ID, hardened runtime, timestamped, entitlement in the signature |
-| `make notarize` / `make release` | **blocked** — the `codecat` keychain profile does not exist yet |
-| DMG | **not built** — `make release` runs it only after notarisation |
+| `make notarize` | **done** — notarised by Apple and stapled |
+| `make release` | **done** — `dist/CodeCat-0.3.0.dmg`, 1.7 MB, build 165 |
+| GitHub release | **published** — https://github.com/tim-zagirov/codecat/releases/tag/v0.3.0 |
 
-Gatekeeper's verdict on the signed bundle right now is
-`source=Unnotarized Developer ID`. That is correct and expected, and it is the
-reason notarisation is the last thing standing between this and a download link.
+Verified independently of the Makefile's own output, on both artefacts:
+
+```
+$ xcrun stapler validate dist/CodeCat.app          → The validate action worked!
+$ xcrun stapler validate dist/CodeCat-0.3.0.dmg    → The validate action worked!
+$ spctl -a -vvv --ignore-cache -t exec dist/CodeCat.app
+accepted   source=Notarized Developer ID
+$ spctl -a -vvv --ignore-cache -t open --context context:primary-signature dist/CodeCat-0.3.0.dmg
+accepted   source=Notarized Developer ID
+```
+
+SHA-256 of the published DMG:
+`aa1a2e279c34ed4cae21e93c95cfa207908366c0a7fec28be708dc3f7ff457af`
+
+The notarisation credentials came from an existing App Store Connect API key
+(`Z35ZJ57779`) rather than an app-specific password, so no password was handled
+by anything but the keychain. The `v0.3.0` tag was moved onto commit `18742f0`,
+whose commit count is 165 — the build number the shipped app prints in its menu,
+so an installed copy traces back to exactly this tag.
+
+**The repository is still private**, so the release page and its download link
+are visible only to the author. That is the one remaining step before anyone
+else can download it.
 
 ---
 
@@ -280,24 +301,17 @@ analytics, no networking, no auto-update, no App Store target.
 
 ## What still needs you
 
-1. **Create the notarisation profile.** The only thing between here and a file
-   other people can download, and it cannot be automated — it needs an
-   app-specific password, generated at [appleid.apple.com](https://appleid.apple.com)
-   under Sign-In and Security → App-Specific Passwords:
-
-   ```bash
-   xcrun notarytool store-credentials codecat \
-       --apple-id you@example.com \
-       --team-id T9N3G9LHXL \
-       --password xxxx-xxxx-xxxx-xxxx
-   ```
-
-   Then `make release` builds, signs, notarises, staples and writes
-   `dist/CodeCat-0.3.0.dmg`.
-2. **Make the repository public** when you are ready. It is renamed, pushed and
-   green, but still private.
-3. **Run `docs/verification-checklist.md`** on a fresh build. Item 34 needs a
-   second Mac and a real release build; item 35 is the new localisation check.
+1. **Make the repository public.** Everything else is done; until this happens
+   the release page and the DMG are visible only to you.
+2. **Run `docs/verification-checklist.md`** against the shipped DMG. Item 34 is
+   now finally testable and is the one that matters most: on a *different* Mac,
+   download the DMG, open it with a plain double-click, install, and click a
+   session row for a Terminal.app session. That is the only real test of the
+   Apple-events entitlement under hardened runtime, and it cannot be reproduced
+   on this machine. Item 35 covers the Russian localisation.
+3. **Install 0.3.0 over the copy in `/Applications`**, which is still 0.2.0
+   (build 142) and ad-hoc-era. Note that the hooks call the binary by absolute
+   path, so the bundle has to be replaced, not just launched from `dist`.
 4. **Replace the app icon** if the generated one is not good enough.
 5. Optionally, delete `Sources/CodeCatApp/Skins/elthen/` from your disk — see
    the deviation note in section 1.

@@ -13,8 +13,9 @@ blur them. Anything a user reads is English — see the [README](../README.md).
 
 - `master` is green: **404 tests**, `swift test`, clean working tree. The public
   release pass (licence, English UI, icon, CI, docs) is on top of it.
-- Installed at `/Applications/CodeCat.app`, ad-hoc signed. That is fine locally
-  and **not** fine for distribution: see `docs/release.md`.
+- **0.3.0 is signed, notarised and published** as
+  `dist/CodeCat-0.3.0.dmg` on the GitHub release page. The copy in
+  `/Applications` is still 0.2.0 (build 142) and needs replacing.
 - Hooks are installed in `~/.claude/settings.json` — all **five** events point at
   `/Applications/CodeCat.app/Contents/MacOS/codecat-hook`. Backup:
   `~/.claude/settings.json.backup-before-codecat`.
@@ -34,18 +35,14 @@ make app && pkill -x CodeCat; rm -rf /Applications/CodeCat.app && cp -R dist/Cod
 
 In order. The first two need a human; nothing else is blocked.
 
-1. **Get a Developer ID Application certificate and store notarisation
-   credentials.** This is the only real blocker for shipping to anyone else, and
-   it cannot be automated: it needs an Apple Developer account. Exact commands:
-   [docs/release.md](release.md). Until then every reinstall changes the
-   signature, so macOS asks for the automation permission again each time
-   (`tccutil reset AppleEvents com.codecat.app` to re-test that path).
-2. **Rename the GitHub repository** `vibe-coding-utility` → `codecat`, and
-   force-push the history-rewritten `master` (the Elthen sheet was purged from
-   history — see RELEASE_NOTES.md).
-3. **Run [docs/verification-checklist.md](verification-checklist.md) end to
-   end** on a fresh build. Item 34 needs a second Mac and a real release build;
-   item 35 is new and covers the Russian localisation.
+1. **Make the repository public.** Signing, notarisation, the rename, the
+   force-push and the release page are all done; visibility is the last switch.
+2. **Run [docs/verification-checklist.md](verification-checklist.md) end to
+   end** against the shipped DMG. Item 34 finally has something to test and is
+   the one that matters: on a *different* Mac, download, plain double-click,
+   install, then jump to a Terminal.app session. It is the only real test of the
+   Apple-events entitlement under hardened runtime.
+3. **Install 0.3.0 over `/Applications/CodeCat.app`**, still 0.2.0 build 142.
 4. **Replace the app icon** if the generated one is not good enough — it is drawn
    from `CatView`, not designed.
 5. Then the loose ends below, none of which block a release.
