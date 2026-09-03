@@ -1,0 +1,165 @@
+/* CodeCat — English (base language).
+
+   Keys and their English text also live at every call site as the `value:`
+   argument of L10n.t/L10n.f, so a build that never assembled these .lproj
+   directories still shows English rather than raw keys. This file is what
+   ru.lproj is translated against; keep the two in step. */
+
+/* MARK: - Menu bar */
+
+/* Tooltip on the menu-bar icon: nothing is running. */
+"menubar.asleep" = "asleep";
+/* Tooltip: %d agents are working. */
+"menubar.working" = "working: %d";
+/* Tooltip: %d agents are waiting for the user. */
+"menubar.waiting" = "waiting: %d";
+"menubar.done" = "done";
+"menubar.problem" = "problem";
+
+/* Menu item that switches how the mascot is shown. %@ is "Cat" or "Island". */
+"menu.view" = "View: %@";
+"menu.hooks.install" = "Install Claude Code hooks…";
+"menu.hooks.remove" = "Remove Claude Code hooks…";
+"menu.login.item" = "Open at login";
+"menu.quit" = "Quit";
+
+/* MARK: - Display modes */
+
+"display.mode.floating" = "Cat";
+"display.mode.island" = "Island";
+
+/* MARK: - Settings (shared by the menu bar and the panel) */
+
+"settings.title" = "Settings";
+"settings.view" = "View";
+"setting.keep.awake" = "Keep the Mac awake";
+"setting.lid.mode" = "Closed-lid mode";
+"setting.sounds" = "Sounds";
+"setting.show.cat" = "Show the cat";
+"setting.hide.when.idle" = "Hide the cat when nothing is running";
+"settings.no.notch" = "This display has no notch, so the island won't appear.";
+"settings.lid.password.hint" = "Turning this on the first time asks for an administrator password. One-time setup.";
+"settings.hooks.install" = "Install Claude Code hooks";
+
+/* MARK: - Session list */
+
+"panel.no.sessions" = "No active sessions";
+"panel.away.title" = "While you were away";
+/* %@ is a duration such as "12 min". */
+"panel.running.for" = "running for %@";
+"duration.minutes" = "%d min";
+"duration.hours.minutes" = "%dh %dm";
+
+/* One-word state of a session, shown in the list and in the menu-bar menu. */
+"session.status.idle" = "open";
+"session.status.working" = "working";
+"session.status.waiting" = "waiting for you";
+"session.status.done" = "done";
+"session.status.crashed" = "stopped";
+
+/* MARK: - What an agent is doing right now */
+
+"activity.working" = "working on the task";
+"activity.done" = "done";
+"activity.thinking" = "thinking";
+/* %@ is a file name. */
+"activity.editing.file" = "editing %@";
+"activity.editing" = "editing files";
+"activity.running" = "running a command";
+/* %@ is a file name. */
+"activity.reading.file" = "reading %@";
+"activity.reading" = "reading files";
+"activity.searching" = "searching the code";
+"activity.subagent.started" = "started a subagent";
+/* %@ is a tool name, e.g. "WebSearch". */
+"activity.tool" = "using %@";
+"activity.session.opened" = "open, waiting for a task";
+"activity.session.started" = "started on the task";
+"activity.session.stopped" = "the session stopped";
+"activity.waiting" = "waiting for you";
+"activity.waiting.maybe" = "looks like it is waiting for you";
+/* %@ is another activity line: the session's work is being done by a subagent. */
+"activity.subagent" = "subagent %@";
+
+/* MARK: - "While you were away" entries */
+
+"away.waiting" = "an agent is waiting for you";
+"away.done" = "an agent finished its work";
+"away.crashed" = "a session stopped";
+
+/* MARK: - Skins */
+
+"skins.title" = "Skin";
+"skins.credits" = "About the assets";
+"license.cc0" = "CC0 1.0 — public domain";
+"skin.luizmelo.1" = "Ginger";
+"skin.luizmelo.2" = "Black";
+"skin.luizmelo.3" = "Siamese";
+"skin.luizmelo.4" = "Smoke";
+"skin.luizmelo.5" = "White";
+"skin.luizmelo.6" = "Tabby";
+"skin.luizmelo.other" = "Cat %d";
+"skin.elthen" = "Silver";
+"skin.elthen.terms" = "Free to use in projects; the assets themselves may not be resold or redistributed.";
+"skin.mxmaze" = "Plush";
+/* %@ is the skin's name. */
+"skin.load.failed.title" = "Couldn't load the %@ skin";
+"skin.load.failed.body" = "Its files couldn't be read. Switched to another skin.";
+
+/* MARK: - Hooks */
+
+"hooks.install.failed.title" = "Couldn't install the hooks";
+"hooks.remove.failed.title" = "Couldn't remove the hooks";
+/* %@ is the path to ~/.claude/settings.json. */
+"hooks.settings.unreadable" = "Couldn't read the settings file %@. Check its permissions and try again.";
+"hooks.settings.unwritable" = "Couldn't update the settings file %@. Check that the file is valid.";
+/* %1$@ is a path, %2$@ the system error. */
+"hooks.settings.write.error" = "Couldn't write to %@: %@";
+"hooks.remove.confirm.title" = "Remove CodeCat's hooks?";
+/* %1$@ is the settings path, %2$@ the list of hook event names. */
+"hooks.remove.confirm.body" = "CodeCat's entries for these events will be removed from %1$@: %2$@. Other hooks and the rest of your settings are left alone.\n\nWithout hooks the cat keeps working, but it learns about session changes late — from transcripts rather than from events.";
+"hooks.remove.confirm.button" = "Remove";
+"button.cancel" = "Cancel";
+
+/* MARK: - Closed-lid mode */
+
+"lid.script.missing.title" = "Installer script not found";
+"lid.script.missing.body" = "Run it yourself: sudo bash scripts/install-lid-mode.sh";
+"lid.enable.failed.title" = "Couldn't turn on closed-lid mode";
+"lid.enable.failed.body" = "The installer finished but the rule still isn't there. Try again, or install it yourself: sudo bash scripts/install-lid-mode.sh";
+"lid.setup.needed.title" = "One-time setup needed";
+"lid.setup.needed.body" = "Closed-lid mode needs an administrator password once. You can turn it on later — try again when you're ready to enter it.";
+"lid.install.failed.title" = "Setup didn't finish";
+/* %@ is the installer's own error text. */
+"lid.install.failed.body" = "The installer exited with an error (%@). Try installing it yourself: sudo bash scripts/install-lid-mode.sh";
+/* %@ is the system error. */
+"lid.osascript.failed" = "Couldn't run osascript: %@";
+"lid.exit.code" = "exit code %d";
+/* %1$d is the exit code, %2$@ the command's output. */
+"lid.exit.code.detail" = "exit code %d: %@";
+
+/* MARK: - Jumping to a session's terminal tab */
+
+"jump.automation.denied.title" = "No automation permission";
+"jump.automation.denied.body" = "To open the terminal tab directly, CodeCat needs automation permission. Grant it in System Settings, under Privacy & Security → Automation.";
+"jump.tab.notfound.title" = "Couldn't find the tab";
+"jump.tab.notfound.body" = "That session's tab looks closed.";
+"jump.host.gone.title" = "Session closed";
+"jump.host.gone.body" = "The app this session was running in is no longer open.";
+"jump.failed.title" = "Couldn't jump to the session";
+/* %@ is the underlying detail. */
+"jump.failed.body" = "Error: %@";
+/* Appended to a jump message when CodeCat brought the terminal forward instead. */
+"jump.fallback.done" = "Brought the app forward instead.";
+"jump.fallback.failed" = "Bringing the app forward didn't work either — switch to it yourself.";
+"jump.detail.activation.refused" = "couldn't bring the app forward";
+"jump.detail.script.build.failed" = "couldn't compile the AppleScript";
+"jump.detail.timeout" = "the terminal didn't answer";
+"jump.detail.timeout.consent" = "the terminal hasn't answered yet — the automation permission dialog may still be open: answer it and click the session again";
+"jump.detail.unexpected.reply" = "unexpected reply from the terminal";
+"jump.detail.busy" = "The previous jump to the terminal hasn't finished.";
+/* %d is the AppleScript error number. */
+"jump.applescript.code" = "code %d";
+/* Caption under a session row that cannot be clicked. */
+"jump.hint.no.host" = "can't jump — this session started before CodeCat did";
+"jump.hint.host.gone" = "can't jump — this session's app is closed";

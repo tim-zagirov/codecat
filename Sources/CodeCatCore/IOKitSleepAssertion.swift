@@ -17,7 +17,9 @@ public final class IOKitSleepAssertion: SleepAssertionHolding {
         let result = IOPMAssertionCreateWithName(
             kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
             IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            "CodeCat: агенты Claude Code работают" as CFString,
+            // English regardless of the UI language: this is the reason string that shows
+            // up in `pmset -g assertions`, which is a diagnostic surface, not the UI.
+            "CodeCat: Claude Code agents are working" as CFString,
             &assertionID)
         isHeld = (result == kIOReturnSuccess)
     }

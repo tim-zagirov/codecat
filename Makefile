@@ -40,6 +40,11 @@ bundle: assets
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
 	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD)" $(APP)/Contents/Info.plist
 	cp scripts/install-lid-mode.sh scripts/uninstall-lid-mode.sh $(APP)/Contents/Resources/
+	# Локализация. `.strings`, а не `.xcstrings`: каталог строк компилирует сборочная
+	# система Xcode, а здесь её нет — бандл собирается этим Makefile из пакета SwiftPM.
+	# Ищутся они через `Bundle.main` (см. `L10n`), поэтому лежать обязаны именно в
+	# Contents/Resources — и подпись их покрывает вместе с остальным содержимым.
+	cp -R Resources/en.lproj Resources/ru.lproj $(APP)/Contents/Resources/
 	# Ассеты обликов идут в Contents/Resources/Skins, поэтому подпись их покрывает.
 	# Приложение находит их через Bundle.main (см. SpriteSheetStore), не трогая
 	# Bundle.module.
@@ -121,6 +126,11 @@ release: notarize
 verify-skins:
 	@test -d "$(APP)/Contents/Resources/Skins" \
 		|| (echo "ОШИБКА: ассеты обликов не попали в бандл"; exit 1)
+	# Локализация проверяется здесь же, а не отдельной целью: пропущенный `.lproj`
+	# не роняет приложение — оно молча показывает английский, — и потому это ровно
+	# та ошибка сборки, которую никто не заметит без проверки.
+	@test -f "$(APP)/Contents/Resources/ru.lproj/Localizable.strings" \
+		|| (echo "ОШИБКА: локализация не попала в бандл"; exit 1)
 	@out=$$(CODECAT_SKINS_DIR="$(CURDIR)/$(APP)/Contents/Resources/Skins" swift test --filter SkinAssetsTests 2>&1); \
 		echo "$$out" | grep -qE "Executed [1-9][0-9]* tests?, with 0 failures" \
 		&& echo "$$out" | grep -q "SKINS DIR: .*Contents/Resources/Skins" \

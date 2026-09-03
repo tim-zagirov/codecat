@@ -64,16 +64,16 @@ final class LidHelperInstallTests: XCTestCase {
 
     func testClassifyFailedWithDetailForOtherNonZeroExit() {
         let outcome = LidHelperInstall.classify(status: 1, output: "visudo: syntax error")
-        XCTAssertEqual(outcome, .failed(detail: "код завершения 1: visudo: syntax error"))
+        XCTAssertEqual(outcome, .failed(detail: "exit code 1: visudo: syntax error"))
     }
 
     func testClassifyFailedWithNoOutputStillReportsStatus() {
         let outcome = LidHelperInstall.classify(status: 127, output: "")
-        XCTAssertEqual(outcome, .failed(detail: "код завершения 127"))
+        XCTAssertEqual(outcome, .failed(detail: "exit code 127"))
     }
 
     func testClassifyFailedTrimsWhitespace() {
         let outcome = LidHelperInstall.classify(status: 2, output: "  boom  \n")
-        XCTAssertEqual(outcome, .failed(detail: "код завершения 2: boom"))
+        XCTAssertEqual(outcome, .failed(detail: "exit code 2: boom"))
     }
 }

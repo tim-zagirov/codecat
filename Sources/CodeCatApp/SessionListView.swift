@@ -41,21 +41,23 @@ struct SessionListView: View {
 
     @Environment(\.menuStyle) private var style
 
+    private static var awayTitle: String { L10n.t("panel.away.title", "While you were away") }
+
     /// В панели заголовок сводки — обычный текст того же кегля, что и раньше; в
     /// меню острова у секций есть свой заголовочный стиль.
     @ViewBuilder
     private var awayLogHeader: some View {
         if style.separator == nil {
-            Text("Пока тебя не было").font(.system(size: 12, weight: .medium))
+            Text(Self.awayTitle).font(.system(size: 12, weight: .medium))
         } else {
-            MenuSectionHeader(title: "Пока тебя не было")
+            MenuSectionHeader(title: Self.awayTitle)
         }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: style.blockSpacing) {
             if appState.store.ordered.isEmpty {
-                Text("Нет активных сессий")
+                Text(L10n.t("panel.no.sessions", "No active sessions"))
                     .font(.system(size: 12))
                     .foregroundStyle(style.secondary)
             } else {
@@ -99,7 +101,7 @@ struct SessionListView: View {
     /// правого края — это и есть сетка, которая держит список.
     @ViewBuilder
     private func secondLine(_ session: Session) -> some View {
-        let status = Text("\(label(for: session.status)) · \(session.activityDescription)")
+        let status = Text("\(session.status.title) · \(session.activityDescription)")
             .font(.system(size: 11))
             .foregroundStyle(style.secondary)
         if style.rowLayout == .twoLine {
@@ -138,7 +140,7 @@ struct SessionListView: View {
                     .foregroundStyle(style.primary)
                 secondLine(session)
                 if style.rowLayout == .threeLine {
-                    Text("длится \(duration(session))")
+                    Text(L10n.f("panel.running.for", "running for %@", duration(session)))
                         .font(.system(size: 10))
                         .foregroundStyle(style.tertiary)
                 }
@@ -216,19 +218,11 @@ struct SessionListView: View {
         }
     }
 
-    private func label(for status: SessionStatus) -> String {
-        switch status {
-        case .idle: return "открыта"
-        case .working: return "работает"
-        case .waitingForYou: return "ждёт тебя"
-        case .done: return "закончил"
-        case .crashed: return "оборвалась"
-        }
-    }
-
     private func duration(_ session: Session) -> String {
         let seconds = Int(session.lastActivity.timeIntervalSince(session.startedAt))
         let m = seconds / 60
-        return m < 60 ? "\(m) мин" : "\(m / 60) ч \(m % 60) мин"
+        return m < 60
+            ? L10n.f("duration.minutes", "%d min", m)
+            : L10n.f("duration.hours.minutes", "%dh %dm", m / 60, m % 60)
     }
 }

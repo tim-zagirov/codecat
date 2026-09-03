@@ -11,7 +11,7 @@ public enum MascotSkins {
 
     public static let all: [MascotSkin] = (1...6).map(luizMeloCat) + [elthen, mxmaze]
 
-    /// `luizmelo-cat-1` ("Рыжий"): the warm ginger cat, closest in spirit to the
+    /// `luizmelo-cat-1` ("Ginger"): the warm ginger cat, closest in spirit to the
     /// retired hand-drawn default, and the only LuizMelo cat in a warm palette.
     ///
     /// Built directly rather than looked up in `all`, so this can never fail: a
@@ -35,13 +35,13 @@ public enum MascotSkins {
     /// covered, so there is no force-unwrap that could trap on a typo'd number.
     private static func luizMeloName(_ n: Int) -> String {
         switch n {
-        case 1: return "Рыжий"
-        case 2: return "Чёрный"
-        case 3: return "Сиамский"
-        case 4: return "Дымчатый"
-        case 5: return "Белый"
-        case 6: return "Полосатый"
-        default: return "Кот \(n)"
+        case 1: return L10n.t("skin.luizmelo.1", "Ginger")
+        case 2: return L10n.t("skin.luizmelo.2", "Black")
+        case 3: return L10n.t("skin.luizmelo.3", "Siamese")
+        case 4: return L10n.t("skin.luizmelo.4", "Smoke")
+        case 5: return L10n.t("skin.luizmelo.5", "White")
+        case 6: return L10n.t("skin.luizmelo.6", "Tabby")
+        default: return L10n.f("skin.luizmelo.other", "Cat %d", n)
         }
     }
 
@@ -107,9 +107,10 @@ public enum MascotSkins {
     /// when it is absent this skin simply does not appear in the picker.
     private static let elthen = MascotSkin(
         id: "elthen-cat",
-        name: "Silver",
+        name: L10n.t("skin.elthen", "Silver"),
         author: "Elthen's Pixel Art Shop",
-        license: .authorTerms(summary: "Free to use in projects; the assets themselves may not be resold or redistributed."),
+        license: .authorTerms(summary: L10n.t("skin.elthen.terms",
+            "Free to use in projects; the assets themselves may not be resold or redistributed.")),
         sourceURL: "https://elthen.itch.io/2d-pixel-art-cat-sprites",
         directory: "elthen",
         frameSize: 32,
@@ -146,7 +147,7 @@ public enum MascotSkins {
     /// from row 1 rather than the sitting frame (2,0), whose eyes are shut.
     private static let mxmaze = MascotSkin(
         id: "mxmaze-kitty",
-        name: "Плюшевый",
+        name: L10n.t("skin.mxmaze", "Plush"),
         author: "Maze.Bit.Boutique (mxmaze)",
         license: .ccBy4,
         sourceURL: "https://mxmaze.itch.io/16-bit-kitty-free",

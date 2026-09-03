@@ -82,9 +82,9 @@ final class JumpExecutionPolicyTests: XCTestCase {
         let wedged = JumpMessages.timedOutDetail(awaitingConsent: false)
         let consent = JumpMessages.timedOutDetail(awaitingConsent: true)
         XCTAssertNotEqual(wedged, consent)
-        XCTAssertTrue(wedged.localizedCaseInsensitiveContains("терминал"))
-        XCTAssertTrue(consent.localizedCaseInsensitiveContains("разрешени"))
-        XCTAssertFalse(consent.localizedCaseInsensitiveContains("терминал не ответил"))
+        XCTAssertTrue(wedged.localizedCaseInsensitiveContains("terminal"))
+        XCTAssertTrue(consent.localizedCaseInsensitiveContains("permission"))
+        XCTAssertFalse(consent.localizedCaseInsensitiveContains("the terminal didn't answer"))
     }
 
     /// The string the user actually reads on a consent-path timeout is a composition of
@@ -96,10 +96,10 @@ final class JumpExecutionPolicyTests: XCTestCase {
             let body = JumpMessages.alert(for: .failed(JumpMessages.failureDetail(
                 JumpMessages.timedOutDetail(awaitingConsent: true), fellBack: fellBack)))!.body
             // Hedged about the dialog, never stated as fact.
-            XCTAssertTrue(body.localizedCaseInsensitiveContains("возможно"))
-            XCTAssertFalse(body.localizedCaseInsensitiveContains("всё ещё ждёт"))
+            XCTAssertTrue(body.localizedCaseInsensitiveContains("may still be open"))
+            XCTAssertFalse(body.localizedCaseInsensitiveContains("is still waiting"))
             // And still says what to do next.
-            XCTAssertTrue(body.localizedCaseInsensitiveContains("ответьте"))
+            XCTAssertTrue(body.localizedCaseInsensitiveContains("answer it"))
         }
         let fellBack = JumpMessages.alert(for: .failed(JumpMessages.failureDetail(
             JumpMessages.timedOutDetail(awaitingConsent: true), fellBack: true)))!.body
