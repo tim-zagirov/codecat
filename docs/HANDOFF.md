@@ -11,7 +11,7 @@ blur them. Anything a user reads is English — see the [README](../README.md).
 
 ## Where things stand
 
-- `master` is green: **400 tests**, `swift test`, clean working tree. The public
+- `master` is green: **404 tests**, `swift test`, clean working tree. The public
   release pass (licence, English UI, icon, CI, docs) is on top of it.
 - Installed at `/Applications/CodeCat.app`, ad-hoc signed. That is fine locally
   and **not** fine for distribution: see `docs/release.md`.

@@ -1,7 +1,7 @@
 # CodeCat public-release pass — what was done, and what is left for you
 
 Everything below landed on `master` as separate commits between `83d777f` and
-HEAD. **Tests: 390 before, 400 after, all green.** The version is now 0.3.0;
+HEAD. **Tests: 390 before, 404 after, all green.** The version is now 0.3.0;
 `v0.2.0` tags the state this pass started from.
 
 **Read the force-push section before you push anything.**
@@ -202,8 +202,9 @@ themselves are unchanged from what you wrote.
 - `.github/ISSUE_TEMPLATE/` (bug + feature, as forms) and `CONTRIBUTING.md`.
 - **Worktrees removed**, both, plus the empty `.claude/worktrees` directory.
 - **Merged branch deleted:** `claude/silent-fast-install-cabc5f`.
-- **`claude/codecat-release-prep-20e944` was NOT deleted** — see the open item
-  below.
+- **`claude/codecat-release-prep-20e944` was merged** into `master` before the
+  release: one commit closing items 5.4 and 5.5 of the old release checklist —
+  the island was taking clicks over the concave corners where nothing is drawn.
 - `docs/HANDOFF.md`'s "what's next" rewritten around what actually remains.
 - **`docs/superpowers/` and `.superpowers/sdd/` are kept, intentionally public.**
   `.superpowers/` was gitignored; `sdd/` is now committed — 54 briefs, reports
@@ -266,15 +267,10 @@ analytics, no networking, no auto-update, no App Store target.
    repository settings, and update the remote:
    `git remote set-url origin https://github.com/tim-zagirov/codecat.git`.
    Every document already points at the new name.
-4. **Close or merge PR #1**, whose content is already in `master` — and note that
-   the rewrite means its commits no longer exist under those hashes.
+4. ~~Close or merge PR #1~~ — already merged on GitHub; the old release checklist
+   was out of date about it.
 5. **Run `docs/verification-checklist.md`** on a fresh build. Item 34 needs a
    second Mac; item 35 is the new localisation check.
-6. **Decide about `claude/codecat-release-prep-20e944`.** It holds one unmerged
-   commit — *"остров больше не съедает клики там, где не нарисован"* — which
-   closes items 5.4 and 5.5 of the old release checklist with tests. I kept the
-   branch rather than pruning it: it is real work, and merging a behaviour change
-   was outside what you asked for. Worth merging before 0.3.0 ships.
-7. **Replace the app icon** if the generated one is not good enough.
-8. Optionally, delete `Sources/CodeCatApp/Skins/elthen/` from your disk — see
+6. **Replace the app icon** if the generated one is not good enough.
+7. Optionally, delete `Sources/CodeCatApp/Skins/elthen/` from your disk — see
    the deviation note in section 1.
