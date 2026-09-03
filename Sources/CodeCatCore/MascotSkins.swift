@@ -100,14 +100,20 @@ public enum MascotSkins {
 
     /// One 256x320 sheet, an 8x10 grid of 32x32 frames. Rows are numbered from zero,
     /// so frame index = row * 8 + column.
+    ///
+    /// `bundled: false` — Elthen's terms forbid redistributing the assets
+    /// themselves, so the sheet is not committed to this repository. It is
+    /// downloaded onto the build machine by `scripts/fetch-optional-assets.sh`;
+    /// when it is absent this skin simply does not appear in the picker.
     private static let elthen = MascotSkin(
         id: "elthen-cat",
-        name: "Серебристый",
+        name: "Silver",
         author: "Elthen's Pixel Art Shop",
-        license: .authorTerms(summary: "Разрешено использовать в проектах; сами ассеты нельзя перепродавать и раздавать."),
+        license: .authorTerms(summary: "Free to use in projects; the assets themselves may not be resold or redistributed."),
         sourceURL: "https://elthen.itch.io/2d-pixel-art-cat-sprites",
         directory: "elthen",
         frameSize: 32,
+        bundled: false,
         animations: {
             let sheet = "Cat Sprite Sheet.png"
             func rowFrames(_ r: Int, _ columns: Range<Int>) -> [SpriteFrame] {

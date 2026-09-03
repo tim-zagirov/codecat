@@ -110,10 +110,21 @@ public struct MascotSkin: Equatable, Sendable, Identifiable {
     public let directory: String
     /// 50 for LuizMelo, 32 for Elthen, 16 for mxmaze.
     public let frameSize: Int
+    /// Whether this skin's sheets are committed to the repository and therefore
+    /// present in every build.
+    ///
+    /// `false` means the author forbids redistributing the assets themselves, so
+    /// they are downloaded onto the build machine instead (see
+    /// `scripts/fetch-optional-assets.sh`) and may legitimately be missing. A
+    /// skin like that disappears from the picker rather than failing anything —
+    /// which is why this is a declared fact about the skin and not something the
+    /// UI infers from a failed load.
+    public let bundled: Bool
     public let animations: [AggregateStatusKey: SpriteAnimation]
 
     public init(id: String, name: String, author: String, license: SkinLicense,
                 sourceURL: String, directory: String, frameSize: Int,
+                bundled: Bool = true,
                 animations: [AggregateStatusKey: SpriteAnimation]) {
         self.id = id
         self.name = name
@@ -122,7 +133,27 @@ public struct MascotSkin: Equatable, Sendable, Identifiable {
         self.sourceURL = sourceURL
         self.directory = directory
         self.frameSize = frameSize
+        self.bundled = bundled
         self.animations = animations
+    }
+
+    /// Every sheet file this skin declares, de-duplicated. Used to answer "are this
+    /// skin's assets on disk?" without decoding a single PNG.
+    public var declaredSheets: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        // Every phase, not just the first: `.done` is a transition whose later
+        // phases ("laying", "sleeping") live in their own files, and a sheet that
+        // is only reachable after the first phase is exactly the one that would go
+        // missing unnoticed.
+        for animation in animations.values {
+            for phase in animation.phases {
+                for frame in phase.frames where seen.insert(frame.sheet).inserted {
+                    result.append(frame.sheet)
+                }
+            }
+        }
+        return result.sorted()
     }
 
     public func animation(for key: AggregateStatusKey) -> SpriteAnimation? {

@@ -30,7 +30,7 @@ struct SkinPickerView: View {
         VStack(alignment: .leading, spacing: 8) {
             header
             LazyVGrid(columns: columns, alignment: .leading, spacing: style.cellSpacing) {
-                ForEach(MascotSkins.all) { skin in
+                ForEach(appState.availableSkins) { skin in
                     preview(skin)
                 }
             }
@@ -127,7 +127,7 @@ struct SkinPickerView: View {
     private var creditedPacks: [(author: String, license: String, sourceURL: String)] {
         var seen = Set<String>()
         var result: [(author: String, license: String, sourceURL: String)] = []
-        for skin in MascotSkins.all {
+        for skin in appState.availableSkins {
             guard seen.insert(skin.author).inserted else { continue }
             result.append((author: skin.author,
                            license: licenseText(skin.license),

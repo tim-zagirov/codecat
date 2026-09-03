@@ -38,9 +38,18 @@ final class SkinAssetsTests: XCTestCase {
                       "Ассеты обликов не найдены: \(skinsDirectory.path)")
     }
 
+    /// A skin marked `bundled == false` is one whose author forbids redistributing
+    /// the assets, so its sheets are downloaded rather than committed and may
+    /// legitimately be missing from a clean checkout. Skipping it here is the whole
+    /// point — but the skip is *only* for that case: a `bundled` skin with no
+    /// directory still fails, which is what keeps the Makefile's post-build guard
+    /// able to catch a packaging mistake.
     func testEveryDeclaredSheetExistsAndHoldsEveryDeclaredFrame() throws {
         for skin in MascotSkins.all {
             let directory = skinsDirectory.appendingPathComponent(skin.directory)
+            if !skin.bundled && !FileManager.default.fileExists(atPath: directory.path) {
+                continue
+            }
             // Highest frame index actually asked for, per sheet.
             var maxIndex: [String: Int] = [:]
             for animation in skin.animations.values {
@@ -76,5 +85,18 @@ final class SkinAssetsTests: XCTestCase {
             atPath: skinsDirectory.appendingPathComponent("luizmelo/License.txt").path))
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: skinsDirectory.appendingPathComponent("CREDITS.md").path))
+    }
+
+    /// Every skin the app must be able to draw out of the box is committed. Only
+    /// Elthen's is not, and only because its terms forbid redistributing it — so
+    /// this pins the exception rather than letting a future "just don't commit
+    /// this one" pass unnoticed.
+    func testOnlyElthenIsAllowedToBeMissingFromTheRepository() {
+        XCTAssertEqual(MascotSkins.all.filter { !$0.bundled }.map(\.id), ["elthen-cat"])
+        for skin in MascotSkins.all where skin.bundled {
+            let directory = skinsDirectory.appendingPathComponent(skin.directory)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path),
+                          "\(skin.id): bundled skin has no assets at \(directory.path)")
+        }
     }
 }

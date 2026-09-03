@@ -17,14 +17,21 @@ NOTARY_PROFILE ?= codecat
 ZIP = dist/CodeCat-$(VERSION).zip
 DMG = dist/CodeCat-$(VERSION).dmg
 
-.PHONY: app bundle release notarize verify-skins test clean
+.PHONY: app bundle release notarize verify-skins assets test clean
 
 test:
 	swift test
 
+# Ассеты, которые нельзя держать в репозитории. Сейчас такой один — лист Elthen:
+# автор разрешает использовать спрайты, но не раздавать сами файлы, а публичный
+# репозиторий делает именно это. Скрипт не валит сборку: без листа просто нет
+# одного облика из восьми, и падать из-за недоступного itch.io незачем.
+assets:
+	@bash scripts/fetch-optional-assets.sh
+
 # Сборка бандла без подписи. Отдельной целью — потому что подписей две разные:
 # ad-hoc для локальной работы (`app`) и Developer ID для раздачи (`release`).
-bundle:
+bundle: assets
 	swift build -c release
 	rm -rf $(APP)
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
