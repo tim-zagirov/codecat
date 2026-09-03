@@ -8,6 +8,7 @@ import CodeCatCore
 /// not a way to choose — hence a 4x2 grid that fits whole. Fits with room to spare:
 /// 4 columns x 34pt + 3 gaps x 8pt = 160pt, against 290 - 2x14 = 262pt of usable
 /// width inside the panel's own padding.
+@MainActor
 struct SkinPickerView: View {
     @ObservedObject var appState: AppState
 

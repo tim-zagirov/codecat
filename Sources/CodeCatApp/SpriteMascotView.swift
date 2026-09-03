@@ -5,6 +5,7 @@ import CodeCatCore
 ///
 /// Two rules make pixel art survive on screen: `.interpolation(.none)` and an
 /// integer magnification. Anything else turns a 16x16 kitten into mush.
+@MainActor
 struct SpriteMascotView: View {
     let loaded: LoadedSkin
     let status: AggregateStatus
