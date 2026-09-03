@@ -60,7 +60,7 @@
 /* MARK: - What an agent is doing right now */
 
 "activity.working" = "working on the task";
-"activity.done" = "done";
+"activity.done" = "finished the task";
 "activity.thinking" = "thinking";
 /* %@ is a file name. */
 "activity.editing.file" = "editing %@";

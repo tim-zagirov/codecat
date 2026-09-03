@@ -265,6 +265,48 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
     }
 
+    /// Runs the scripted `DemoFeed` loop instead of watching anything real.
+    ///
+    /// Started by `--demo`, in place of `start()`, and it deliberately starts
+    /// *nothing* that `start()` does: no socket (a second listener would fight the
+    /// installed app for it), no transcript watcher, no power assertion — a demo
+    /// must not keep the Mac awake — and no maintenance timer, whose `reconcile`
+    /// would notice that none of these sessions has a live process and mark them
+    /// all crashed within a minute.
+    ///
+    /// - Parameter interval: seconds per phase. Four is what the capture script
+    ///   uses; the "done" animation is a transition and needs a beat to play.
+    /// - Parameter pinnedPhase: hold one phase instead of looping. A screenshot of
+    ///   "waiting for you" taken against a four-second loop is a race; this makes it
+    ///   a fact.
+    func startDemo(interval: TimeInterval = 4, pinnedPhase: DemoFeed.Phase? = nil) {
+        log.write("demo mode — no socket, no watcher, no power assertion"
+            + (pinnedPhase.map { ", pinned to \($0)" } ?? ""))
+        powerManager.isEnabled = false
+        lidController.isEnabled = false
+        var step = 0
+        func apply(_ phase: DemoFeed.Phase) {
+            let now = Date()
+            for event in DemoFeed.events(for: phase) { store.apply(hook: event, now: now) }
+            for activity in DemoFeed.activities(for: phase, now: now) { store.apply(activity: activity) }
+            refresh()
+        }
+        if let pinnedPhase {
+            apply(pinnedPhase)
+        } else {
+            func advance() {
+                apply(DemoFeed.phase(atStep: step))
+                step += 1
+            }
+            advance()
+            timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in advance() }
+        }
+        store.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+    }
+
     func refresh() {
         let agg = store.aggregate
         // Power policy must read `store.anyWorking` (per-session), never `aggregate`

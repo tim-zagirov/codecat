@@ -5,6 +5,8 @@ agents are working, and waves a paw when one of them needs you.
 
 *[Русская версия](README.ru.md)*
 
+![The island in the notch, with two agents working](docs/media/island-badge.png)
+
 ## How it works, in 30 seconds
 
 Claude Code fires hooks on five session events. CodeCat installs a tiny binary
@@ -53,6 +55,11 @@ Requires macOS 14 or later. Apple silicon and Intel.
 - **Closed-lid mode.** Shut the laptop and walk away; the agents keep going.
 - **"While you were away"** — a summary of what happened while the screen was
   locked.
+
+<p>
+  <img src="docs/media/panel-sessions.png" alt="The panel: three sessions, the skin grid and the settings" width="300">
+  <img src="docs/media/cat-waiting.png" alt="The cat waving because an agent is waiting" width="120">
+</p>
 
 ## Hooks: what gets written, and how to take it back
 
