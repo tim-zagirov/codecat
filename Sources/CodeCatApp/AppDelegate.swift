@@ -63,11 +63,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusIcon() {
         let (symbol, description): (String, String)
         switch appState.store.aggregate {
-        case .sleeping: (symbol, description) = ("moon.zzz", "спит")
-        case .working(let n): (symbol, description) = ("cat.fill", "работает: \(n)")
-        case .waiting(let n): (symbol, description) = ("exclamationmark.bubble.fill", "ждёт: \(n)")
-        case .done: (symbol, description) = ("checkmark.circle.fill", "готово")
-        case .problem: (symbol, description) = ("exclamationmark.triangle.fill", "проблема")
+        case .sleeping:
+            (symbol, description) = ("moon.zzz", L10n.t("menubar.asleep", "asleep"))
+        case .working(let n):
+            (symbol, description) = ("cat.fill", L10n.f("menubar.working", "working: %d", n))
+        case .waiting(let n):
+            (symbol, description) = ("exclamationmark.bubble.fill",
+                                     L10n.f("menubar.waiting", "waiting: %d", n))
+        case .done:
+            (symbol, description) = ("checkmark.circle.fill", L10n.t("menubar.done", "done"))
+        case .problem:
+            (symbol, description) = ("exclamationmark.triangle.fill",
+                                     L10n.t("menubar.problem", "problem"))
         }
         statusItem.button?.image = NSImage(
             systemSymbolName: symbol, accessibilityDescription: description)
@@ -77,16 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         for session in appState.store.ordered {
-            let status: String
-            switch session.status {
-            case .idle: status = "открыта"
-            case .working: status = "работает"
-            case .waitingForYou: status = "ждёт тебя"
-            case .done: status = "закончил"
-            case .crashed: status = "оборвалась"
-            }
             let item = NSMenuItem(
-                title: "\(session.projectName): \(status) — \(session.activityDescription)",
+                title: "\(session.projectName): \(session.status.title) — \(session.activityDescription)",
                 action: nil, keyEquivalent: "")
             item.isEnabled = false
             menu.addItem(item)
@@ -94,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !appState.store.ordered.isEmpty { menu.addItem(.separator()) }
 
         for mode in MascotDisplayMode.allCases {
-            let item = NSMenuItem(title: "Вид: \(mode.title)",
+            let item = NSMenuItem(title: L10n.f("menu.view", "View: %@", mode.title),
                                   action: #selector(selectDisplayMode(_:)), keyEquivalent: "")
             item.state = (appState.displayMode == mode) ? .on : .off
             item.representedObject = mode.rawValue
@@ -102,27 +101,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
-        menu.addItem(toggle("Не давать маку спать", appState.keepAwakeEnabled,
-                            #selector(toggleKeepAwake)))
-        menu.addItem(toggle("Режим закрытой крышки", appState.lidModeEnabled,
-                            #selector(toggleLidMode)))
-        menu.addItem(toggle("Звуки", appState.soundsEnabled, #selector(toggleSounds)))
-        menu.addItem(toggle("Показывать котика", appState.showMascot, #selector(toggleMascot)))
+        menu.addItem(toggle(L10n.t("setting.keep.awake", "Keep the Mac awake"),
+                            appState.keepAwakeEnabled, #selector(toggleKeepAwake)))
+        menu.addItem(toggle(L10n.t("setting.lid.mode", "Closed-lid mode"),
+                            appState.lidModeEnabled, #selector(toggleLidMode)))
+        menu.addItem(toggle(L10n.t("setting.sounds", "Sounds"),
+                            appState.soundsEnabled, #selector(toggleSounds)))
+        menu.addItem(toggle(L10n.t("setting.show.cat", "Show the cat"),
+                            appState.showMascot, #selector(toggleMascot)))
         // Дубликат пункта из панели настроек, и он здесь обязателен, а не для
         // удобства: включив «прятать», пользователь убирает с экрана и самого
         // маскота, и меню, которое живёт внутри него, — выключить обратно было бы
         // неоткуда. Меню-бар остаётся на месте всегда.
-        menu.addItem(toggle("Прятать котика, когда сессий нет",
+        menu.addItem(toggle(L10n.t("setting.hide.when.idle", "Hide the cat when nothing is running"),
                             appState.hidesWhenNoSessions, #selector(toggleHideWhenIdle)))
         menu.addItem(.separator())
         if appState.hooksInstalled {
-            menu.addItem(NSMenuItem(title: "Убрать хуки Claude Code…",
+            menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.remove", "Remove Claude Code hooks…"),
                                     action: #selector(removeHooks), keyEquivalent: ""))
         } else {
-            menu.addItem(NSMenuItem(title: "Установить хуки Claude Code…",
+            menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.install", "Install Claude Code hooks…"),
                                     action: #selector(installHooks), keyEquivalent: ""))
         }
-        let loginItem = NSMenuItem(title: "Запускать при логине",
+        let loginItem = NSMenuItem(title: L10n.t("menu.login.item", "Open at login"),
                                    action: #selector(toggleLoginItem), keyEquivalent: "")
         loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
         menu.addItem(loginItem)
@@ -134,7 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                      action: nil, keyEquivalent: "")
         versionItem.isEnabled = false
         menu.addItem(versionItem)
-        menu.addItem(NSMenuItem(title: "Выйти", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: L10n.t("menu.quit", "Quit"),
+                                action: #selector(quit), keyEquivalent: "q"))
         for item in menu.items where item.action != nil { item.target = self }
         return menu
     }

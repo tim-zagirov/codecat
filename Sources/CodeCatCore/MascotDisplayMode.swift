@@ -21,8 +21,8 @@ public enum MascotDisplayMode: String, CaseIterable, Sendable {
     /// Подпись в интерфейсе.
     public var title: String {
         switch self {
-        case .floating: return "Кот"
-        case .island: return "Остров"
+        case .floating: return L10n.t("display.mode.floating", "Cat")
+        case .island: return L10n.t("display.mode.island", "Island")
         }
     }
 }

@@ -136,19 +136,19 @@ final class SessionStoreTests: XCTestCase {
     func testSubagentActivityMarksDescriptionAsSubagentWork() {
         let store = SessionStore()
         let act = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
-                                     description: "выполняет команду",
+                                     description: "running a command",
                                      timestamp: t0, isSubagent: true)
         store.apply(activity: act)
-        XCTAssertEqual(store.ordered[0].activityDescription, "субагент выполняет команду")
+        XCTAssertEqual(store.ordered[0].activityDescription, "subagent running a command")
     }
 
     func testOrdinaryActivityDoesNotCarryTheSubagentMarker() {
         let store = SessionStore()
         let act = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
-                                     description: "выполняет команду",
+                                     description: "running a command",
                                      timestamp: t0, isSubagent: false)
         store.apply(activity: act)
-        XCTAssertEqual(store.ordered[0].activityDescription, "выполняет команду")
+        XCTAssertEqual(store.ordered[0].activityDescription, "running a command")
     }
 
     /// Пин требования 3 из спеки: субагент, работающий внутри сессии, — это работа
@@ -159,7 +159,7 @@ final class SessionStoreTests: XCTestCase {
     func testSessionWithOnlySubagentActivityStillCountsAsWorking() {
         let store = SessionStore()
         let act = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
-                                     description: "выполняет команду",
+                                     description: "running a command",
                                      timestamp: t0, isSubagent: true)
         store.apply(activity: act)
         XCTAssertEqual(store.aggregate, .working(1))

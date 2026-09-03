@@ -13,7 +13,7 @@ public enum LidHelperInstall {
         /// The user dismissed/cancelled the administrator password prompt.
         case cancelled
         /// The script ran but exited non-zero for a reason other than cancellation.
-        /// `detail` is meant to be shown to the user, e.g. "код завершения 1: ...".
+        /// `detail` is meant to be shown to the user, e.g. "exit code 1: ...".
         case failed(detail: String)
     }
 
@@ -56,8 +56,8 @@ public enum LidHelperInstall {
             return .cancelled
         }
         let detail = trimmed.isEmpty
-            ? "код завершения \(status)"
-            : "код завершения \(status): \(trimmed)"
+            ? L10n.f("lid.exit.code", "exit code %d", status)
+            : L10n.f("lid.exit.code.detail", "exit code %d: %@", status, trimmed)
         return .failed(detail: detail)
     }
 }

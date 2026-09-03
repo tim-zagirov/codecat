@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ru</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>CodeCat</string>
 	<key>CFBundleExecutable</key>
@@ -21,7 +28,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>CodeCat переключает вас во вкладку терминала, где ждёт ответа агент Claude Code.</string>
+	<string>CodeCat switches you to the terminal tab where a Claude Code agent is waiting for you.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

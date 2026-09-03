@@ -24,6 +24,19 @@ public enum SessionStatus: Equatable, Sendable {
     case waitingForYou(WaitReason)
     case done
     case crashed
+
+    /// The one-word label the user reads. Defined here rather than in each view
+    /// because the menu-bar menu and the session list both print it, and two copies
+    /// of the same five words are two translations that can drift apart.
+    public var title: String {
+        switch self {
+        case .idle: return L10n.t("session.status.idle", "open")
+        case .working: return L10n.t("session.status.working", "working")
+        case .waitingForYou: return L10n.t("session.status.waiting", "waiting for you")
+        case .done: return L10n.t("session.status.done", "done")
+        case .crashed: return L10n.t("session.status.crashed", "stopped")
+        }
+    }
 }
 
 public struct Session: Identifiable, Equatable, Sendable {

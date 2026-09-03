@@ -30,9 +30,9 @@ public enum TranscriptParser {
             && (obj["message"] as? [String: Any])?["stop_reason"] as? String == "end_turn"
         let description: String
         if type == "user" {
-            description = "работает над задачей"
+            description = L10n.t("activity.working", "working on the task")
         } else if endsTurn {
-            description = "закончил"
+            description = L10n.t("activity.done", "done")
         } else {
             description = describeAssistant(obj)
         }
@@ -50,24 +50,26 @@ public enum TranscriptParser {
         let content = ((obj["message"] as? [String: Any])?["content"] as? [[String: Any]]) ?? []
         guard let tool = content.last(where: { $0["type"] as? String == "tool_use" }),
               let name = tool["name"] as? String
-        else { return "думает" }
+        else { return L10n.t("activity.thinking", "thinking") }
 
         let input = tool["input"] as? [String: Any] ?? [:]
         let file = (input["file_path"] as? String).map { ($0 as NSString).lastPathComponent }
 
         switch name {
         case "Edit", "Write", "MultiEdit", "NotebookEdit":
-            return file.map { "редактирует \($0)" } ?? "редактирует файлы"
+            return file.map { L10n.f("activity.editing.file", "editing %@", $0) }
+                ?? L10n.t("activity.editing", "editing files")
         case "Bash":
-            return "выполняет команду"
+            return L10n.t("activity.running", "running a command")
         case "Read":
-            return file.map { "читает \($0)" } ?? "читает файлы"
+            return file.map { L10n.f("activity.reading.file", "reading %@", $0) }
+                ?? L10n.t("activity.reading", "reading files")
         case "Grep", "Glob":
-            return "ищет по коду"
+            return L10n.t("activity.searching", "searching the code")
         case "Task", "Agent":
-            return "запустил субагента"
+            return L10n.t("activity.subagent.started", "started a subagent")
         default:
-            return "использует \(name)"
+            return L10n.f("activity.tool", "using %@", name)
         }
     }
 }
