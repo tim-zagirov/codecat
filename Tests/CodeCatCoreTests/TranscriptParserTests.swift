@@ -120,7 +120,7 @@ final class TranscriptParserTests: XCTestCase {
     func testAssistantEndTurnIsRecognisedAsTheEndOfWork() {
         let activity = TranscriptParser.parseLine(assistant(stopReason: "end_turn"))
         XCTAssertEqual(activity?.endsTurn, true)
-        XCTAssertEqual(activity?.description, "done")
+        XCTAssertEqual(activity?.description, "finished the task")
     }
 
     /// Противоположность: вызов инструмента. Таких записей в реальной сессии в

@@ -147,7 +147,7 @@ public final class SessionStore: ObservableObject {
         case "Stop":
             upsert(event: event, now: now) { s in
                 s.status = .done
-                s.activityDescription = L10n.t("activity.done", "done")
+                s.activityDescription = L10n.t("activity.done", "finished the task")
             }
         case "SessionEnd":
             sessions.removeValue(forKey: event.sessionId)
@@ -176,7 +176,7 @@ public final class SessionStore: ObservableObject {
         // работать, разбирая его результат.
         if activity.endsTurn && !activity.isSubagent {
             s.status = .done
-            s.activityDescription = L10n.t("activity.done", "done")
+            s.activityDescription = L10n.t("activity.done", "finished the task")
             s.finishedAt = activity.timestamp
             s.lastActivity = activity.timestamp
             if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
