@@ -1,48 +1,39 @@
-# Ассеты обликов котика
+# Mascot sprite assets
 
-Файлы скачаны 2026-08-30 с разрешения пользователя. Лицензии перечитаны на страницах
-источников, а не взяты из вторичных таблиц. Скрипт `fetch-assets.sh` воспроизводит
-скачивание с itch.io (у всех трёх наборов цена «name your own price», то есть бесплатно).
+Authors, sources and licences for every pack live in
+[`THIRD_PARTY_NOTICES.md`](../../../THIRD_PARTY_NOTICES.md) at the repository
+root — that is the file to read for the licensing side. This one records how the
+files are wired into the build, which is what breaks if someone moves them.
 
-Ассеты объявлены ресурсами таргета `CodeCatApp` в `Package.swift` (`.copy("Skins")`).
-В коде (`SpriteSheetStore.skinsRoot`) они находятся напрямую, без `Bundle.module`:
-сперва `Bundle.main.resourceURL/Skins` (собранный `.app`, `Contents/Resources/Skins`),
-затем `Bundle.main.bundleURL/CodeCat_CodeCatApp.bundle/Skins` (`swift run` и любой
-будущий тестовый хост). Если ни один путь не существует, возвращается `nil`, и
-вызывающий код откатывается на нарисованного кота — `Bundle.module` не трогается
-вовсе, потому что его сгенерированный акцессор паникует (`fatalError`), если не
-находит бандл, а именно этот случай («лист не загрузился, файл потерян при сборке»)
-и должен обрабатываться откатом, а не падением.
+Licences were read on the itch.io pages themselves, not taken from secondary
+tables. All three packs are "name your own price", i.e. free.
 
-**Про условие Elthen «нельзя раздавать сами ассеты».** Репозиторий локальный, без
-remote, поэтому файлы никуда не раздаются, а внутри собранного `.app` это обычное
-использование. Если репозиторий когда-нибудь станет публичным, лист Elthen из него
-удаляется, а его место занимает `fetch-assets.sh`, скачивающий лист с itch.io на
-машину пользователя. У LuizMelo (CC0) и mxmaze (CC BY 4.0) такого ограничения нет.
+## What is here, and what is not
 
-## LuizMelo — Pet Cats Pack
+- `luizmelo/` — CC0. Committed. The author's own licence text is kept verbatim
+  in `luizmelo/License.txt`.
+- `mxmaze/` — CC BY 4.0. Committed. Attribution is a legal obligation here, not
+  a courtesy, and is shown in the app under *About the assets*.
+- `elthen/` — **not committed.** The author allows using the sprites but not
+  passing the assets themselves on, so this directory is gitignored and
+  `scripts/fetch-optional-assets.sh` downloads the sheet onto the machine that
+  builds the app. Without it the *Silver* skin is simply absent from the picker
+  (`MascotSkin.bundled == false` is what makes that a supported state rather
+  than an error).
 
-- Источник: https://luizmelo.itch.io/pet-cat-pack
-- Лицензия: **CC0 1.0 Universal** (общественное достояние). Оригинальный текст автора —
-  в `luizmelo/License.txt`, страница добавляет: «Credit is not required, but I would
-  appreciate it.»
-- Что внутри: шесть котов (`Cat-1`…`Cat-6`), кадр 50×50 px, горизонтальные полосы.
-  `Cat-1` рыжий. У `Cat-3` нет анимации `Itch` — единственное отличие в покрытии.
+`fetch-assets.sh` is the generic downloader those scripts call: it walks one
+itch.io page's free download flow and saves every file it offers.
 
-## Elthen's Pixel Art Shop — 2D Pixel Art Cat Sprites
+## How the app finds these files
 
-- Источник: https://elthen.itch.io/2d-pixel-art-cat-sprites
-- Формальной лицензии на странице нет. Страница: «Feel free to use the sprites in
-  commercial/non-commercial projects!». Условия автора — https://www.patreon.com/posts/27430241 :
-  коммерческое использование разрешено; **сами ассеты нельзя перепродавать и
-  раздавать**; нельзя в blockchain/NFT/p2e проектах; кредиты не обязательны.
-- Что внутри: один лист 256×320, сетка 8×10 кадров по 32×32.
+They are declared as resources of the `CodeCatApp` target in `Package.swift`
+(`.copy("Skins")`). `SpriteSheetStore.skinsRoot` resolves them directly, without
+`Bundle.module`: first `Bundle.main.resourceURL/Skins` (the assembled `.app`,
+`Contents/Resources/Skins`), then
+`Bundle.main.bundleURL/CodeCat_CodeCatApp.bundle/Skins` (`swift run`, and any
+future test host). If neither exists it returns `nil` and the caller falls back
+to the hand-drawn cat.
 
-## mxmaze — 16-Bit Kitty (FREE)
-
-- Источник: https://mxmaze.itch.io/16-bit-kitty-free
-- Лицензия: **CC BY 4.0** — атрибуция обязательна. Автор подтверждает лицензию в
-  комментариях к странице.
-- Атрибуция: **Maze.Bit.Boutique (mxmaze), CC BY 4.0** — должна быть показана в
-  приложении, а не только здесь.
-- Что внутри: один лист 48×48, сетка 3×3 по 16×16.
+`Bundle.module` is deliberately never touched: its generated accessor calls
+`fatalError` when it cannot find its bundle, and "the sheet did not make it into
+the build" is precisely the case that has to degrade, not crash.

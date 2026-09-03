@@ -115,6 +115,22 @@ final class AppState: ObservableObject {
 
     var skin: MascotSkin { MascotSkins.skin(withID: skinID) }
 
+    /// The skins the picker may offer: everything in the registry whose sheets are
+    /// actually on this machine.
+    ///
+    /// Not every registered skin ships with the app. Elthen's terms forbid
+    /// redistributing the assets, so that sheet is downloaded by whoever builds
+    /// CodeCat and is legitimately absent from a plain `git clone` build. A skin
+    /// in that state must disappear quietly — a greyed-out tile or an error would
+    /// tell the user about a licence problem that is not theirs.
+    ///
+    /// `@MainActor` because `SpriteSheetStore.shared` is; every caller is a SwiftUI
+    /// body, which already is.
+    @MainActor
+    var availableSkins: [MascotSkin] {
+        MascotSkins.all.filter { SpriteSheetStore.shared.hasAssets(for: $0) }
+    }
+
     /// Skins whose failure alert has already been shown. Only the *alert* is
     /// once-per-launch: the view that renders the mascot is rebuilt constantly, and
     /// an alert on every rebuild would be unusable. The revert to the default skin in
@@ -147,7 +163,13 @@ final class AppState: ObservableObject {
         // sitting in `skinID` — rendering the default skin correctly, but with no
         // tile selected in `SkinPickerView` (it compares `skin.id == skinID`) until
         // the user happens to tap one, since `didSet` does not fire on `init`.
-        skinID = MascotSkins.skin(withID: defaults.string(forKey: "mascotSkin") ?? MascotSkins.default.id).id
+        //
+        // A stored skin whose sheets are not on this machine gets that same silent
+        // migration: it happens when CodeCat was built without running the
+        // optional-asset download (Elthen's sheet is not in the repository), and it
+        // is not the user's mistake to be told about.
+        let storedSkin = MascotSkins.skin(withID: defaults.string(forKey: "mascotSkin") ?? MascotSkins.default.id)
+        skinID = SpriteSheetStore.assetsExist(for: storedSkin) ? storedSkin.id : MascotSkins.default.id
 
         // Read once at startup (see the design spec): a route recorded by a hook
         // before this launch is what makes a session the transcript watcher
