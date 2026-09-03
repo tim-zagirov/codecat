@@ -6,11 +6,11 @@ final class AwayLogTests: XCTestCase {
 
     func testRecordsOnlyWhileAway() {
         let log = AwayLog()
-        log.record("до блокировки", at: t0)
+        log.record("before the lock", at: t0)
         log.lock()
-        log.record("сессия couchdeck закончила", at: t0.addingTimeInterval(60))
+        log.record("the couchdeck session finished", at: t0.addingTimeInterval(60))
         log.unlock()
-        XCTAssertEqual(log.lastSummary.map(\.text), ["сессия couchdeck закончила"])
+        XCTAssertEqual(log.lastSummary.map(\.text), ["the couchdeck session finished"])
     }
 
     func testUnlockKeepsSummaryUntilNextLock() {
@@ -20,7 +20,7 @@ final class AwayLogTests: XCTestCase {
         log.unlock()
         XCTAssertEqual(log.lastSummary.count, 1)
         log.lock()
-        XCTAssertEqual(log.lastSummary.count, 0, "новая блокировка начинает новый сбор")
+        XCTAssertEqual(log.lastSummary.count, 0, "a new lock starts a new collection")
     }
 
     func testIsAwayFlag() {

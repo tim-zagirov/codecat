@@ -2,16 +2,16 @@ import SwiftUI
 import AppKit
 import CodeCatCore
 
-/// Список активных сессий плюс сводка «пока тебя не было». Вынесен из
-/// `DetailsPanelView`, чтобы то же содержимое рисовалось и в меню острова —
-/// на другом фоне, но с той же логикой наведения, курсора и перехода.
+/// The list of active sessions plus the "while you were away" summary. Split out of
+/// `DetailsPanelView` so the same content can be drawn in the island menu too — on a
+/// different background, but with the same hover, cursor and jump behaviour.
 ///
-/// Комментарии про курсор и `hovered` переехали сюда дословно: они описывают
-/// нетривиальный обход поведения AppKit, а не стиль кода.
+/// The comments about the cursor and `hovered` moved here verbatim: they describe a
+/// non-obvious workaround for AppKit's behaviour, not a matter of code style.
 ///
-/// Всё, что здесь показано, вычисляется прямо из `appState` в момент вычисления
-/// `body`, поэтому отражает живое состояние само по себе — отдельной подписки
-/// на `store`/`awayLog` не нужно.
+/// Everything here is computed straight from `appState` while `body` runs, so it
+/// reflects live state on its own — no separate subscription to `store`/`awayLog` is
+/// needed.
 struct SessionListView: View {
     @ObservedObject var appState: AppState
     var onJump: () -> Void = {}
@@ -43,8 +43,8 @@ struct SessionListView: View {
 
     private static var awayTitle: String { L10n.t("panel.away.title", "While you were away") }
 
-    /// В панели заголовок сводки — обычный текст того же кегля, что и раньше; в
-    /// меню острова у секций есть свой заголовочный стиль.
+    /// In the panel the summary's heading is ordinary text at the size it always was;
+    /// in the island menu, sections have a heading style of their own.
     @ViewBuilder
     private var awayLogHeader: some View {
         if style.separator == nil {
@@ -70,8 +70,8 @@ struct SessionListView: View {
                 MenuSeparator()
                 awayLogHeader
                 ForEach(appState.awayLog.lastSummary) { entry in
-                    // Маркер «• » нужен был, пока сводка шла вплотную к списку
-                    // сессий; с заголовком секции и отступом он лишний.
+                    // The "• " marker was needed while the summary ran flush against
+                    // the session list; with a section heading and padding it is surplus.
                     Text(style.separator == nil ? "• \(entry.text)" : entry.text)
                         .font(.system(size: 11))
                         .foregroundStyle(style.secondary)
@@ -91,14 +91,14 @@ struct SessionListView: View {
         }
     }
 
-    /// Точка статуса. На чёрном 8 pt читаются как клякса, а костыль
-    /// `.padding(.top, 5)` под неё подгонялся к трёхстрочной раскладке.
+    /// The status dot. On black, 8 pt reads as a blob, and the `.padding(.top, 5)`
+    /// crutch under it was tuned to the three-line layout.
     private var dotSize: CGFloat { style.rowLayout == .twoLine ? 6 : 8 }
     private var dotTopInset: CGFloat { style.rowLayout == .twoLine ? 4 : 5 }
 
-    /// Вторая строка. В двухстрочной раскладке длительность уезжает сюда же и
-    /// прижимается вправо: длительности всех сессий выстраиваются в колонку у
-    /// правого края — это и есть сетка, которая держит список.
+    /// The second line. In the two-line layout the duration moves here too and is
+    /// pushed right: every session's duration lines up in a column at the right edge —
+    /// that column is the grid holding the list together.
     @ViewBuilder
     private func secondLine(_ session: Session) -> some View {
         let status = Text("\(session.status.title) · \(session.activityDescription)")
@@ -208,8 +208,8 @@ struct SessionListView: View {
 
     private func color(for status: SessionStatus) -> Color {
         switch status {
-        // Серый: сессия открыта, но ничего не происходит — ровно то же, что говорит
-        // спящий кот и пустой счётчик.
+        // Grey: the session is open but nothing is happening — exactly what the
+        // sleeping cat and the empty counter say.
         case .idle: return .secondary
         case .working: return .green
         case .waitingForYou: return .orange

@@ -93,8 +93,9 @@ public final class LidSleepController {
     }
 
     private func setFlag(_ on: Bool) {
-        // Мост ставится ДО снятия флага, иначе он опоздает: сон наступает в те же
-        // миллисекунды, что и запись pmset. См. bridgeIdleSleep.
+        // The bridge is put in place BEFORE the flag is cleared, or it arrives too
+        // late: sleep happens in the same milliseconds as the pmset write. See
+        // bridgeIdleSleep.
         if !on { bridge(Self.bridgeSeconds) }
         let args = ["/usr/bin/sudo", "-n", "/usr/bin/pmset", "-a",
                      "disablesleep", on ? "1" : "0"]
@@ -103,42 +104,43 @@ public final class LidSleepController {
         }
     }
 
-    /// Сколько секунд удерживать мак от сна сразу после снятия `disablesleep`.
+    /// How many seconds to hold the Mac awake immediately after clearing `disablesleep`.
     ///
-    /// Смысл окна — дать маку прожить обычную паузу вместо мгновенного провала в
-    /// сон, чтобы за это время засчиталось живое действие человека (он только что
-    /// нажал «Выйти» и почти наверняка ещё за машиной). Если человек всё-таки ушёл,
-    /// окно истечёт и мак уснёт сам — это правильно, мешать этому не надо.
+    /// The point of the window is to let the Mac live through an ordinary pause
+    /// instead of dropping instantly into sleep, so that a real human action can be
+    /// registered in the meantime (they just clicked Quit and are almost certainly
+    /// still at the machine). If they did walk away, the window expires and the Mac
+    /// sleeps on its own — which is correct and should not be prevented.
     public static let bridgeSeconds = 60
 
-    /// Почему это вообще нужно — замерено на живой машине, а не выведено из
-    /// документации.
+    /// Why this is needed at all — measured on a live machine, not deduced from the
+    /// documentation.
     ///
-    /// `pmset -a disablesleep 0` заставляет ядро перечитать настройки сна. Всё
-    /// время, пока флаг стоял, простой продолжал накапливаться, поэтому при
-    /// перечитывании мак видит простой, давно перешедший порог, и засыпает
-    /// НЕМЕДЛЕННО — в журнале это `sleep reason Software Sleep`, то есть сон по
-    /// программному запросу, а не по простою. Замер на выходе из приложения:
+    /// `pmset -a disablesleep 0` makes the kernel re-read the sleep settings. All the
+    /// while the flag was up, idle time kept accumulating, so on re-reading, the Mac
+    /// sees idle time long past the threshold and sleeps IMMEDIATELY — in the log that
+    /// is `sleep reason Software Sleep`, i.e. sleep by software request rather than by
+    /// idling. Measured on app exit:
     ///
-    ///     11:20:06.018  powerd: Energy Saver Prefs have changed   (это наш pmset)
-    ///     11:20:06.055  kernel: PMRD: sleep reason Software Sleep (через 37 мс)
-    ///     11:20:06.094  corebrightnessd: Will Sleep, яркость 0    (экран погас)
+    ///     11:20:06.018  powerd: Energy Saver Prefs have changed   (this is our pmset)
+    ///     11:20:06.055  kernel: PMRD: sleep reason Software Sleep (37 ms later)
+    ///     11:20:06.094  corebrightnessd: Will Sleep, brightness 0 (screen went dark)
     ///
-    /// Контрольный опыт: тот же выход при ВЫКЛЮЧЕННОМ режиме крышки — сна нет
-    /// вовсе. Виноват именно этот `pmset`, а не снятие IOKit-удержания: отдельно
-    /// проверено, что `IOPMAssertionDeclareUserActivity` (то же, что `caffeinate -u`)
-    /// этот путь не перекрывает — мак засыпает всё равно.
+    /// Control experiment: the same exit with lid mode OFF — no sleep at all. This
+    /// `pmset` is the culprit, not the release of the IOKit assertion: it was verified
+    /// separately that `IOPMAssertionDeclareUserActivity` (the same thing as
+    /// `caffeinate -u`) does not block this path — the Mac sleeps regardless.
     ///
-    /// Работает `caffeinate -i` — обычное удержание сна по простою. Он ОТДЕЛЬНЫЙ
-    /// процесс намеренно: удержание принадлежит своему процессу, и взятое внутри
-    /// CodeCat умерло бы вместе с ним через миллисекунды (в журнале powerd это
-    /// видно как `ClientDied`), то есть ровно тогда, когда оно и нужно.
+    /// What works is `caffeinate -i` — an ordinary idle-sleep assertion. It is a
+    /// SEPARATE process deliberately: an assertion belongs to its own process, and one
+    /// taken inside CodeCat would die with it milliseconds later (visible in powerd's
+    /// log as `ClientDied`) — precisely when it is needed.
     private func bridge(_ seconds: Int) {
         _ = bridgeRunner(seconds)
     }
 
-    /// Запускает `caffeinate -i -t <seconds>` отвязанно. Подменяется в тестах —
-    /// ни один тест не должен порождать настоящий процесс.
+    /// Launches `caffeinate -i -t <seconds>` detached. Substituted in tests — no test
+    /// should spawn a real process.
     public static let defaultBridgeRunner: (Int) -> Bool = { seconds in
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
@@ -147,13 +149,13 @@ public final class LidSleepController {
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
-            // Намеренно НЕ ждём: процесс должен пережить наш выход. launchd
-            // усыновит его, когда мы умрём.
+            // Deliberately NOT waited on: the process must outlive our exit. launchd
+            // adopts it when we die.
             return true
         } catch {
-            // Мост — удобство, а не корректность. Не смогли — снимаем флаг всё
-            // равно: оставить disablesleep поднятым куда хуже, чем разбудить
-            // человека погасшим экраном.
+            // The bridge is a convenience, not correctness. If it could not be started,
+            // clear the flag anyway: leaving disablesleep up is far worse than waking
+            // someone with a screen that went dark.
             return false
         }
     }

@@ -3,7 +3,6 @@
 A menu-bar cat that watches your Claude Code sessions, keeps the Mac awake while
 agents are working, and waves a paw when one of them needs you.
 
-*[Русская версия](README.ru.md)*
 
 ![The island in the notch, with two agents working](docs/media/island-badge.png)
 
@@ -169,18 +168,12 @@ parsing, aggregate session status, the power assertion, the away log, the
 `settings.json` rewrite, the process-tree walk that picks a jump route, the
 sprite registry against the real PNGs, and both string catalogs against the call
 sites. The build additionally checks that the assembled `.app` really contains
-the skins and the localisations.
+the skins and the string catalog.
 
 By hand, because an `LSUIElement` app has no window for a screen-control tool to
 find: everything in [docs/verification-checklist.md](docs/verification-checklist.md).
 Closed-lid mode in particular has never run end to end on a machine — it needs an
 administrator password, so it was never executed during development.
-
-### How this was built
-
-Every line of CodeCat was written by AI agents, driven by specs. If that is the
-interesting part for you, [docs/how-this-was-built.md](docs/how-this-was-built.md)
-has the workflow, the timeline, and the one review lesson that cost the most.
 
 ## Credits and licence
 

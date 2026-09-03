@@ -8,8 +8,8 @@ requests are welcome; there is no roadmap you need to fit into.
 For anything beyond a small fix, open an issue first. Not for process — because
 the design decisions in this codebase are written down, and it saves you writing
 code against an assumption that was already considered and rejected. The specs
-are in `docs/superpowers/specs/`, and the comments in the source carry the *why*
-rather than the *what*.
+The comments in the source carry the *why* rather than the *what*, and they are
+where the reasoning behind most of these decisions lives.
 
 ## Working on it
 
@@ -40,10 +40,11 @@ open -a /Applications/CodeCat.app
   say so, and the message must not claim something the code does not know. There
   are tests that enforce exactly this for jump-to-session; hold new code to it
   too.
-- **User-visible text goes through `L10n`**, with the English at the call site
-  and both catalogs updated (`Resources/en.lproj`, `Resources/ru.lproj`).
-  `LocalizationCatalogTests` fails if you forget one. Log lines are the
-  exception: those stay English so a pasted log is readable by anyone.
+- **User-visible text goes through `L10n`**, with the English written at the call
+  site and the key added to `Resources/en.lproj/Localizable.strings`.
+  `LocalizationCatalogTests` fails if the two ever disagree. It is one file on
+  purpose: it is the only place the product's whole vocabulary can be read at
+  once. Log lines are the exception — they are not user-facing copy.
 - **Verify by artefact.** Reasoning about whether UI code is right has a poor
   record here — three real defects survived careful review and fell only to a
   rendered image or an independently computed number. If you change something

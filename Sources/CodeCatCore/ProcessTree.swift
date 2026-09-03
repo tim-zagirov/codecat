@@ -87,22 +87,22 @@ public enum ProcessTree {
         return found
     }
 
-    /// PID ближайшего предка, чей исполняемый файл называется `executableName`
-    /// (по умолчанию — `claude`), то есть процесс той самой сессии, внутри которой
-    /// запустился хук.
+    /// PID of the nearest ancestor whose executable is named `executableName`
+    /// (`claude` by default) — the process of the very session the hook was launched
+    /// inside.
     ///
-    /// Ближайший, а не самый внешний — в отличие от `host`: когда один `claude`
-    /// запускает другого, сессия хука принадлежит внутреннему. Цепочка предков у
-    /// хука обычно такая: `codecat-hook` ← `sh -c` ← `claude`.
+    /// The nearest, not the outermost, unlike `host`: when one `claude` launches
+    /// another, the hook's session belongs to the inner one. The hook's ancestor chain
+    /// is usually `codecat-hook` ← `sh -c` ← `claude`.
     ///
-    /// Сравнивается последний компонент пути, а не имя процесса в ядре (`p_comm`):
-    /// оно обрезано до 16 символов и у бинарника, запущенного через симлинк,
-    /// показывает имя цели симлинка, а не то, чем процесс себя называет.
+    /// The path's last component is compared rather than the kernel's process name
+    /// (`p_comm`): that is truncated to 16 characters and, for a binary launched
+    /// through a symlink, shows the symlink target's name rather than what the process
+    /// calls itself.
     ///
-    /// Те же предохранители, что у `host`: ограничение глубины и множество
-    /// посещённых pid — код исполняется внутри `codecat-hook`, которого ждёт
-    /// Claude Code, поэтому испорченная или зацикленная цепочка предков обязана
-    /// завершиться, а не крутиться.
+    /// The same safeguards as `host`: a depth limit and a set of visited pids — this
+    /// code runs inside `codecat-hook`, which Claude Code is waiting on, so a corrupt
+    /// or looping ancestor chain has to terminate rather than spin.
     public static func agent(startingAt pid: pid_t,
                              provider: ProcessTreeProviding,
                              maxDepth: Int = 24,

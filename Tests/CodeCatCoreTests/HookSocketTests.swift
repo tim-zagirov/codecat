@@ -30,7 +30,7 @@ final class HookSocketTests: XCTestCase {
         try server.start()
         defer { server.stop() }
         XCTAssertTrue(HookSocketClient.send("not json".data(using: .utf8)!, to: path))
-        // даём серверу шанс обработать
+        // give the server a chance to process it
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
         XCTAssertEqual(count, 0)
     }

@@ -17,9 +17,9 @@ public final class SessionStore: ObservableObject {
         sessions.values.sorted { $0.startedAt < $1.startedAt }
     }
 
-    /// Что показывает кот. `.idle`-сессии сюда не входят ни в каком виде: открытая
-    /// сессия, в которой никто ничего не запускал, — это `.sleeping`, спящий кот и
-    /// пустой бейдж, а не «работает 1».
+    /// What the cat shows. `.idle` sessions do not enter into this at all: an open
+    /// session in which nobody has started anything is `.sleeping` — a sleeping cat
+    /// and an empty badge, not "working: 1".
     public var aggregate: AggregateStatus {
         let all = sessions.values
         let waiting = all.filter {
@@ -43,22 +43,23 @@ public final class SessionStore: ObservableObject {
     /// `expireFinished`'s TTL (up to 600s) — as the badge's number, while the badge's
     /// *colour* came from `aggregate`, which only counts the sessions in the state
     /// being shown. Two agents genuinely working could badge "5" because three
-    /// finished sessions hadn't expired yet. The design spec calls the badge
-    /// «бейдж с числом активных сессий» (`docs/superpowers/specs/2026-08-28-codecat-design.md:83`)
-    /// — the number of *active* sessions, not of everything this process still
+    /// finished sessions hadn't expired yet. The design spec calls it a badge
+    /// carrying the number of *active* sessions — not the number of everything this
+    /// process still
     /// happens to remember.
     ///
     /// Deliberately derived from `aggregate` rather than recomputing "which state is
     /// the mascot in" a second time: two places independently deciding that question
     /// is exactly how the number and the colour drifted apart in the first place.
-    /// Число на бейдже — это «сколько агентов прямо сейчас чем-то заняты или ждут
-    /// тебя». Больше ничего.
+    /// The number on the badge means "how many agents are busy or waiting for you
+    /// right now". Nothing else.
     ///
-    /// Поэтому у `.done` и `.problem` числа нет: закончившая сессия не работает, и
-    /// оборвавшаяся тоже. Позы кота (доволен / тревога) сами говорят, что случилось,
-    /// а сколько именно сессий в этом состоянии — видно в панели. Раньше число там
-    /// было, и оно врало ровно так, как это читает человек: «ничего не запущено, а
-    /// на бейдже 2» — это были две сессии, закончившие турн в последние десять минут.
+    /// That is why `.done` and `.problem` carry no number: a finished session is not
+    /// working, and neither is one that died. The cat's poses (content / alarmed)
+    /// already say what happened, and how many sessions are in that state is visible
+    /// in the panel. The number used to be there, and it lied in precisely the way a
+    /// person reads it: "nothing is running, and the badge says 2" meant two sessions
+    /// had finished their turn within the last ten minutes.
     public var badgeCount: Int {
         switch aggregate {
         case .waiting(let n): return n
@@ -67,13 +68,14 @@ public final class SessionStore: ObservableObject {
         }
     }
 
-    /// Есть ли вообще отслеживаемые сессии — независимо от того, чем они заняты.
+    /// Whether there are any tracked sessions at all, regardless of what they are doing.
     ///
-    /// Отвечает ровно на вопрос «есть ли сессии», и в этом всё дело: `aggregate`
-    /// отвечает на другой — «что показывает кот». С появлением `.idle` эти два
-    /// вопроса разошлись: открытая, но простаивающая сессия даёт `.sleeping`, хотя
-    /// сессия есть. Настройка «прятать остров, когда сессий нет» читала `aggregate`
-    /// и потому убирала остров с экрана, пока сессии преспокойно жили в панели.
+    /// It answers exactly the question "are there sessions", and that is the whole
+    /// point: `aggregate` answers a different one — "what does the cat show". Once
+    /// `.idle` existed the two questions diverged: an open but idle session yields
+    /// `.sleeping` even though the session exists. The "hide the island when nothing
+    /// is running" setting read `aggregate` and so took the island off screen while
+    /// sessions were sitting happily in the panel.
     public var hasSessions: Bool { !sessions.isEmpty }
 
     /// True when at least one session's *own* status counts as work in progress —
@@ -94,9 +96,9 @@ public final class SessionStore: ObservableObject {
             case .working: return true
             case .waitingForYou(.idle): return true
             case .waitingForYou: return false
-            // Открытая сессия без работы не повод не давать маку заснуть: держать
-            // ассершен ради вкладки, в которой никто ничего не запускал, значит
-            // сажать батарею за компанию с бейджем, который врал.
+            // An open session with no work is no reason to keep the Mac awake: holding
+            // an assertion for a tab nobody has started anything in drains the battery
+            // for the same reason the badge used to lie.
             case .idle, .done, .crashed: return false
             }
         }
@@ -105,34 +107,34 @@ public final class SessionStore: ObservableObject {
     public func apply(hook event: HookEvent, now: Date) {
         switch event.hookEventName {
         case "SessionStart":
-            // `source == "compact"` — единственный случай, когда SessionStart не
-            // означает появления сессии: он приходит посреди уже идущей работы, после
-            // авто-компакции. Поэтому для него не трогается ни статус (сбросить
-            // работающую сессию в `.idle` значило бы погасить кота ровно тогда, когда
-            // агент занят), ни `startedAt` (сессия не прерывалась, и её длительность
-            // не должна начинаться заново).
+            // `source == "compact"` is the one case where SessionStart does not mean a
+            // session appeared: it arrives in the middle of ongoing work, after an
+            // auto-compaction. So it touches neither the status (resetting a working
+            // session to `.idle` would put the cat to sleep exactly while the agent is
+            // busy) nor `startedAt` (the session never stopped, and its duration must
+            // not start over).
             //
-            // Любой другой `source` — включая отсутствующий или незнакомый — считается
-            // настоящим стартом и сбрасывает возможно устаревший `startedAt` из кэша
-            // маршрутов (см. доккоммент `SessionRouteCache.merged`). Это безопасное
-            // умолчание: SessionStart не приходит просто оттого, что перезапустили
-            // CodeCat, так что случая «незнакомый source значит сохранить старое» нет.
+            // Any other `source` — including a missing or unfamiliar one — counts as a
+            // real start and clears the possibly stale `startedAt` from the route cache
+            // (see `SessionRouteCache.merged`). That is the safe default: SessionStart
+            // does not arrive merely because CodeCat was restarted, so there is no case
+            // where an unknown source ought to mean "keep the old value".
             let isCompact = event.source == "compact"
             upsert(event: event, now: now, resetStartedAt: !isCompact) { s in
                 guard !isCompact else { return }
-                // Не `.working`: событие говорит «сессия появилась», а не «агент
-                // взялся за работу» — см. `SessionStatus.idle`. Работа начнётся,
-                // когда в транскрипте появится первая строка турна (её пишут в тот
-                // же момент, когда пользователь отправляет реплику), и `apply(activity:)`
-                // переведёт сессию в `.working`.
+                // Not `.working`: the event says "a session appeared", not "an agent
+                // started working" — see `SessionStatus.idle`. Work begins when the
+                // first line of a turn shows up in the transcript (written at the same
+                // moment the user sends a message), and `apply(activity:)` moves the
+                // session to `.working`.
                 s.status = .idle
                 s.activityDescription = L10n.t("activity.session.opened", "open, waiting for a task")
             }
         case "UserPromptSubmit":
-            // Единственный сигнал «работа началась», который приходит мгновенно и
-            // наверняка. Транскрипт скажет то же самое, но позже (замеры — см.
-            // `HooksInstaller.events`) и подробнее: он уточнит описание, а статус
-            // к тому моменту уже верный.
+            // The one "work has started" signal that arrives instantly and reliably.
+            // The transcript says the same thing later (measurements in
+            // `HooksInstaller.events`) and in more detail: it refines the description,
+            // by which time the status is already right.
             upsert(event: event, now: now) { s in
                 s.status = .working
                 s.activityDescription = L10n.t("activity.session.started", "started on the task")
@@ -151,11 +153,11 @@ public final class SessionStore: ObservableObject {
             }
         case "SessionEnd":
             sessions.removeValue(forKey: event.sessionId)
-            // Сессия закончилась — маршрут для неё больше не нужен (см. спеку,
-            // «Кэшируются маршруты, а не сессии»).
+            // The session is over, so its route is no longer needed — the cache holds
+            // routes, not sessions.
             routeCache?.remove(sessionId: event.sessionId)
         default:
-            break // неизвестные события игнорируем
+            break // unknown events are ignored
         }
     }
 
@@ -167,13 +169,13 @@ public final class SessionStore: ObservableObject {
             lastActivity: activity.timestamp)
         guard activity.timestamp > s.lastActivity || isNew else { return }
         guard s.status != .crashed else { return }
-        // Конец турна виден прямо в транскрипте (`stop_reason == "end_turn"`), и
-        // полагаться на это надёжнее, чем на хук `Stop`: тот приходит не всегда —
-        // замер см. в доккомменте `TranscriptActivity.endsTurn`. Без этого сессия,
-        // чей хук потерялся, оставалась «работает» навсегда.
+        // The end of a turn is visible in the transcript itself (`stop_reason ==
+        // "end_turn"`), and relying on that is safer than relying on the `Stop` hook,
+        // which does not always arrive — measurements are in `TranscriptActivity.endsTurn`.
+        // Without this, a session whose hook went missing stayed "working" forever.
         //
-        // Турн субагента здесь не считается: субагент закончил — сессия продолжает
-        // работать, разбирая его результат.
+        // A subagent's turn does not count here: the subagent finished, and the
+        // session carries on working through its result.
         if activity.endsTurn && !activity.isSubagent {
             s.status = .done
             s.activityDescription = L10n.t("activity.done", "finished the task")
@@ -184,10 +186,11 @@ public final class SessionStore: ObservableObject {
             return
         }
         s.status = .working
-        // Работа субагента — это работа сессии (см. `isSubagent` на `TranscriptActivity`):
-        // статус, `aggregate`, `badgeCount` и `anyWorking` не отличают её от собственной
-        // работы сессии. Единственное отличие — пометка в описании, чтобы строка в панели
-        // не выглядела загадочно, когда сама сессия молчит, а работу ведёт подчинённый агент.
+        // A subagent's work is the session's work (see `isSubagent` on
+        // `TranscriptActivity`): status, `aggregate`, `badgeCount` and `anyWorking`
+        // do not tell them apart. The only difference is a note in the description, so
+        // the panel row is not mystifying when the session itself is silent and a
+        // subordinate agent is doing the work.
         s.activityDescription = activity.isSubagent
             ? L10n.f("activity.subagent", "subagent %@", activity.description)
             : activity.description
@@ -197,31 +200,31 @@ public final class SessionStore: ObservableObject {
         sessions[activity.sessionId] = s
     }
 
-    /// Убирает сессии, которых больше нет, двумя разными способами — точным и
-    /// приблизительным, и приблизительный применяется только там, где точный
-    /// недоступен.
+    /// Removes sessions that no longer exist, two different ways — an exact one and
+    /// an approximate one, with the approximate one used only where the exact one is
+    /// unavailable.
     ///
-    /// **Точный (`agentPID`).** У сессии, про которую приходил хук, известен pid её
-    /// собственного процесса `claude`. Пока он жив — сессия жива, сколько бы она ни
-    /// молчала: молчание идущей сессии не значит ничего (один длинный вызов
-    /// инструмента, открытая вкладка, в которую человек вернётся завтра). Как только
-    /// процесса не стало — сессии больше нет, и ждать нечего: работавшая помечается
-    /// `.crashed` («оборвалась» — работу прервали, об этом стоит сказать), любая
-    /// другая просто исчезает (её закрыли, а `SessionEnd` не дошёл — например,
-    /// приложение сняли по kill).
+    /// **Exact (`agentPID`).** For a session a hook arrived for, the pid of its own
+    /// `claude` process is known. While that process lives the session lives, however
+    /// long it stays silent: silence in a running session means nothing (one long
+    /// tool call, an open tab someone will return to tomorrow). The moment the process
+    /// is gone the session is gone and there is nothing to wait for — one that was
+    /// working is marked `.crashed` (its work was cut off, which is worth saying), and
+    /// any other simply disappears (it was closed and `SessionEnd` never arrived —
+    /// the app was killed, say).
     ///
-    /// **Приблизительный (пороги тишины).** Только для сессий без `agentPID` — тех,
-    /// что нашёл наблюдатель транскриптов, а хук по ним не приходил. Спросить не у
-    /// кого, поэтому остаются прежние два порога: `staleAfter` (по умолчанию 120с),
-    /// когда во всей системе не осталось ни одного процесса `claude`, и
-    /// `longStaleAfter` (часы) — как страховка на случай, когда другие процессы
-    /// `claude` живы и обнулить счётчик не выйдет. Порог в часах обязан оставаться
-    /// заметно выше любого правдоподобного ожидания: сессию, которую человек
-    /// действительно оставил ждать, нельзя убивать у него из-под рук.
+    /// **Approximate (silence thresholds).** Only for sessions with no `agentPID` —
+    /// the ones the transcript watcher found and no hook ever reported. There is
+    /// nobody to ask, so the two old thresholds remain: `staleAfter` (120s by default)
+    /// when no `claude` process is left anywhere on the system, and `longStaleAfter`
+    /// (hours) as a backstop for when other `claude` processes are alive and the
+    /// counter cannot be zeroed. The hours-long threshold has to stay well above any
+    /// plausible wait: a session someone genuinely left waiting must not be killed out
+    /// from under them.
     ///
-    /// Раньше точного способа не было вовсе, и `.working`-призрак сессии, убитой
-    /// по kill, висел в бейдже до четырёх часов, пока рядом жил хоть один другой
-    /// `claude`.
+    /// There used to be no exact method at all, and a `.working` ghost of a session
+    /// killed outright would hang in the badge for up to four hours as long as one
+    /// other `claude` was alive nearby.
     public func reconcile(claudeProcessCount: Int, now: Date,
                           staleAfter: TimeInterval = 120,
                           longStaleAfter: TimeInterval = 4 * 60 * 60,
@@ -263,11 +266,11 @@ public final class SessionStore: ObservableObject {
     /// problem. Falls back to `lastActivity` only for the (currently unreachable)
     /// case of a terminal session with no `finishedAt`.
     ///
-    /// `.idle` тоже истекает — но только у сессий без `agentPID`. Открытая сессия
-    /// ничего не делает и ничего не показывает (в бейдж она не попадает), так что
-    /// вечно держать её строку не за чем; а у той, чей процесс мы умеем спросить,
-    /// сроком жизни распоряжается `reconcile` — она останется в панели ровно пока
-    /// её `claude` жив, и по ней можно будет кликнуть, чтобы вернуться.
+    /// `.idle` expires too — but only for sessions with no `agentPID`. An open session
+    /// does nothing and shows nothing (it never reaches the badge), so there is no
+    /// reason to keep its row forever; for one whose process can be asked, `reconcile`
+    /// governs its lifetime — it stays in the panel exactly as long as its `claude`
+    /// lives, and stays clickable so you can go back to it.
     public func expireFinished(now: Date, ttl: TimeInterval = 600) {
         for (id, s) in sessions {
             switch s.status {
@@ -286,7 +289,7 @@ public final class SessionStore: ObservableObject {
         }
     }
 
-    /// Fallback без хуков: тихая работающая сессия помечается как «ждёт тебя (idle)».
+    /// Fallback with no hooks: a quiet working session is marked "waiting for you (idle)".
     ///
     /// This is a guess, not a real signal — a transcript is silent during any single
     /// long tool call (Claude Code writes the `tool_use` entry, then nothing until the
@@ -334,10 +337,10 @@ public final class SessionStore: ObservableObject {
         // bundle id for the new host", not as the *previous* host's bundle id — that
         // would describe a route naming two different hosts at once and route the
         // jump to the wrong application.
-        // Пришёл вместе с событием — значит, процесс сессии жив прямо сейчас и это
-        // его номер. Никогда не затираем известное значение отсутствующим: событие
-        // от старой версии хука не должно лишать сессию единственного точного
-        // признака жизни.
+        // If it came with the event, the session's process is alive right now and this
+        // is its number. Never overwrite a known value with a missing one: an event
+        // from an older hook build must not strip a session of the one exact sign of
+        // life it has.
         if let agentPID = event.agentPID { s.agentPID = agentPID }
         if let pid = event.hostPID {
             s.hostPID = pid
@@ -367,9 +370,9 @@ public final class SessionStore: ObservableObject {
         // existed yet and this is the first hook event for it. Before this cache
         // existed, that guess was recomputed fresh on every launch; now `merged`
         // freezes whatever gets recorded first, so this particular guess can no
-        // longer self-correct on a later restart. Not fixed here — see the design
-        // spec's "За скобками" (recovering the route for a pre-CodeCat session is
-        // explicitly out of scope, and this is the same root cause: nothing tells
+        // longer self-correct on a later restart. Not fixed here — recovering the route
+        // for a session that started before CodeCat is explicitly out of scope, and
+        // this is the same root cause: nothing tells
         // us the watcher's discovery time isn't the true start).
         // Also record unconditionally when `resetStartedAt` is true, even if this
         // particular event carries no route fields at all — a `SessionStart` for a
@@ -397,12 +400,12 @@ public final class SessionStore: ObservableObject {
     /// route cache first: a cached `SessionRoute` for this id supplies the
     /// missing `hostPID`/`hostBundlePath`/`hostBundleID`/`tty` *and* the real
     /// `startedAt`, so a session restored after a CodeCat restart is clickable
-    /// immediately and its "длится N мин" counts from when it actually began —
+    /// immediately and its "running for N min" counts from when it actually began —
     /// not from the moment this process happened to notice it (`fallbackStartedAt`).
     ///
     /// Shared by both `upsert` (hook path) and `apply(activity:)` (transcript
     /// watcher path): whichever one sees a session first, the substitution is
-    /// identical, per the design spec's «Подстановка» test list.
+    /// identical.
     ///
     /// Takes no `resetStartedAt` flag: `upsert` is the only caller that ever needs
     /// one (a genuine `SessionStart`, see `apply(hook:)`), and it already passes

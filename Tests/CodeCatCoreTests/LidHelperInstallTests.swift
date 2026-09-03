@@ -45,7 +45,7 @@ final class LidHelperInstallTests: XCTestCase {
         XCTAssertEqual(LidHelperInstall.classify(status: 0, output: ""), .success)
         // Exit 0 is success even if osascript printed something to stdout.
         XCTAssertEqual(
-            LidHelperInstall.classify(status: 0, output: "Режим закрытой крышки CodeCat установлен"),
+            LidHelperInstall.classify(status: 0, output: "CodeCat closed-lid mode installed"),
             .success)
     }
 

@@ -72,7 +72,7 @@ final class SessionRouteCacheTests: XCTestCase {
         XCTAssertEqual(merged.hostPID, 2)
         XCTAssertEqual(merged.hostBundlePath, "/Applications/NewHost.app")
         XCTAssertNil(merged.hostBundleID,
-                     "новый pid не должен унаследовать bundle id старого хоста")
+                     "a new pid must not inherit the old host's bundle id")
     }
 
     func testPrunedKeepsFreshEntriesAndDropsStaleOnes() {
@@ -97,7 +97,7 @@ final class SessionRouteCacheTests: XCTestCase {
     func testPrunedDropsFutureDatedEntriesBeyondMaxAge() {
         let future = route(startedAt: t0, updatedAt: t0.addingTimeInterval(8 * 24 * 60 * 60))
         let result = SessionRouteCache.pruned(["f": future], now: t0, maxAge: 7 * 24 * 60 * 60)
-        XCTAssertNil(result["f"], "запись с updatedAt из будущего дальше maxAge тоже должна отбрасываться")
+        XCTAssertNil(result["f"], "an entry whose updatedAt is further in the future than maxAge must be dropped too")
     }
 
     func testDecodeOfCorruptJSONYieldsEmptyDictionaryWithoutThrowing() {
@@ -105,8 +105,8 @@ final class SessionRouteCacheTests: XCTestCase {
         XCTAssertEqual(SessionRouteCache.decode(garbage), [:])
     }
 
-    /// "Запись без startedAt (файл от будущей/прошлой версии формата) → запись
-    /// игнорируется целиком" — one malformed entry must not take down the whole file.
+    /// An entry with no startedAt (a file from a future or past version of the format)
+    /// is ignored on its own — one malformed entry must not take down the whole file.
     func testDecodeIgnoresAnEntryMissingStartedAtButKeepsOthers() {
         let json = #"""
         {
@@ -167,7 +167,7 @@ final class SessionRouteCacheTests: XCTestCase {
                     tty: "/dev/t1", startedAt: t0, now: t0)
         cache.load(now: t0.addingTimeInterval(1))
         XCTAssertNotNil(cache.route(for: "s1"),
-                        "load() без url — заявленный no-op, не должен стирать записанное через record")
+                        "load() with no url is a declared no-op and must not erase what record wrote")
     }
 
     func testRemoveDeletesTheEntry() {
@@ -238,7 +238,7 @@ final class SessionRouteCacheTests: XCTestCase {
         cache.record(sessionId: "fresh", hostPID: 2, hostBundlePath: "/b", hostBundleID: "b",
                     tty: "/dev/t2", startedAt: t0, now: t0)
         XCTAssertNil(cache.route(for: "stale"),
-                    "должен быть вычищен уже при следующей записи, не дожидаясь перезапуска")
+                    "must be cleared on the very next write, without waiting for a restart")
         XCTAssertNotNil(cache.route(for: "fresh"))
     }
 }

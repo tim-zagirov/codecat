@@ -1,29 +1,28 @@
 import Foundation
 import CoreServices
 
-/// Следит за ~/.claude/projects/**/*.jsonl через FSEvents,
-/// новые строки прогоняет через TranscriptParser и отдаёт наружу.
+/// Watches ~/.claude/projects/**/*.jsonl through FSEvents, runs new lines through
+/// TranscriptParser and hands them out.
 ///
-/// FSEvents — доставка «по возможности», а не гарантия, и это заметно ровно тогда,
-/// когда человек работает над несколькими проектами сразу: файлов, меняющихся
-/// одновременно, много. Поэтому у наблюдателя две независимые опоры:
+/// FSEvents is best-effort delivery, not a guarantee, and that shows exactly when
+/// someone is working on several projects at once: many files change at the same
+/// time. So the watcher stands on two independent legs:
 ///
-/// - **Push.** События FSEvents. Их флаги обязаны разбираться: при переполнении
-///   очереди ядро выдаёт не путь к файлу, а `MustScanSubDirs`/`KernelDropped`/
-///   `UserDropped` с путём к *каталогу* — раньше такой путь молча отсеивался
-///   проверкой «оканчивается на .jsonl», и вместе с ним терялась вся пачка
-///   изменений, а котик застревал в позе, которая уже неправда.
-/// - **Poll.** Медленный обход недавно изменённых файлов раз в `pollInterval`.
-///   Страховка на классы отказов, о которых push не сообщает вовсе: поток
-///   FSEvents перестал приходить, корневой каталог пересоздали
-///   (`kFSEventStreamEventFlagRootChanged`), система была занята. Стоит она
-///   недорого — один обход дерева и `stat` на файл, — а верхнюю границу
-///   отставания состояния делает предсказуемой: `pollInterval`, что бы ни
-///   случилось с push.
+/// - **Push.** FSEvents events. Their flags must be examined: when the kernel's
+///   queue overflows it reports not a file path but `MustScanSubDirs` /
+///   `KernelDropped` / `UserDropped` with the path to a *directory* — which an
+///   "ends in .jsonl" check used to discard silently, taking the whole batch of
+///   changes with it and leaving the cat stuck in a pose that was no longer true.
+/// - **Poll.** A slow walk over recently modified files every `pollInterval`.
+///   Insurance against the classes of failure push says nothing about at all: the
+///   FSEvents stream stopped arriving, the root directory was recreated
+///   (`kFSEventStreamEventFlagRootChanged`), the system was busy. It is cheap — one
+///   tree walk and a `stat` per file — and it makes the worst case predictable:
+///   `pollInterval`, whatever happens to push.
 ///
-/// Обе опоры ведут в один и тот же `FileTailer`, помнящий смещение по каждому
-/// файлу, поэтому повторный проход по файлу, о котором уже пришло событие, ничего
-/// не дублирует: новых строк там просто нет.
+/// Both legs lead into the same `FileTailer`, which remembers an offset per file,
+/// so walking a file an event already reported duplicates nothing: there are simply
+/// no new lines in it.
 public final class TranscriptWatcher {
     private let root: URL
     private let onActivity: (TranscriptActivity) -> Void
@@ -31,17 +30,17 @@ public final class TranscriptWatcher {
     private var stream: FSEventStreamRef?
     private let queue = DispatchQueue(label: "codecat.transcript-watcher")
 
-    /// Как часто проходить по дереву в качестве страховки.
+    /// How often to walk the tree as insurance.
     private let pollInterval: TimeInterval
-    /// Насколько свежим должен быть файл, чтобы его смотрел обход. Заметно больше
-    /// `pollInterval`: окно должно с запасом перекрывать паузу между обходами,
-    /// иначе файл, изменившийся сразу после обхода, успел бы «остыть» к следующему.
+    /// How recently a file must have changed for the walk to look at it. Noticeably
+    /// larger than `pollInterval`: the window has to cover the gap between walks with
+    /// room to spare, or a file changed just after one walk would go cold before the next.
     private let rescanWindow: TimeInterval
     private var pollTimer: DispatchSourceTimer?
 
-    /// Сколько раз пришлось обходить дерево целиком — из-за потерянных событий или
-    /// по таймеру страховки. Нужен тестам и диагностике: по нему видно, работает ли
-    /// push вообще. Под замком — пишется на `queue`, а читают снаружи.
+    /// How many times the whole tree had to be walked — because events were lost or
+    /// because the insurance timer fired. Used by tests and diagnostics: it shows
+    /// whether push works at all. Behind a lock — written on `queue`, read from outside.
     public var rescanCount: Int { countLock.withLock { rescans } }
     private var rescans = 0
     private let countLock = NSLock()
@@ -57,20 +56,21 @@ public final class TranscriptWatcher {
     }
 
     deinit {
-        // FSEvents держит непроверяемый (Unmanaged.passUnretained) указатель
-        // на self в контексте потока; без остановки здесь коллбэк может
-        // сработать после освобождения self и разыменовать чужую память.
+        // FSEvents holds an unchecked (Unmanaged.passUnretained) pointer to self in
+        // the stream's context; without stopping here the callback can fire after self
+        // is deallocated and dereference someone else's memory.
         stop()
     }
 
     public func start() {
-        // ПЕРВЫМ делом — восстановить картину уже идущей работы. Обязано стоять до
-        // FileTailer'а: тот при первой встрече с файлом ставит смещение в конец и
-        // истории не отдаёт, поэтому после него хвосты читать уже поздно.
+        // FIRST of all, recover the picture of work already in progress. This must
+        // come before the FileTailer: the tailer sets its offset to the end the first
+        // time it meets a file and hands out no history, so after it there is no point
+        // reading tails any more.
         primeFromExistingTranscripts()
-        // Обход-страховка заводится первым и независимо от FSEvents: если поток
-        // событий не создался вовсе, наблюдатель обязан продолжать работать —
-        // медленнее, но работать, а не молчать.
+        // The insurance walk is started first and independently of FSEvents: if the
+        // event stream never gets created at all, the watcher must keep working —
+        // slower, but working, not silent.
         if pollTimer == nil { startPolling() }
         guard stream == nil else { return }
         var context = FSEventStreamContext(
@@ -84,13 +84,13 @@ public final class TranscriptWatcher {
             let cfPaths = Unmanaged<CFArray>.fromOpaque(paths).takeUnretainedValue() as? [String] ?? []
             var lost = false
             for index in 0..<count where index < cfPaths.count {
-                // Не `Self.` — из замыкания, которое становится сишным указателем на
-                // функцию, нельзя ссылаться на динамический Self.
+                // Not `Self.` — a closure that becomes a C function pointer cannot
+                // refer to the dynamic Self.
                 if TranscriptWatcher.meansLostEvents(flags[index]) { lost = true; continue }
                 watcher.handleChange(atPath: cfPaths[index])
             }
-            // Обход — после разбора остальных путей: то, что доехало, обрабатывается
-            // в любом случае, даже если часть пачки потерялась.
+            // The walk comes after the other paths are handled: whatever did arrive is
+            // processed either way, even if part of the batch was lost.
             if lost { watcher.rescan() }
         }
 
@@ -116,8 +116,8 @@ public final class TranscriptWatcher {
         stream = nil
     }
 
-    /// Флаги, означающие «часть событий до тебя не доехала». `RootChanged` тоже
-    /// здесь: корень пересоздали, и всё, что мы про него помним, пора перепроверить.
+    /// Flags meaning "some events never reached you". `RootChanged` belongs here too:
+    /// the root was recreated, and everything remembered about it needs rechecking.
     static func meansLostEvents(_ flags: FSEventStreamEventFlags) -> Bool {
         let lossy = FSEventStreamEventFlags(
             kFSEventStreamEventFlagMustScanSubDirs
@@ -127,24 +127,26 @@ public final class TranscriptWatcher {
         return flags & lossy != 0
     }
 
-    /// Восстанавливает картину уже идущей работы из существующих транскриптов.
+    /// Recovers the picture of work already in progress from existing transcripts.
     ///
-    /// Зачем. До этого при запуске приложение не узнавало о живых сессиях НИКАК —
-    /// не «медленно», а никак. Складывались три вещи: поток FSEvents создаётся с
-    /// `kFSEventStreamEventIdSinceNow` и о прошлом не сообщает; обход-страховка
-    /// заводится с задержкой в целый `pollInterval`; а `FileTailer` при первой
-    /// встрече с файлом ставит смещение в конец и историю намеренно не переигрывает.
-    /// Поэтому агент, занятый долгим вызовом инструмента, в транскрипт ничего не
-    /// пишет — и остаётся невидимым, пока не напишет. Замер на живой машине,
-    /// восемь перезапусков подряд: 4, 7, 9, 11, 18, 25, 33 и 89 секунд слепоты.
+    /// Why. Before this, the app learned about live sessions at startup by NO means at
+    /// all — not "slowly", but not at all. Three things combined: the FSEvents stream
+    /// is created with `kFSEventStreamEventIdSinceNow` and reports nothing about the
+    /// past; the insurance walk starts a whole `pollInterval` later; and `FileTailer`
+    /// sets its offset to the end the first time it meets a file and deliberately does
+    /// not replay history. So an agent busy with a long tool call writes nothing to
+    /// the transcript — and stays invisible until it does. Measured on a live machine
+    /// over eight consecutive restarts: 4, 7, 9, 11, 18, 25, 33 and 89 seconds of
+    /// blindness.
     ///
-    /// Особенно больно это с включённым «прятать котика, когда сессий нет»: маскот
-    /// не просто показывает спящего кота, его вовсе нет на экране, пока агент
-    /// работает.
+    /// It hurts most with "hide the cat when nothing is running" on: the mascot does
+    /// not merely show a sleeping cat, it is absent from the screen entirely while an
+    /// agent works.
     ///
-    /// Читается хвост, а не файл целиком: транскрипт длинной сессии — это мегабайты,
-    /// а нужно только текущее состояние. Первая строка куска отбрасывается, если
-    /// начали не с начала файла: почти наверняка она обрезана посередине.
+    /// The tail is read rather than the whole file: a long session's transcript runs
+    /// to megabytes and only the current state is needed. The chunk's first line is
+    /// dropped when reading did not start at the beginning of the file: it is almost
+    /// certainly cut in half.
     func primeFromExistingTranscripts(now: Date = Date(), tailBytes: Int = 64 * 1024) {
         let cutoff = now.addingTimeInterval(-rescanWindow)
         let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]
@@ -166,7 +168,7 @@ public final class TranscriptWatcher {
         }
     }
 
-    /// Последние `bytes` байт файла, разобранные на целые строки.
+    /// The last `bytes` bytes of a file, split into whole lines.
     static func tailLines(of url: URL, bytes: Int) -> [String] {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
         defer { try? handle.close() }
@@ -176,7 +178,7 @@ public final class TranscriptWatcher {
         guard let data = try? handle.readToEnd(),
               let text = String(data: data, encoding: .utf8) else { return [] }
         var lines = text.components(separatedBy: "\n")
-        // Начали с середины файла — первая строка почти наверняка обрезана.
+        // Started mid-file, so the first line is almost certainly truncated.
         if start > 0, !lines.isEmpty { lines.removeFirst() }
         return lines.filter { !$0.isEmpty }
     }
@@ -189,9 +191,9 @@ public final class TranscriptWatcher {
         timer.resume()
     }
 
-    /// Проходит по недавно изменённым `.jsonl` и подтягивает их хвосты. Вызывается
-    /// только на `queue` — и обработчик FSEvents, и таймер страховки живут на ней,
-    /// поэтому `FileTailer` (он не потокобезопасен) всегда трогает один поток.
+    /// Walks recently modified `.jsonl` files and pulls in their tails. Called on
+    /// `queue` only — both the FSEvents handler and the insurance timer live on it, so
+    /// `FileTailer` (which is not thread-safe) is always touched by one thread.
     func rescan(now: Date = Date()) {
         countLock.withLock { rescans += 1 }
         let cutoff = now.addingTimeInterval(-rescanWindow)

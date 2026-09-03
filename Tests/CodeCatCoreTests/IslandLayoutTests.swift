@@ -2,31 +2,31 @@ import XCTest
 import CoreGraphics
 @testable import CodeCatCore
 
-/// Все числа здесь — замеры с целевой машины (MacBook Pro 16"), а не круглые
-/// величины «на глаз»: экран 1728x1117 pt, строка меню 32 pt, вырез 185 pt
-/// шириной в x ∈ [771, 956]. См. раздел «Что измерено до проектирования» в спеке.
+/// Every number here is measured on the target machine (MacBook Pro 16"), not
+/// rounded by eye: a 1728x1117 pt screen, a 32 pt menu bar, and a 185 pt notch
+/// spanning x ∈ [771, 956].
 final class IslandLayoutTests: XCTestCase {
 
     private let screen = CGRect(x: 0, y: 0, width: 1728, height: 1117)
     private let auxLeft = CGRect(x: 0, y: 1085, width: 771, height: 32)
     private let auxRight = CGRect(x: 956, y: 1085, width: 772, height: 32)
 
-    // MARK: - Вырез
+    // MARK: - The notch
 
     func testNotchIsTheGapBetweenTheTwoAuxiliaryAreas() {
         let notch = IslandLayout.notchRect(auxLeft: auxLeft, auxRight: auxRight)
         XCTAssertEqual(notch, CGRect(x: 771, y: 1085, width: 185, height: 32))
     }
 
-    /// Экран без выреза не сообщает вспомогательных областей вовсе.
+    /// A display without a notch reports no auxiliary areas at all.
     func testNoNotchWhenAuxiliaryAreasAreMissing() {
         XCTAssertNil(IslandLayout.notchRect(auxLeft: nil, auxRight: nil))
         XCTAssertNil(IslandLayout.notchRect(auxLeft: auxLeft, auxRight: nil))
         XCTAssertNil(IslandLayout.notchRect(auxLeft: nil, auxRight: auxRight))
     }
 
-    /// Области сомкнулись или перекрылись — дырки между ними нет, значит острову
-    /// не за что зацепиться. Ноль ширины тоже не вырез.
+    /// The areas met or overlapped — there is no gap between them, so the island has
+    /// nothing to hold on to. Zero width is not a notch either.
     func testNoNotchWhenAreasTouchOrOverlap() {
         let touching = CGRect(x: 771, y: 1085, width: 957, height: 32)
         XCTAssertNil(IslandLayout.notchRect(auxLeft: auxLeft, auxRight: touching))
@@ -39,12 +39,12 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertFalse(IslandLayout.hasNotch(safeAreaTop: 0))
     }
 
-    // MARK: - Крылья
+    // MARK: - Wings
 
-    /// Главное требование композиции: чёрное пятно обязано стоять ровно по центру
-    /// выреза. Кот — объект с габаритом, счётчик — штрих, и уравнять их можно
-    /// только геометрией, поэтому крылья одинаковы с обеих сторон независимо от
-    /// того, насколько широк спрайт текущего облика.
+    /// The main compositional requirement: the black shape must sit exactly at the
+    /// notch's centre. The cat is an object with bulk, the counter is a mark, and they
+    /// can only be balanced with geometry — so the wings are equal on both sides
+    /// regardless of how wide the current skin's sprite is.
     func testWingsAreSymmetricAroundTheNotch() {
         let notch = CGRect(x: 771, y: 1085, width: 185, height: 32)
         let island = IslandLayout.islandFrame(notch: notch)
@@ -52,8 +52,8 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertEqual(island.midX, notch.midX, accuracy: 0.001)
     }
 
-    /// Крылья растут наружу от краёв выреза: сам вырез остаётся ровно там, где был,
-    /// и ни одно крыло в него не залезает.
+    /// The wings grow outward from the notch's edges: the notch itself stays exactly
+    /// where it was, and neither wing encroaches on it.
     func testIslandGrowsOutwardWithoutEatingIntoTheNotch() {
         let notch = CGRect(x: 771, y: 1085, width: 185, height: 32)
         let island = IslandLayout.islandFrame(notch: notch)
@@ -62,48 +62,48 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertEqual(island.height, notch.height, accuracy: 0.001)
     }
 
-    /// Крыло рассчитано на самый широкий облик — LuizMelo `cat-4`, 28×16 px, что при
-    /// обязательном целочисленном ×2 даёт 56 pt, — и оставляет отступ с обеих сторон.
-    /// Уже нельзя: кот упрётся в кромку плашки.
+    /// The wing is sized for the widest skin — LuizMelo `cat-4`, 28×16 px, which at the
+    /// mandatory integer ×2 gives 56 pt — and leaves padding on both sides. Narrower is
+    /// not possible: the cat would run into the slab's edge.
     func testWingFitsTheWidestSkinWithPaddingOnBothSides() {
         XCTAssertGreaterThanOrEqual(IslandLayout.wingWidth, 56 + 2 * IslandLayout.wingPadding)
     }
 
-    // MARK: - Окно: остров и меню — одна форма
+    // MARK: - The window: island and menu are one shape
 
-    /// Верхняя кромка окна не двигается: форма растёт вниз от кромки экрана, а не
-    /// переезжает. Это и есть «выезжает из острова».
+    /// The window's top edge does not move: the shape grows downward from the screen's
+    /// edge rather than relocating. That is what "slides out of the island" means.
     func testWindowGrowsDownwardsAndKeepsItsTopEdgeAtTheScreenEdge() {
         let island = CGRect(x: 701, y: 1085, width: 329, height: 32)
         for total in [32.0, 120.0, 400.0] as [CGFloat] {
             let frame = IslandLayout.windowFrame(island: island, totalHeight: total,
                                                  screenFrame: screen)
-            XCTAssertEqual(frame.maxY, island.maxY, accuracy: 0.001, "высота \(total)")
-            XCTAssertEqual(frame.height, total, accuracy: 0.001, "высота \(total)")
+            XCTAssertEqual(frame.maxY, island.maxY, accuracy: 0.001, "height \(total)")
+            XCTAssertEqual(frame.height, total, accuracy: 0.001, "height \(total)")
         }
     }
 
-    /// Ширина окна всегда одна — ширина силуэта. Отдельной ширины у меню больше нет,
-    /// а значит нет и уступа на стыке, который раньше приходилось прятать.
+    /// The window is always one width — the silhouette's. The menu has no width of its
+    /// own any more, and so there is no ledge at the join that used to need hiding.
     func testWindowIsAlwaysAsWideAsTheSilhouette() {
         for width in [281.0, 329.0, 400.0] as [CGFloat] {
             let island = CGRect(x: 701, y: 1085, width: width, height: 32)
             let frame = IslandLayout.windowFrame(island: island, totalHeight: 200,
                                                  screenFrame: screen)
             XCTAssertEqual(frame.width, IslandLayout.silhouetteFrame(island: island).width,
-                           accuracy: 0.001, "ширина \(width)")
+                           accuracy: 0.001, "width \(width)")
             XCTAssertEqual(frame.midX, island.midX, accuracy: 0.001)
         }
     }
 
-    /// Ниже полосы острова окно не сжимается: это его собственная высота в покое.
+    /// The window never shrinks below the island strip: that is its own height at rest.
     func testWindowNeverShrinksBelowTheIslandStrip() {
         let island = CGRect(x: 701, y: 1085, width: 329, height: 32)
         let frame = IslandLayout.windowFrame(island: island, totalHeight: 0, screenFrame: screen)
         XCTAssertEqual(frame.height, island.height, accuracy: 0.001)
     }
 
-    /// Меню выше экрана не должно уезжать под нижнюю границу.
+    /// A menu taller than the screen must not run off the bottom edge.
     func testWindowNeverGoesBelowTheScreen() {
         let island = CGRect(x: 701, y: 1085, width: 329, height: 32)
         let frame = IslandLayout.windowFrame(island: island, totalHeight: 4000,
@@ -111,18 +111,18 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(frame.minY, screen.minY)
     }
 
-    // MARK: - Числа из спеки
+    // MARK: - Numbers from the spec
 
-    /// Ширина крыла — число из визуальной спецификации; в остальных тестах она
-    /// фигурирует только как производная, здесь закреплена явно.
+    /// The wing's width is a number from the visual specification; in the other tests
+    /// it appears only as a derived value, so it is pinned explicitly here.
     func testWingWidthMatchesSpec() {
         XCTAssertEqual(IslandLayout.wingWidth, 72)
     }
 
-    // MARK: - Силуэт: галтели у кромки экрана
+    // MARK: - The silhouette: fillets at the screen edge
 
-    /// Галтели лежат снаружи корпуса, поэтому окно шире — но ровно на них, и центр
-    /// не уезжает: остров обязан оставаться симметричным относительно выреза.
+    /// The fillets lie outside the body, so the window is wider — but by exactly them,
+    /// and the centre does not move: the island has to stay symmetric about the notch.
     func testSilhouetteFrameAddsTheFilletMarginsOnBothSidesWithoutMovingTheCentre() {
         let island = CGRect(x: 100, y: 1085, width: 329, height: 32)
         let silhouette = IslandLayout.silhouetteFrame(island: island)
@@ -132,8 +132,8 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertEqual(silhouette.minY, island.minY)
     }
 
-    /// Форма касается всех четырёх сторон своего прямоугольника: сверху она во всю
-    /// ширину (упирается в кромку экрана), снизу — по корпусу.
+    /// The shape touches all four sides of its rectangle: full width at the top (where
+    /// it meets the screen's edge) and the body's width at the bottom.
     func testSilhouetteFillsTheWholeWidthAtTheScreenEdge() {
         let rect = CGRect(x: 0, y: 0, width: 200, height: 32)
         let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 16)
@@ -143,28 +143,28 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertEqual(path.boundingBox.maxY, rect.maxY, accuracy: 0.01)
     }
 
-    /// Суть галтели — куда она загибается. Правильная вогнута внутрь: у самой
-    /// стенки корпуса чёрное расширяется наружу, а внешний угол у кромки остаётся
-    /// за обоями. Если перепутать касательные, дуга выгибается наружу и закрашивает
-    /// именно внешний угол — это и есть «уши», которые так делать не надо.
+    /// The essence of a fillet is which way it curves. The correct one is concave: at
+    /// the body's wall the black spreads outward, while the outer corner at the edge
+    /// stays wallpaper. Swap the tangents and the arc bulges outward, filling that
+    /// outer corner — those are the "ears", and they are what not to do.
     func testTheFilletCurvesInwardAndLeavesTheOuterCornerToTheWallpaper() {
         let rect = CGRect(x: 0, y: 0, width: 200, height: 32)
         let e = IslandLayout.edgeRadius
         let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 16)
 
         XCTAssertFalse(path.contains(CGPoint(x: 0.5, y: 0.5)),
-                       "внешний угол слева — обои, а не плечо острова")
+                       "the outer corner on the left is wallpaper, not a shoulder")
         XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - 0.5, y: 0.5)),
-                       "и справа тоже")
+                       "and on the right too")
         XCTAssertTrue(path.contains(CGPoint(x: e - 1, y: 1)),
-                      "у стенки корпуса галтель закрашена — чёрное вытекает из кромки")
+                      "at the body's wall the fillet is filled — black flows out of the edge")
         XCTAssertTrue(path.contains(CGPoint(x: rect.maxX - e + 1, y: 1)))
-        XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: e)), "корпус на месте")
+        XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: e)), "the body is where it should be")
     }
 
-    /// Галтель закрашивает площадь **снаружи** корпуса: точка чуть левее корпуса, у
-    /// самой кромки, с галтелью чёрная, а без неё — обои. Так видно, что расширение
-    /// даёт именно галтель, а не что-то ещё.
+    /// The fillet fills area **outside** the body: a point just left of the body, right
+    /// at the edge, is black with a fillet and wallpaper without one. That shows the
+    /// widening comes from the fillet and not from something else.
     func testTheFilletFillsSpaceOutsideTheBodyThatIsOtherwiseWallpaper() {
         let body = CGRect(x: 0, y: 0, width: 200, height: 32)
         let spot = CGPoint(x: body.minX - 1, y: body.minY + 1)
@@ -175,16 +175,16 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertFalse(square.contains(spot))
     }
 
-    /// Нулевой радиус галтели — прежняя форма с прямыми верхними углами. Нужен и
-    /// как деградация на узком острове, и чтобы разница была проверяема.
+    /// A zero fillet radius is the old shape with square top corners. Needed both as
+    /// the degradation on a narrow island and so the difference is testable.
     func testZeroEdgeRadiusLeavesSquareTopCorners() {
         let rect = CGRect(x: 0, y: 0, width: 200, height: 32)
         let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 16, edgeRadius: 0)
-        XCTAssertTrue(path.contains(CGPoint(x: 0.5, y: 10)), "угол прямой — закрашено")
+        XCTAssertTrue(path.contains(CGPoint(x: 0.5, y: 10)), "square corner — filled")
     }
 
-    /// Радиусы, не влезающие в прямоугольник, зажимаются, а не выворачивают форму
-    /// наизнанку: остров бывает узким на маленьком вырезе.
+    /// Radii that do not fit the rectangle are clamped rather than turning the shape
+    /// inside out: the island is narrow on a small notch.
     func testOversizedRadiiAreClampedAndTheShapeStaysInsideItsRect() {
         let rect = CGRect(x: 0, y: 0, width: 20, height: 8)
         let path = IslandLayout.silhouettePath(in: rect, bottomRadius: 999, edgeRadius: 999)
@@ -193,10 +193,10 @@ final class IslandLayoutTests: XCTestCase {
     }
 }
 
-/// Контур как проверка попадания клика (см. `IslandHostingView.hitTest`).
+/// The outline as a click hit test (see `IslandHostingView.hitTest`).
 ///
-/// Окно прямоугольное, остров — нет, и без этой проверки прямоугольник окна
-/// перехватывал клики там, где не нарисовано ничего.
+/// The window is a rectangle and the island is not, and without this test the
+/// window's rectangle intercepted clicks where nothing was drawn.
 final class IslandSilhouetteHitTests: XCTestCase {
 
     private let rect = CGRect(x: 0, y: 0, width: 200, height: 120)
@@ -204,48 +204,48 @@ final class IslandSilhouetteHitTests: XCTestCase {
         IslandLayout.silhouettePath(in: rect, bottomRadius: 16)
     }
 
-    /// Главная зона: верхние углы окна вогнуты галтелью и не закрашены НИКОГДА.
-    /// Именно здесь клики по строке меню доставались острову.
+    /// The main zone: the window's top corners are concave with a fillet and are NEVER
+    /// filled. This is exactly where menu-bar clicks were going to the island.
     func testTopCornersAreOutsideSoMenuBarClicksPassThrough() {
         let e = IslandLayout.edgeRadius
         XCTAssertFalse(path.contains(CGPoint(x: 1, y: 1)),
-                       "левый верхний угол окна — галтель, там пусто")
+                       "the window's top-left corner is fillet — empty there")
         XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - 1, y: 1)),
-                       "правый верхний угол окна — галтель, там пусто")
+                       "the window's top-right corner is fillet — empty there")
         XCTAssertFalse(path.contains(CGPoint(x: 2, y: e - 2)),
-                       "вся вогнутая зона слева свободна")
+                       "the whole concave zone on the left is clear")
         XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - 2, y: e - 2)),
-                       "и справа тоже")
+                       "and on the right too")
     }
 
-    /// Обратная половина: по самому корпусу клики обязаны проходить, иначе
-    /// проверка сломала бы остров вместо того, чтобы починить.
+    /// The other half: clicks on the body itself must pass through, or the check would
+    /// break the island instead of fixing it.
     func testBodyIsInsideSoTheIslandStillTakesClicks() {
         XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: 2)),
-                      "середина верхней кромки — это корпус")
+                      "the middle of the top edge is the body")
         XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: rect.midY)))
         XCTAssertTrue(path.contains(CGPoint(x: IslandLayout.edgeRadius + 2, y: rect.midY)),
-                      "левая стенка корпуса, сразу за галтелью")
+                      "the body's left wall, right past the fillet")
     }
 
-    /// Нижние углы скруглены — там тоже пусто.
+    /// The bottom corners are rounded — empty there too.
     func testBottomCornersAreOutside() {
         let e = IslandLayout.edgeRadius
         XCTAssertFalse(path.contains(CGPoint(x: e + 1, y: rect.maxY - 1)),
-                       "левый нижний угол скруглён")
+                       "the bottom-left corner is rounded")
         XCTAssertFalse(path.contains(CGPoint(x: rect.maxX - e - 1, y: rect.maxY - 1)),
-                       "правый нижний угол скруглён")
+                       "the bottom-right corner is rounded")
         XCTAssertTrue(path.contains(CGPoint(x: rect.midX, y: rect.maxY - 1)),
-                      "но середина нижней кромки закрашена")
+                      "but the middle of the bottom edge is filled")
     }
 
-    /// Пока меню не раскрыто, окно высотой в полосу острова: ниже полосы кликать
-    /// не по чему, и контур обязан это отражать.
+    /// While the menu is closed the window is one island strip tall: there is nothing
+    /// to click below the strip, and the outline has to reflect that.
     func testShortWindowHasNoAreaBelowTheStrip() {
         let strip = CGRect(x: 0, y: 0, width: 200, height: 32)
         let p = IslandLayout.silhouettePath(in: strip, bottomRadius: 16)
         XCTAssertTrue(p.contains(CGPoint(x: strip.midX, y: 16)))
         XCTAssertFalse(p.contains(CGPoint(x: strip.midX, y: 40)),
-                       "за нижней кромкой окна формы нет")
+                       "there is no shape past the window's bottom edge")
     }
 }

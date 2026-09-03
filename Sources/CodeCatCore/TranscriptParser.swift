@@ -23,9 +23,9 @@ public enum TranscriptParser {
         else { return nil }
 
         let cwd = obj["cwd"] as? String ?? ""
-        // Конец турна: модель вернула управление человеку. См. `TranscriptActivity.endsTurn`.
-        // Только у ассистента: у записей пользователя (включая результаты инструментов)
-        // такого поля нет и быть не может.
+        // End of turn: the model handed control back to the human. See
+        // `TranscriptActivity.endsTurn`. Only on the assistant's entries: user entries
+        // (including tool results) have no such field and never could.
         let endsTurn = type == "assistant"
             && (obj["message"] as? [String: Any])?["stop_reason"] as? String == "end_turn"
         let description: String
@@ -36,10 +36,10 @@ public enum TranscriptParser {
         } else {
             description = describeAssistant(obj)
         }
-        // Субагент распознаётся по наличию непустого поля `agentId` в самой записи, а не
-        // по тому, что файл лежит в подпапке `subagents/`: путь — это деталь того, как
-        // Claude Code раскладывает файлы сегодня, а `agentId` — факт о самой записи,
-        // который переживёт возможные будущие изменения раскладки.
+        // A subagent is recognised by a non-empty `agentId` field on the entry itself,
+        // not by the file sitting in a `subagents/` subdirectory: the path is a detail
+        // of how Claude Code arranges files today, while `agentId` is a fact about the
+        // entry that will survive any future change to that arrangement.
         let isSubagent = !((obj["agentId"] as? String ?? "").isEmpty)
         return TranscriptActivity(sessionId: sessionId, projectPath: cwd,
                                   description: description, timestamp: ts,

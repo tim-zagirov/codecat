@@ -1,9 +1,9 @@
 import SwiftUI
 import CodeCatCore
 
-/// Панель плавающего режима. Всё содержимое переехало в `SessionListView` и
-/// `SettingsSectionView`, здесь остались только заголовок, фон и размер —
-/// то, чем эта панель отличается от меню острова.
+/// The floating mode's panel. All of its content moved to `SessionListView` and
+/// `SettingsSectionView`; what is left here is the heading, the background and the
+/// size — the things that distinguish this panel from the island menu.
 struct DetailsPanelView: View {
     @ObservedObject var appState: AppState
 

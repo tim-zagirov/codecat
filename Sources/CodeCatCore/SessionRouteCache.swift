@@ -2,12 +2,11 @@ import Foundation
 
 /// Everything known about where a session lives, plus when it started.
 ///
-/// See `docs/superpowers/specs/2026-08-31-route-cache-and-subagents.md`, «1.
-/// Кэшируются маршруты, а не сессии», for why this exists at all: `SessionStore`
-/// only keeps sessions in memory, so a CodeCat restart (every rebuild during
-/// development; every app update or logout for a user) forgot where a
+/// Why this exists at all: `SessionStore` keeps sessions in memory only, so a
+/// CodeCat restart (every rebuild during
+/// development, and every update for a user) erased where a
 /// still-running session lived, leaving its row permanently unclickable and its
-/// "длится N мин" counted from the moment the transcript watcher happened to
+/// "running for N min" counted from the moment the transcript watcher happened to
 /// notice it rather than from the session's real start.
 public struct SessionRoute: Codable, Equatable, Sendable {
     public let hostPID: pid_t?
@@ -117,7 +116,7 @@ public final class SessionRouteCache {
     /// than only at the next `load()`. That is a deliberate trade-off, not an
     /// oversight: nothing distinguishes "clock jumped" from "file is a week old"
     /// from inside `pruned`, and losing the cache is the same silent, non-fatal
-    /// degradation described under "Обработка ошибок" either way.
+    /// degradation either way.
     ///
     /// - Parameter resetStartedAt: true for a genuine `SessionStart` (any
     ///   `source` other than `"compact"`) — see `merged` for what this changes.
@@ -214,7 +213,8 @@ public final class SessionRouteCache {
     /// Lenient decode: the document as a whole must parse as an object, but one
     /// entry missing `startedAt`/`updatedAt` (a file written by a future or past
     /// version of the format) is dropped on its own rather than failing the
-    /// entire cache — per "Обработка ошибок" in the design spec. A dictionary's
+    /// entire cache. A dictionary's synthesized `Decodable` fails the whole decode on a
+    /// single bad value, so
     /// synthesized `Decodable` fails the whole decode on a single bad value, so
     /// decoding through `RawEntry` (whose dates are optional) is what makes the
     /// per-entry leniency possible.

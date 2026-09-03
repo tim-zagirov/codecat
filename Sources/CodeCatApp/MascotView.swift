@@ -21,11 +21,11 @@ struct MascotView: View {
     let skin: MascotSkin
     let status: AggregateStatus
     let sessionCount: Int
-    /// Размеры для острова. Не заданы — канва и нормировка плавающего маскота.
+    /// Sizes for the island. Unset means the floating mascot's canvas and scale.
     var drawingSize: CGSize?
     var canvasSize: CGSize?
     var showsBadge: Bool = true
-    /// Момент входа в текущее состояние — см. `SpriteMascotView.since`.
+    /// When the current state began — see `SpriteMascotView.since`.
     var since: Date?
     /// Called when a sprite skin could not be loaded, so the app can report it.
     var onLoadFailure: (MascotSkin) -> Void = { _ in }
@@ -61,30 +61,29 @@ struct MascotView: View {
         }
     }
 
-    /// Аварийная отрисовка: у `CatView` нет своего `showsBadge` — он рисует
-    /// `MascotBadge` безусловно, — поэтому бейдж гасится здесь, на уровне ветки,
-    /// где `MascotView` уже знает про `showsBadge`, а не правкой контракта
-    /// `CatView` (у плавающего кота бейдж обязан остаться на месте). `MascotBadge`
-    /// рисует себя только при `sessionCount > 0` (см. её тело), так что нулевой
-    /// счётчик надёжно её выключает — тем же приёмом, каким уже пользуется
-    /// `SkinPickerView` для своих превью 34pt.
+    /// The emergency render. `CatView` has no `showsBadge` of its own — it draws
+    /// `MascotBadge` unconditionally — so the badge is suppressed here, in the branch
+    /// where `MascotView` already knows about `showsBadge`, rather than by changing
+    /// `CatView`'s contract (the floating cat's badge has to stay). `MascotBadge`
+    /// draws itself only when `sessionCount > 0` (see its body), so a zero count
+    /// reliably switches it off — the same technique `SkinPickerView` already uses for
+    /// its 34pt previews.
     @ViewBuilder
     private var fallback: some View {
         let cat = CatView(status: status, sessionCount: showsBadge ? sessionCount : 0)
         if let canvasSize {
-            // `CatView` рисует себя на квадратной канве `MascotLayout.canvasSize`
-            // (128pt) — без сжатия в островном крыле высотой 32pt он показался бы
-            // обрезанным фрагментом. Тот же приём, что и у `SkinPickerView`
-            // (`.scaleEffect(previewSize / MascotLayout.canvasSize)`), только
-            // размер берётся из уже переданного `canvasSize`. Масштаб — по меньшей
-            // стороне, а не по высоте: запасной `spriteSize` из `geometry()`
-            // (24×24) даёт неквадратную канву 24×32, и масштаб по высоте растянул
-            // бы квадратного кота до 32×32 — на 4pt шире рамки с каждой стороны,
-            // сегодня незаметно только потому, что `wingPadding` (8pt) это
-            // проглатывает. Масштаб по меньшей стороне держит кота внутри рамки по
-            // построению, а не по совпадению констант. Когда `canvasSize` не
-            // задан (плавающий кот), эта ветка не выполняется — поведение не
-            // меняется ни на пиксель.
+            // `CatView` draws itself on a square `MascotLayout.canvasSize` canvas
+            // (128pt) — without shrinking, it would look like a cropped fragment in a
+            // 32pt island wing. The same technique as `SkinPickerView`'s
+            // (`.scaleEffect(previewSize / MascotLayout.canvasSize)`), only the size
+            // comes from the `canvasSize` already passed in. Scaled by the smaller
+            // side, not by height: the fallback `spriteSize` from `geometry()` (24×24)
+            // gives a non-square 24×32 canvas, and scaling by height would stretch the
+            // square cat to 32×32 — 4pt wider than the frame on each side, unnoticed
+            // today only because `wingPadding` (8pt) absorbs it. Scaling by the smaller
+            // side keeps the cat inside the frame by construction rather than by a
+            // coincidence of constants. When `canvasSize` is unset (the floating cat)
+            // this branch does not run and behaviour is unchanged to the pixel.
             cat
                 .scaleEffect(min(canvasSize.width, canvasSize.height) / MascotLayout.canvasSize)
                 .frame(width: canvasSize.width, height: canvasSize.height)

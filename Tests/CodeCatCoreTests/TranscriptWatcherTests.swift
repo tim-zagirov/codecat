@@ -2,12 +2,12 @@ import XCTest
 import CoreServices
 @testable import CodeCatCore
 
-/// Наблюдатель за транскриптами: разбор флагов FSEvents и обход-страховка.
+/// The transcript watcher: parsing FSEvents flags and the insurance walk.
 ///
-/// FSEvents в тестах не заводится — он асинхронный, зависит от нагрузки на машину и
-/// сам по себе не проверяем. Проверяется то, что от него не зависит: правило «эти
-/// флаги значат, что события потерялись» и обход, который в такой ситуации (а также
-/// по таймеру) обязан догнать состояние сам.
+/// FSEvents is not started in the tests — it is asynchronous, depends on how loaded
+/// the machine is, and is not testable in itself. What is tested is everything that
+/// does not depend on it: the rule "these flags mean events were lost", and the walk
+/// that in such a situation (and on a timer) has to catch up on its own.
 final class TranscriptWatcherTests: XCTestCase {
 
     private var root: URL!
@@ -22,19 +22,18 @@ final class TranscriptWatcherTests: XCTestCase {
         try? FileManager.default.removeItem(at: root)
     }
 
-    // MARK: - Флаги
+    // MARK: - Flags
 
-    /// Ровно тот баг, из-за которого под нагрузкой от нескольких проектов терялись
-    /// целые пачки изменений: при переполнении очереди FSEvents отдаёт путь к
-    /// каталогу с одним из этих флагов, а проверка «оканчивается на .jsonl» молча
-    /// его отбрасывала.
+    /// Exactly the bug that lost whole batches of changes under load from several
+    /// projects: when its queue overflows, FSEvents reports a directory path with one
+    /// of these flags, and an "ends in .jsonl" check silently discarded it.
     func testFlagsThatMeanEventsWereLost() {
         for flag in [kFSEventStreamEventFlagMustScanSubDirs,
                      kFSEventStreamEventFlagUserDropped,
                      kFSEventStreamEventFlagKernelDropped,
                      kFSEventStreamEventFlagRootChanged] {
             XCTAssertTrue(TranscriptWatcher.meansLostEvents(FSEventStreamEventFlags(flag)),
-                          "флаг \(flag) означает потерю событий")
+                          "flag \(flag) means events were lost")
         }
     }
 
@@ -44,33 +43,33 @@ final class TranscriptWatcherTests: XCTestCase {
                      kFSEventStreamEventFlagItemRenamed,
                      kFSEventStreamEventFlagItemIsFile] {
             XCTAssertFalse(TranscriptWatcher.meansLostEvents(FSEventStreamEventFlags(flag)),
-                           "флаг \(flag) — обычное событие о файле")
+                           "flag \(flag) is an ordinary file event")
         }
         XCTAssertFalse(TranscriptWatcher.meansLostEvents(0))
     }
 
-    /// Флаги приходят смесью: «файл изменён» и «а ещё часть событий мы потеряли»
-    /// могут стоять в одном событии.
+    /// Flags arrive mixed: "file changed" and "also, we lost some events" can appear in
+    /// the same event.
     func testALostEventFlagIsRecognisedEvenMixedWithOrdinaryOnes() {
         let mixed = FSEventStreamEventFlags(
             kFSEventStreamEventFlagItemIsDir | kFSEventStreamEventFlagMustScanSubDirs)
         XCTAssertTrue(TranscriptWatcher.meansLostEvents(mixed))
     }
 
-    // MARK: - Обход
+    // MARK: - The walk
 
     func testRescanDeliversLinesAppendedSinceTheLastPass() throws {
         let file = root.appendingPathComponent("s1.jsonl")
         try line(session: "s1", tool: "Bash").write(to: file, atomically: true, encoding: .utf8)
 
-        let received = expectation(description: "активность доехала обходом")
+        let received = expectation(description: "activity arrived through the walk")
         let watcher = TranscriptWatcher(root: root) { activity in
             XCTAssertEqual(activity.sessionId, "s1")
             XCTAssertEqual(activity.description, "running a command")
             received.fulfill()
         }
-        // Первый проход знакомится с файлом и встаёт на его конец: историю чужих
-        // сессий переигрывать нельзя.
+        // The first pass gets acquainted with the file and stops at its end: other
+        // sessions' history must not be replayed.
         watcher.rescan()
         try append(line(session: "s1", tool: "Bash"), to: file)
         watcher.rescan()
@@ -79,15 +78,15 @@ final class TranscriptWatcherTests: XCTestCase {
         XCTAssertEqual(watcher.rescanCount, 2)
     }
 
-    /// Файлы субагентов лежат во вложенных каталогах — обход обязан быть
-    /// рекурсивным, иначе после потери событий работа субагента не догонится.
+    /// Subagent files live in nested directories — the walk has to be recursive, or a
+    /// subagent's work would never be caught up on after events are lost.
     func testRescanReachesNestedSubagentTranscripts() throws {
         let nested = root.appendingPathComponent("proj/session/subagents", isDirectory: true)
         try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
         let file = nested.appendingPathComponent("agent-1.jsonl")
         try line(session: "s2", tool: "Read").write(to: file, atomically: true, encoding: .utf8)
 
-        let received = expectation(description: "активность субагента доехала")
+        let received = expectation(description: "subagent activity arrived")
         let watcher = TranscriptWatcher(root: root) { activity in
             XCTAssertEqual(activity.sessionId, "s2")
             received.fulfill()
@@ -99,15 +98,15 @@ final class TranscriptWatcherTests: XCTestCase {
         wait(for: [received], timeout: 2)
     }
 
-    /// Обход смотрит только недавно изменённые файлы: в `~/.claude/projects` лежат
-    /// сотни транскриптов давно законченных сессий, и открывать их каждые двадцать
-    /// секунд незачем.
+    /// The walk looks only at recently modified files: `~/.claude/projects` holds
+    /// hundreds of transcripts from sessions finished long ago, and there is no reason
+    /// to open them every twenty seconds.
     func testRescanSkipsFilesOlderThanTheWindow() throws {
         let stale = root.appendingPathComponent("old.jsonl")
         try line(session: "old", tool: "Bash").write(to: stale, atomically: true, encoding: .utf8)
 
         let watcher = TranscriptWatcher(root: root, rescanWindow: 60) { activity in
-            XCTFail("старый файл не должен был попасть в обход: \(activity.sessionId)")
+            XCTFail("an old file should not have been picked up by the walk: \(activity.sessionId)")
         }
         watcher.rescan()
         try append(line(session: "old", tool: "Bash"), to: stale)
@@ -115,26 +114,26 @@ final class TranscriptWatcherTests: XCTestCase {
             [.modificationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: stale.path)
         watcher.rescan()
 
-        // Коллбэк уходит на главную очередь — даём ей прокрутиться, чтобы падение
-        // сработало, если файл всё-таки прочитали.
-        let settled = expectation(description: "главная очередь прокрутилась")
+        // The callback goes to the main queue — let it turn over so the failure fires
+        // if the file was read after all.
+        let settled = expectation(description: "the main queue turned over")
         DispatchQueue.main.async { settled.fulfill() }
         wait(for: [settled], timeout: 2)
     }
 
-    /// Файл, который обход видит впервые, историю не переигрывает — иначе первый же
-    /// проход выплюнул бы всю переписку всех сессий за неделю.
+    /// A file the walk sees for the first time does not replay history — otherwise the
+    /// very first pass would spit out a week of every session's conversation.
     func testRescanDoesNotReplayHistoryOfAFileItSeesForTheFirstTime() throws {
         let file = root.appendingPathComponent("s3.jsonl")
         let history = (0..<5).map { _ in line(session: "s3", tool: "Bash") }.joined()
         try history.write(to: file, atomically: true, encoding: .utf8)
 
         let watcher = TranscriptWatcher(root: root) { activity in
-            XCTFail("история не должна переигрываться: \(activity.sessionId)")
+            XCTFail("history must not be replayed: \(activity.sessionId)")
         }
         watcher.rescan()
 
-        let settled = expectation(description: "главная очередь прокрутилась")
+        let settled = expectation(description: "the main queue turned over")
         DispatchQueue.main.async { settled.fulfill() }
         wait(for: [settled], timeout: 2)
     }
@@ -157,12 +156,12 @@ final class TranscriptWatcherTests: XCTestCase {
     }
 }
 
-/// Восстановление картины при запуске.
+/// Recovering the picture at startup.
 ///
-/// До этого приложение при старте не узнавало о живых сессиях никак: FSEvents
-/// сообщает только о будущем, обход заводится через целый интервал, а FileTailer
-/// при первой встрече с файлом ставит смещение в конец. Замер на живой машине —
-/// от 4 до 89 секунд слепоты на каждом перезапуске.
+/// Before this, the app learned nothing about live sessions at launch: FSEvents
+/// reports only the future, the walk starts a whole interval later, and FileTailer
+/// sets its offset to the end the first time it meets a file. Measured on a live
+/// machine — between 4 and 89 seconds of blindness on every restart.
 final class TranscriptPrimingTests: XCTestCase {
 
     private var root: URL!
@@ -193,11 +192,11 @@ final class TranscriptPrimingTests: XCTestCase {
 
     func testPrimingFindsASessionThatWasAlreadyRunning() throws {
         _ = try writeTranscript("live", lines: [
-            assistantLine(session: "aaaa1111", cwd: "/Users/x/Projects/alpha", text: "думаю"),
+            assistantLine(session: "aaaa1111", cwd: "/Users/x/Projects/alpha", text: "thinking"),
         ])
 
         var seen: [TranscriptActivity] = []
-        let expectation = expectation(description: "активность доехала")
+        let expectation = expectation(description: "activity arrived")
         expectation.assertForOverFulfill = false
         let watcher = TranscriptWatcher(root: root) { activity in
             seen.append(activity); expectation.fulfill()
@@ -206,14 +205,14 @@ final class TranscriptPrimingTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
 
         XCTAssertEqual(seen.first?.sessionId, "aaaa1111",
-                       "уже идущая сессия обязана найтись сразу, а не через минуту")
+                       "a session already running must be found at once, not a minute later")
     }
 
-    /// Старые транскрипты подниматься не должны: иначе после запуска в списке
-    /// оказались бы сессии, закрытые вчера.
+    /// Old transcripts must not be picked up: otherwise the list after launch would
+    /// hold sessions closed yesterday.
     func testPrimingIgnoresTranscriptsOlderThanTheWindow() throws {
         _ = try writeTranscript("ancient", lines: [
-            assistantLine(session: "old00001", cwd: "/Users/x/Projects/beta", text: "давно"),
+            assistantLine(session: "old00001", cwd: "/Users/x/Projects/beta", text: "long ago"),
         ], modified: Date().addingTimeInterval(-3600))
 
         var seen: [TranscriptActivity] = []
@@ -221,17 +220,17 @@ final class TranscriptPrimingTests: XCTestCase {
         watcher.primeFromExistingTranscripts()
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
-        XCTAssertTrue(seen.isEmpty, "транскрипт часовой давности поднимать не надо")
+        XCTAssertTrue(seen.isEmpty, "an hour-old transcript should not be picked up")
     }
 
     func testTailLinesReturnsWholeFileWhenSmall() throws {
-        let url = try writeTranscript("small", lines: ["один", "два", "три"])
+        let url = try writeTranscript("small", lines: ["one", "two", "three"])
         XCTAssertEqual(TranscriptWatcher.tailLines(of: url, bytes: 64 * 1024),
-                       ["один", "два", "три"])
+                       ["one", "two", "three"])
     }
 
-    /// Кусок, начатый с середины файла, почти наверняка начинается с обрезанной
-    /// строки — её надо отбросить, иначе парсер получит битый JSON.
+    /// A chunk started mid-file almost certainly begins with a truncated line — it has
+    /// to be discarded, or the parser gets broken JSON.
     func testTailLinesDropsTheTruncatedFirstLine() throws {
         let url = try writeTranscript("big", lines: [
             String(repeating: "A", count: 500),
@@ -240,13 +239,13 @@ final class TranscriptPrimingTests: XCTestCase {
         ])
         let lines = TranscriptWatcher.tailLines(of: url, bytes: 120)
         XCTAssertFalse(lines.contains { $0.hasPrefix("A") },
-                       "обрезанная строка не должна попасть в разбор")
+                       "a truncated line must not reach the parser")
         XCTAssertEqual(lines.last, String(repeating: "C", count: 50))
     }
 
     func testTailLinesOnMissingFileIsEmptyNotFatal() {
         XCTAssertEqual(
-            TranscriptWatcher.tailLines(of: root.appendingPathComponent("нет.jsonl"), bytes: 1024),
+            TranscriptWatcher.tailLines(of: root.appendingPathComponent("missing.jsonl"), bytes: 1024),
             [])
     }
 }

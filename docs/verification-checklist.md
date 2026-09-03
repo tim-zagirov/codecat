@@ -122,10 +122,3 @@ Run this on a fresh build before tagging a release.
     session: the jump must work. This is the only real check of the Apple-events
     entitlement; ad-hoc builds have no hardened runtime, so the failure it guards
     against cannot be reproduced there.
-
-## Localisation
-
-35. Set the system language to Russian (System Settings → General → Language &
-    Region), restart CodeCat → the menu, the panel, the session statuses and the
-    activity lines are all Russian. Switch back to English and confirm the same.
-    The log stays English in both cases; that is deliberate.

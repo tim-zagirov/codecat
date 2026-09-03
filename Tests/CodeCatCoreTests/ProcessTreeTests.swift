@@ -15,9 +15,9 @@ final class ProcessTreeTests: XCTestCase {
 
     // MARK: - Finding the session's own `claude` process
 
-    /// Цепочка, которую видит хук на самом деле: `codecat-hook` ← `sh -c` ← `claude`
-    /// ← `disclaimer` ← `Claude.app`. Нужен именно `claude`, а не приложение-владелец:
-    /// приложение переживает десяток сессий, и по нему нельзя понять, жива ли эта.
+    /// The chain the hook actually sees: `codecat-hook` ← `sh -c` ← `claude` ←
+    /// `disclaimer` ← `Claude.app`. What is wanted is `claude`, not the owning app: the
+    /// app outlives a dozen sessions and says nothing about whether this one is alive.
     func testAgentFindsTheNearestClaudeAncestor() {
         let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
             node(100, 90, "/Applications/CodeCat.app/Contents/MacOS/codecat-hook"),
@@ -29,8 +29,8 @@ final class ProcessTreeTests: XCTestCase {
         XCTAssertEqual(ProcessTree.agent(startingAt: 100, provider: tree), 80)
     }
 
-    /// Вложенные `claude` (агент запустил агента): сессия хука принадлежит
-    /// ближайшему — в отличие от `host`, которому нужен самый внешний бандл.
+    /// Nested `claude` processes (an agent launched an agent): the hook's session
+    /// belongs to the nearest — unlike `host`, which wants the outermost bundle.
     func testAgentPrefersTheNearestClaudeOverAnOuterOne() {
         let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
             node(10, 9, "/opt/hook"),
@@ -48,8 +48,8 @@ final class ProcessTreeTests: XCTestCase {
         XCTAssertNil(ProcessTree.agent(startingAt: 10, provider: tree))
     }
 
-    /// Хук исполняется внутри вызова, которого ждёт Claude Code: зацикленная цепочка
-    /// предков обязана завершиться, а не крутиться.
+    /// The hook runs inside a call Claude Code is waiting on: a cyclic ancestor chain
+    /// has to terminate rather than spin.
     func testAgentTerminatesOnACyclicParentChain() {
         let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
             node(10, 11, "/opt/a"),
@@ -58,8 +58,8 @@ final class ProcessTreeTests: XCTestCase {
         XCTAssertNil(ProcessTree.agent(startingAt: 10, provider: tree))
     }
 
-    /// Имя сравнивается по последнему компоненту пути целиком: `claude-hook` и
-    /// `claude.app` — не процесс сессии.
+    /// The name is compared against the whole last path component: `claude-hook` and
+    /// `claude.app` are not the session's process.
     func testAgentDoesNotMatchOnAPrefix() {
         let tree = FakeTree(nodes: Dictionary(uniqueKeysWithValues: [
             node(10, 9, "/opt/hook"),

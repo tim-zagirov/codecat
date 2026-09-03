@@ -81,12 +81,12 @@ public enum MascotSkins {
             // The cat opens its mouth and calls — the closest thing in the pack to
             // "your agent is asking you something".
             .waiting: strip("Meow", count: 4, fps: 5),
-            // Работа закончена: кот потягивается пару раз, укладывается и засыпает.
-            // `Laying` — это готовый переход «сесть и лечь» из самого набора: в петле
-            // он выглядел бы бесконечным вставанием, а одним проходом ровно тем, чем
-            // и является. Потягивание тоже одноразовое по смыслу — крутить его все
-            // десять минут, что живёт состояние, значит показывать движение, которого
-            // в жизни не бывает.
+            // Work is over: the cat stretches a couple of times, lies down and falls
+            // asleep. `Laying` is a ready-made sit-down-then-lie-down transition from
+            // the pack itself: in a loop it would look like endless getting up, and in
+            // a single pass it is exactly what it is. The stretch is one-shot by meaning
+            // too — looping it for the ten minutes the state lives would show a motion
+            // that does not happen in life.
             .done: SpriteAnimation(phases: [
                 SpritePhase(frames: stripFrames("Stretching", count: 13), framesPerSecond: 8, repeats: 2),
                 SpritePhase(frames: stripFrames("Laying", count: 8), framesPerSecond: 6, repeats: 1),
@@ -127,8 +127,8 @@ public enum MascotSkins {
                 .sleeping: row(6, 0..<4, fps: 2),   // lying flat
                 .working: row(0, 0..<4, fps: 6),    // sitting, flicking its tail
                 .waiting: row(3, 0..<4, fps: 5),    // raising a paw
-                // Умылся после работы — и лёг. Тот же переход к покою, что и у
-                // остальных наборов (см. `.done` у LuizMelo).
+                // Washed after work — and lay down. The same transition to rest as in
+                // the other packs (see LuizMelo's `.done`).
                 .done: SpriteAnimation(phases: [
                     SpritePhase(frames: rowFrames(7, 0..<6), framesPerSecond: 6, repeats: 2),
                     SpritePhase(frames: rowFrames(6, 0..<4), framesPerSecond: 2),
@@ -165,10 +165,10 @@ public enum MascotSkins {
                 .sleeping: frames([7, 8], fps: 0.6),      // (2,1), (2,2): lying, eyes closed
                 .working: frames([0, 1, 2], fps: 5),      // row 0
                 .waiting: frames([3, 4, 5], fps: 5),      // row 1: raises a paw
-                // Раньше здесь стоял один застывший кадр стоящего кота — и он висел
-                // так все десять минут, что живёт состояние. Теперь кот садится,
-                // укладывается и остаётся лежать: три позы, которые есть в наборе,
-                // как раз и складываются в этот переход.
+                // This used to be a single frozen frame of a standing cat, and it hung
+                // there for the whole ten minutes the state lives. Now the cat sits
+                // down, lies down and stays there: the three poses the pack has add up
+                // to exactly that transition.
                 .done: SpriteAnimation(phases: [
                     SpritePhase(frames: cells([4, 5]), framesPerSecond: 2.5, repeats: 2),
                     SpritePhase(frames: cells([6]), framesPerSecond: 1.2, repeats: 1),

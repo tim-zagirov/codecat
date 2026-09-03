@@ -12,18 +12,18 @@ final class DiagnosticFormatTests: XCTestCase {
     func testLineHasStampSourceAndMessage() {
         let line = DiagnosticFormat.line(
             date: date("2026-09-01T12:34:56.789Z"), source: "app",
-            message: "сокет поднят", timeZone: TimeZone(identifier: "UTC")!)
-        XCTAssertEqual(line, "2026-09-01 12:34:56.789 [app] сокет поднят\n")
+            message: "socket is up", timeZone: TimeZone(identifier: "UTC")!)
+        XCTAssertEqual(line, "2026-09-01 12:34:56.789 [app] socket is up\n")
     }
 
-    /// Строка обязана оставаться одной строкой: хвост лога режется по `\n`, и
-    /// многострочное сообщение (текст ошибки от macOS часто такой) поехало бы.
+    /// A record has to stay one line: the log's tail is split on `\n`, and a multi-line
+    /// message (macOS error text often is one) would throw it off.
     func testNewlinesInMessageAreEscapedNotDropped() {
         let line = DiagnosticFormat.line(
             date: date("2026-09-01T00:00:00.000Z"), source: "app",
-            message: "строка один\nстрока два", timeZone: TimeZone(identifier: "UTC")!)
-        XCTAssertEqual(line.filter { $0 == "\n" }.count, 1, "внутри записи не должно быть переводов строки")
-        XCTAssertTrue(line.contains("строка один\\nстрока два"))
+            message: "line one\nline two", timeZone: TimeZone(identifier: "UTC")!)
+        XCTAssertEqual(line.filter { $0 == "\n" }.count, 1, "a record must contain no newlines")
+        XCTAssertTrue(line.contains("line one\\nline two"))
     }
 
     func testRotationTriggersAtLimitNotBefore() {
@@ -33,16 +33,16 @@ final class DiagnosticFormatTests: XCTestCase {
     }
 
     func testTailReturnsLastLines() {
-        let text = "один\nдва\nтри\nчетыре\n"
-        XCTAssertEqual(DiagnosticFormat.tail(text, lines: 2), "три\nчетыре")
-        XCTAssertEqual(DiagnosticFormat.tail(text, lines: 99), "один\nдва\nтри\nчетыре")
+        let text = "one\ntwo\nthree\nfour\n"
+        XCTAssertEqual(DiagnosticFormat.tail(text, lines: 2), "three\nfour")
+        XCTAssertEqual(DiagnosticFormat.tail(text, lines: 99), "one\ntwo\nthree\nfour")
         XCTAssertEqual(DiagnosticFormat.tail(text, lines: 0), "")
     }
 
-    /// Завершающий перевод строки не должен считаться за строку — иначе на каждый
-    /// запрос отдавалась бы на одну реальную строку меньше.
+    /// A trailing newline must not count as a line — otherwise every request would
+    /// return one real line fewer than asked.
     func testTailDoesNotCountTrailingNewlineAsALine() {
-        XCTAssertEqual(DiagnosticFormat.tail("один\nдва\n", lines: 1), "два")
+        XCTAssertEqual(DiagnosticFormat.tail("one\ntwo\n", lines: 1), "two")
     }
 
     func testTailKeepsBlankLinesInsideLog() {
@@ -53,8 +53,8 @@ final class DiagnosticFormatTests: XCTestCase {
         let text = "cwd=/Users/tim/Projects/secret-app tty=/dev/ttys003"
         let out = DiagnosticFormat.redact(text, home: "/Users/tim")
         XCTAssertEqual(out, "cwd=~/Projects/secret-app tty=/dev/ttys003")
-        XCTAssertTrue(out.contains("secret-app"), "имя проекта должно остаться — по нему и опознаётся сессия")
-        XCTAssertFalse(out.contains("/Users/tim"), "логин не должен утечь в буфер обмена")
+        XCTAssertTrue(out.contains("secret-app"), "the project name has to stay — it is what identifies the session")
+        XCTAssertFalse(out.contains("/Users/tim"), "the login must not leak into the clipboard")
     }
 
     func testRedactHandlesTrailingSlashAndEmptyHome() {
@@ -80,18 +80,18 @@ final class DiagnosticLogFileTests: XCTestCase {
     func testWritesAppendRatherThanOverwrite() {
         let url = dir.appendingPathComponent("codecat.log")
         let log = DiagnosticLog(url: url, source: "app")
-        log.write("первое")
-        log.write("второе")
+        log.write("first")
+        log.write("second")
         log.close()
         let text = try! String(contentsOf: url, encoding: .utf8)
-        XCTAssertTrue(text.contains("первое"))
-        XCTAssertTrue(text.contains("второе"))
+        XCTAssertTrue(text.contains("first"))
+        XCTAssertTrue(text.contains("second"))
         XCTAssertEqual(text.filter { $0 == "\n" }.count, 2)
     }
 
-    /// Ровно тот случай, ради которого выбран O_APPEND: приложение и хук — разные
-    /// процессы с разными дескрипторами одного файла. Здесь два дескриптора в одном
-    /// процессе, что для ядра неотличимо, и ни одна строка не имеет права порваться.
+    /// Exactly the case O_APPEND was chosen for: the app and the hook are different
+    /// processes with different descriptors on one file. Here there are two descriptors
+    /// in one process, which the kernel cannot tell apart, and no line may be torn.
     func testTwoWritersDoNotTearEachOthersLines() {
         let url = dir.appendingPathComponent("codecat.log")
         let a = DiagnosticLog(url: url, source: "app")
@@ -107,9 +107,9 @@ final class DiagnosticLogFileTests: XCTestCase {
 
         let text = try! String(contentsOf: url, encoding: .utf8)
         let lines = text.split(separator: "\n")
-        XCTAssertEqual(lines.count, 200, "должно быть ровно 200 целых строк")
+        XCTAssertEqual(lines.count, 200, "there must be exactly 200 whole lines")
         for line in lines {
-            XCTAssertTrue(line.hasPrefix("20"), "строка начинается с метки времени, а не с обрывка чужой: \(line.prefix(40))")
+            XCTAssertTrue(line.hasPrefix("20"), "a line starts with a timestamp, not with a fragment of someone else's: \(line.prefix(40))")
             XCTAssertTrue(line.contains("[app]") || line.contains("[hook]"))
         }
     }
@@ -121,33 +121,33 @@ final class DiagnosticLogFileTests: XCTestCase {
         log.rotateIfNeeded(limit: 100)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.appendingPathExtension("1").path),
-                      "старый файл должен переехать в .1")
-        log.write("после ротации")
+                      "the old file must move to .1")
+        log.write("after rotation")
         log.close()
         let text = try! String(contentsOf: url, encoding: .utf8)
-        XCTAssertTrue(text.contains("после ротации"))
-        XCTAssertFalse(text.contains("yyy"), "новый файл должен начинаться пустым")
+        XCTAssertTrue(text.contains("after rotation"))
+        XCTAssertFalse(text.contains("yyy"), "the new file must start empty")
     }
 
-    /// Главный риск ротации: дескриптор остаётся открытым на переименованный файл,
-    /// и запись после ротации молча уходит в `.1` до самого перезапуска.
+    /// Rotation's main risk: the descriptor stays open on the renamed file, and writes
+    /// after rotation silently go to `.1` until the process is restarted.
     func testWriteAfterRotationLandsInTheNewFileNotTheOldOne() {
         let url = dir.appendingPathComponent("codecat.log")
         let log = DiagnosticLog(url: url, source: "app")
         log.write(String(repeating: "z", count: 500))
         log.rotateIfNeeded(limit: 100)
-        log.write("новая запись")
+        log.write("new record")
         log.close()
 
         let rotated = try! String(contentsOf: url.appendingPathExtension("1"), encoding: .utf8)
-        XCTAssertFalse(rotated.contains("новая запись"), "запись после ротации не должна попасть в .1")
-        XCTAssertTrue(try! String(contentsOf: url, encoding: .utf8).contains("новая запись"))
+        XCTAssertFalse(rotated.contains("new record"), "a write after rotation must not land in .1")
+        XCTAssertTrue(try! String(contentsOf: url, encoding: .utf8).contains("new record"))
     }
 
     func testRotateDoesNothingBelowLimit() {
         let url = dir.appendingPathComponent("codecat.log")
         let log = DiagnosticLog(url: url, source: "app")
-        log.write("коротко")
+        log.write("short")
         log.rotateIfNeeded(limit: 1 << 20)
         log.close()
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.appendingPathExtension("1").path))
@@ -156,18 +156,18 @@ final class DiagnosticLogFileTests: XCTestCase {
     func testTailReachesIntoRotatedFileWhenCurrentIsShort() {
         let url = dir.appendingPathComponent("codecat.log")
         let log = DiagnosticLog(url: url, source: "app")
-        log.write("старое один")
-        log.write("старое два")
+        log.write("old one")
+        log.write("old two")
         log.rotateIfNeeded(limit: 1)
-        log.write("новое")
+        log.write("new")
         log.close()
 
         let tail = log.tail(lines: 3)
-        XCTAssertTrue(tail.contains("старое два"), "хвост должен доставать из .1, когда текущий файл короче запроса")
-        XCTAssertTrue(tail.contains("новое"))
-        // Порядок хронологический: то, что было до ротации, идёт раньше.
-        XCTAssertLessThan(tail.range(of: "старое два")!.lowerBound,
-                          tail.range(of: "новое")!.lowerBound)
+        XCTAssertTrue(tail.contains("old two"), "the tail must reach into .1 when the current file is shorter than requested")
+        XCTAssertTrue(tail.contains("new"))
+        // Chronological order: what came before the rotation comes first.
+        XCTAssertLessThan(tail.range(of: "old two")!.lowerBound,
+                          tail.range(of: "new")!.lowerBound)
     }
 
     func testHookRefusesToWriteOnceFileIsHuge() {
@@ -175,17 +175,17 @@ final class DiagnosticLogFileTests: XCTestCase {
         let big = Data(repeating: 0x41, count: DiagnosticFormat.hookHardLimit + 1)
         try! big.write(to: url)
         let log = DiagnosticLog(url: url, source: "hook")
-        XCTAssertFalse(log.writeIfWithinHardLimit("не должно записаться"),
-                       "хук не ротирует, поэтому обязан замолчать на разросшемся файле")
+        XCTAssertFalse(log.writeIfWithinHardLimit("must not be written"),
+                       "the hook does not rotate, so it has to fall silent on a grown file")
         log.close()
     }
 
     func testWritingToUnopenableFileIsSilentNotFatal() {
-        // Каталога нет — открыть нечего. Логирование не имеет права быть причиной
-        // сбоя того, что оно логирует.
-        let log = DiagnosticLog(url: dir.appendingPathComponent("нет/такого/codecat.log"),
+        // The directory does not exist — there is nothing to open. Logging has no right
+        // to be the cause of a failure in what it logs.
+        let log = DiagnosticLog(url: dir.appendingPathComponent("no/such/codecat.log"),
                                 source: "app")
-        log.write("в никуда")
+        log.write("into the void")
         XCTAssertEqual(log.tail(lines: 5), "")
         log.close()
     }

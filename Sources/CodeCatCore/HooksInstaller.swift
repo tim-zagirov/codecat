@@ -25,11 +25,11 @@ public enum SettingsReadResult: Equatable {
 public enum HooksInstaller {
     /// The hook events CodeCat subscribes to.
     ///
-    /// `UserPromptSubmit` — точный момент, когда агент взялся за работу. Без него
-    /// начало работы приходилось узнавать из транскрипта, а он приходит пачками:
-    /// на живой машине замерена задержка в 21 секунду между тем, как строка
-    /// записана, и тем, как о ней сообщил FSEvents. Всё это время котик спал, хотя
-    /// агент уже работал. Хук приходит по сокету сразу.
+    /// `UserPromptSubmit` is the exact moment an agent took on work. Without it, the
+    /// start of work had to be learned from the transcript, which arrives in batches:
+    /// on a live machine a 21-second delay was measured between a line being written
+    /// and FSEvents reporting it. The cat slept through all of that while the agent was
+    /// already working. The hook arrives over the socket immediately.
     public static let events = [
         "SessionStart", "UserPromptSubmit", "Stop", "Notification", "SessionEnd",
     ]

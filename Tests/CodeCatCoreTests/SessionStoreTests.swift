@@ -9,34 +9,34 @@ final class SessionStoreTests: XCTestCase {
         HookEvent(hookEventName: name, sessionId: id, cwd: cwd, message: message)
     }
 
-    /// Сессия, в которой агент действительно работает: строка в транскрипте, а не
-    /// просто открытая вкладка. `SessionStart` даёт `.idle` — см. `SessionStatus.idle`,
-    /// поэтому тесты, которым нужна именно работающая сессия, заводят её так.
+    /// A session where the agent is genuinely working: a line in the transcript, not
+    /// merely an open tab. `SessionStart` yields `.idle` — see `SessionStatus.idle` —
+    /// so tests that need a working session create one this way.
     @discardableResult
     func startWorking(_ store: SessionStore, id: String = "s1", cwd: String = "/proj",
                       at time: Date) -> SessionStore {
         store.apply(activity: TranscriptActivity(sessionId: id, projectPath: cwd,
-                                                 description: "работает над задачей",
+                                                 description: "working on the task",
                                                  timestamp: time))
         return store
     }
 
-    /// Жалоба, с которой всё началось: «ни один агент не запущен, а он показывает 1».
-    /// `SessionStart` приходит, когда сессию открыли или возобновили, — работы в ней
-    /// ещё нет, и в бейдже ей делать нечего.
+    /// The complaint that started all of this: "no agent is running and it shows 1".
+    /// `SessionStart` arrives when a session is opened or resumed — there is no work in
+    /// it yet, and it has no business being in the badge.
     func testSessionStartCreatesIdleSessionThatIsNotCountedAnywhere() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
-        XCTAssertEqual(store.ordered.count, 1, "сессию всё равно отслеживаем")
+        XCTAssertEqual(store.ordered.count, 1, "the session is still tracked")
         XCTAssertEqual(store.ordered[0].status, .idle)
         XCTAssertEqual(store.ordered[0].projectPath, "/proj")
         XCTAssertEqual(store.aggregate, .sleeping)
         XCTAssertEqual(store.badgeCount, 0)
-        XCTAssertFalse(store.anyWorking, "открытая вкладка не повод не давать маку заснуть")
+        XCTAssertFalse(store.anyWorking, "an open tab is no reason to keep the Mac awake")
     }
 
-    /// `UserPromptSubmit` — точный момент начала работы, и он приходит по сокету
-    /// сразу, не дожидаясь, пока FSEvents донесёт строку транскрипта.
+    /// `UserPromptSubmit` is the exact moment work begins, and it arrives over the
+    /// socket at once, without waiting for FSEvents to deliver a transcript line.
     func testUserPromptSubmitStartsWorkImmediately() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
@@ -47,7 +47,7 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(store.anyWorking)
     }
 
-    /// Полный круг одного турна: взялся → закончил → снова взялся.
+    /// A full circle of one turn: took it on → finished → took it on again.
     func testAPromptAfterAFinishedTurnMakesTheSessionWorkAgain() {
         let store = SessionStore()
         store.apply(hook: hook("UserPromptSubmit"), now: t0)
@@ -55,11 +55,11 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.aggregate, .done)
         store.apply(hook: hook("UserPromptSubmit"), now: t0.addingTimeInterval(120))
         XCTAssertEqual(store.ordered[0].status, .working)
-        XCTAssertNil(store.ordered[0].finishedAt, "сессия снова в работе — не законченная")
+        XCTAssertNil(store.ordered[0].finishedAt, "working again — not finished")
     }
 
-    /// И зеркальный случай: как только в сессии действительно началась работа
-    /// (первая строка турна в транскрипте), она немедленно считается работающей.
+    /// And the mirror case: as soon as work genuinely starts in a session (the first
+    /// line of a turn in the transcript), it counts as working immediately.
     func testFirstTranscriptLineTurnsAnIdleSessionIntoAWorkingOne() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
@@ -70,9 +70,9 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(store.anyWorking)
     }
 
-    /// `SessionStart` с `source == "compact"` — это авто-компакция посреди работы,
-    /// а не открытие сессии: сбросить работающую сессию в `.idle` значило бы гасить
-    /// кота ровно в тот момент, когда агент занят.
+    /// `SessionStart` with `source == "compact"` is an auto-compaction mid-work, not a
+    /// session opening: resetting a working session to `.idle` would put the cat to
+    /// sleep at the very moment the agent is busy.
     func testCompactSessionStartDoesNotResetAWorkingSessionToIdle() {
         let store = SessionStore()
         startWorking(store, at: t0)
@@ -115,11 +115,11 @@ final class SessionStoreTests: XCTestCase {
         store.apply(hook: hook("SessionStart"), now: t0)
         store.apply(hook: hook("Stop"), now: t0.addingTimeInterval(10))
         let act = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
-                                     description: "редактирует api.ts",
+                                     description: "editing api.ts",
                                      timestamp: t0.addingTimeInterval(20))
         store.apply(activity: act)
         XCTAssertEqual(store.ordered[0].status, .working)
-        XCTAssertEqual(store.ordered[0].activityDescription, "редактирует api.ts")
+        XCTAssertEqual(store.ordered[0].activityDescription, "editing api.ts")
     }
 
     func testOlderTranscriptActivityDoesNotOverrideWaiting() {
@@ -127,7 +127,7 @@ final class SessionStoreTests: XCTestCase {
         store.apply(hook: hook("SessionStart"), now: t0)
         store.apply(hook: hook("Notification", message: "permission"), now: t0.addingTimeInterval(30))
         let stale = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
-                                       description: "думает",
+                                       description: "thinking",
                                        timestamp: t0.addingTimeInterval(29))
         store.apply(activity: stale)
         XCTAssertEqual(store.ordered[0].status, .waitingForYou(.permission))
@@ -151,11 +151,11 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.ordered[0].activityDescription, "running a command")
     }
 
-    /// Пин требования 3 из спеки: субагент, работающий внутри сессии, — это работа
-    /// самой сессии. Если единственная активность, которую видел стор, пришла из
-    /// транскрипта субагента, сессия всё равно должна агрегироваться, считаться в
-    /// бейдже и удерживать мак от сна — иначе «работает 2» на экране разойдётся с
-    /// тем, что мак реально не спит.
+    /// Pins requirement 3 of the spec: a subagent working inside a session is the
+    /// session's own work. If the only activity the store ever saw came from a
+    /// subagent's transcript, the session must still aggregate, count in the badge and
+    /// hold the Mac awake — otherwise "working 2" on screen would disagree with the
+    /// Mac actually not sleeping.
     func testSessionWithOnlySubagentActivityStillCountsAsWorking() {
         let store = SessionStore()
         let act = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
@@ -170,7 +170,7 @@ final class SessionStoreTests: XCTestCase {
     func testActivityForUnknownSessionCreatesSession() {
         let store = SessionStore()
         let act = TranscriptActivity(sessionId: "s9", projectPath: "/p9",
-                                     description: "думает", timestamp: t0)
+                                     description: "thinking", timestamp: t0)
         store.apply(activity: act)
         XCTAssertEqual(store.ordered.count, 1)
         XCTAssertEqual(store.ordered[0].status, .working)
@@ -183,15 +183,15 @@ final class SessionStoreTests: XCTestCase {
         store.apply(hook: hook("Notification", id: "c", message: "permission"),
                     now: t0.addingTimeInterval(299))
         store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300))
-        // a — упала (работала и протухла), c — ждёт (свежая активность в 299с);
-        // приоритет у «ждёт»
+        // a — crashed (was working and went stale); c — waiting (fresh activity at 299s);
+        // waiting takes priority
         XCTAssertEqual(store.aggregate, .waiting(1))
     }
 
     func testReconcileMarksStaleSessionsCrashedWhenNoProcesses() {
         let store = SessionStore()
         startWorking(store, at: t0)
-        // активность была давно, процессов claude нет → сессия упала
+        // the activity is old and there are no claude processes → the session crashed
         store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300))
         XCTAssertEqual(store.ordered[0].status, .crashed)
         XCTAssertEqual(store.aggregate, .problem)
@@ -200,7 +200,7 @@ final class SessionStoreTests: XCTestCase {
     func testReconcileKeepsFreshSessionsEvenWithZeroProcesses() {
         let store = SessionStore()
         startWorking(store, at: t0)
-        // активность недавняя (< 120 c) → не трогаем, даже если pgrep никого не нашёл
+        // recent activity (< 120 s) → left alone, even if pgrep found nobody
         store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(60))
         XCTAssertEqual(store.ordered[0].status, .working)
     }
@@ -232,8 +232,8 @@ final class SessionStoreTests: XCTestCase {
         store.apply(hook: hook("SessionStart", id: "b", cwd: "/b"), now: t0)
         store.apply(hook: hook("Notification", id: "b", message: "permission"),
                     now: t0.addingTimeInterval(5))
-        XCTAssertEqual(store.aggregate, .waiting(1), "aggregate — приоритет у waiting")
-        XCTAssertTrue(store.anyWorking, "но agent 'a' всё ещё работает")
+        XCTAssertEqual(store.aggregate, .waiting(1), "aggregate — waiting takes priority")
+        XCTAssertTrue(store.anyWorking, "but agent 'a' is still working")
     }
 
     func testAnyWorkingFalseWhenAllSessionsWaitOrIdle() {
@@ -253,7 +253,7 @@ final class SessionStoreTests: XCTestCase {
         startWorking(store, at: t0)
         store.applyIdleHeuristic(now: t0.addingTimeInterval(120), threshold: 60)
         XCTAssertEqual(store.ordered[0].status, .waitingForYou(.idle))
-        XCTAssertTrue(store.anyWorking, ".idle — это догадка, а не реальный сигнал")
+        XCTAssertTrue(store.anyWorking, ".idle is a guess, not a real signal")
     }
 
     func testAnyWorkingFalseForRealPermissionWait() {
@@ -315,7 +315,7 @@ final class SessionStoreTests: XCTestCase {
         startWorking(store, at: t0)
         store.reconcile(claudeProcessCount: 1, now: t0.addingTimeInterval(30 * 60))
         XCTAssertEqual(store.ordered[0].status, .working,
-                       "30 минут не должно быть достаточно для default long-stale timeout")
+                       "30 minutes must not be enough for the default long-stale timeout")
     }
 
     // MARK: - reconcile + expireFinished interaction (regression)
@@ -389,7 +389,7 @@ final class SessionStoreTests: XCTestCase {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
         let activity = TranscriptActivity(sessionId: "s1", projectPath: "/proj",
-                                          description: "работает",
+                                          description: "working",
                                           timestamp: t0.addingTimeInterval(3 * 60 * 60))
         store.apply(activity: activity)
         let doneTime = t0.addingTimeInterval(3 * 60 * 60 + 10)
@@ -406,7 +406,7 @@ final class SessionStoreTests: XCTestCase {
     }
 }
 
-// MARK: - «Есть ли сессии» — это не «чем занят кот»
+// MARK: - "Are there sessions" is not "what is the cat doing"
 
 extension SessionStoreTests {
 
@@ -414,19 +414,19 @@ extension SessionStoreTests {
         XCTAssertFalse(SessionStore().hasSessions)
     }
 
-    /// Ключевой случай: сессия открыта, но простаивает. Кот при этом спит
-    /// (`aggregate == .sleeping`, бейдж пуст) — а сессия есть, и настройка
-    /// «прятать остров, когда сессий нет» не имеет права её не заметить.
+    /// The key case: the session is open but idle. The cat is asleep
+    /// (`aggregate == .sleeping`, empty badge) — and yet the session exists, and "hide
+    /// the island when there are no sessions" has no right to miss it.
     func testAnIdleSessionStillCountsAsASession() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
-        XCTAssertEqual(store.aggregate, .sleeping, "коту показывать нечего")
+        XCTAssertEqual(store.aggregate, .sleeping, "the cat has nothing to show")
         XCTAssertEqual(store.badgeCount, 0)
-        XCTAssertTrue(store.hasSessions, "но сессия есть")
+        XCTAssertTrue(store.hasSessions, "but the session is there")
     }
 
-    /// И законченная — тоже: она ещё висит в панели свой TTL, по ней можно
-    /// кликнуть, значит прятать остров не за что.
+    /// And a finished one counts too: it still sits in the panel for its TTL and can
+    /// be clicked, so there is nothing to hide the island for.
     func testAFinishedSessionStillCountsAsASession() {
         let store = SessionStore()
         startWorking(store, at: t0)
@@ -434,7 +434,7 @@ extension SessionStoreTests {
         XCTAssertTrue(store.hasSessions)
     }
 
-    /// А когда сессия ушла совсем — сессий нет.
+    /// And once a session is gone for good — there are no sessions.
     func testSessionEndLeavesNoSessions() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
@@ -443,18 +443,18 @@ extension SessionStoreTests {
     }
 }
 
-// MARK: - Конец турна виден в транскрипте, а не только в хуке
+// MARK: - The end of a turn is visible in the transcript, not only in the hook
 
 extension SessionStoreTests {
 
     private func endOfTurn(id: String = "s1", at time: Date) -> TranscriptActivity {
-        TranscriptActivity(sessionId: id, projectPath: "/proj", description: "закончил",
+        TranscriptActivity(sessionId: id, projectPath: "/proj", description: "done",
                            timestamp: time, endsTurn: true)
     }
 
-    /// Ровно тот случай, что поймали на живой машине: сессия закончила турн, хук
-    /// `Stop` до приложения не дошёл — и раньше она навсегда оставалась «работает»,
-    /// продолжая давать единицу на бейдже при пустом столе.
+    /// Exactly the case caught on a live machine: the session ended its turn, the
+    /// `Stop` hook never reached the app — and it used to stay "working" forever,
+    /// contributing a 1 to the badge over an empty desk.
     func testEndOfTurnInTheTranscriptFinishesTheSessionWithoutTheStopHook() {
         let store = SessionStore()
         startWorking(store, at: t0)
@@ -462,26 +462,26 @@ extension SessionStoreTests {
         store.apply(activity: endOfTurn(at: t0.addingTimeInterval(30)))
         XCTAssertEqual(store.ordered[0].status, .done)
         XCTAssertEqual(store.ordered[0].finishedAt, t0.addingTimeInterval(30),
-                       "TTL показа отсчитывается от конца турна")
+                       "the display TTL counts from the end of the turn")
         XCTAssertEqual(store.aggregate, .done)
         XCTAssertEqual(store.badgeCount, 0)
-        XCTAssertFalse(store.anyWorking, "мак больше незачем держать не спящим")
+        XCTAssertFalse(store.anyWorking, "no reason to keep the Mac awake any more")
     }
 
-    /// Субагент закончил свой турн — сессия продолжает работать: она разбирает его
-    /// результат. Гасить её здесь значило бы усыплять кота посреди работы.
+    /// A subagent finished its turn — the session keeps working: it is processing the
+    /// result. Ending it here would put the cat to sleep mid-work.
     func testSubagentEndOfTurnDoesNotFinishTheSession() {
         let store = SessionStore()
         startWorking(store, at: t0)
         let subagentDone = TranscriptActivity(
-            sessionId: "s1", projectPath: "/proj", description: "закончил",
+            sessionId: "s1", projectPath: "/proj", description: "done",
             timestamp: t0.addingTimeInterval(30), isSubagent: true, endsTurn: true)
         store.apply(activity: subagentDone)
         XCTAssertEqual(store.ordered[0].status, .working)
         XCTAssertEqual(store.badgeCount, 1)
     }
 
-    /// Следующая реплика человека снова заводит работу — законченность не залипает.
+    /// The human's next message starts work again — finishedness does not stick.
     func testWorkResumesAfterAnEndOfTurnSeenInTheTranscript() {
         let store = SessionStore()
         startWorking(store, at: t0)
@@ -492,7 +492,7 @@ extension SessionStoreTests {
         XCTAssertEqual(store.badgeCount, 1)
     }
 
-    /// Законченная сессия истекает по обычному TTL — от конца турна.
+    /// A finished session expires on the usual TTL, measured from the end of the turn.
     func testASessionFinishedByTheTranscriptExpiresOnTheUsualTTL() {
         let store = SessionStore()
         startWorking(store, at: t0)
@@ -505,7 +505,7 @@ extension SessionStoreTests {
     }
 }
 
-// MARK: - Жива ли сессия: точный ответ по её собственному процессу
+// MARK: - Is the session alive: the exact answer from its own process
 
 extension SessionStoreTests {
 
@@ -514,10 +514,10 @@ extension SessionStoreTests {
                   agentPID: agentPID)
     }
 
-    /// Тот самый призрак: сессию убили (kill, force quit — `SessionEnd` не дошёл),
-    /// но рядом живы другие процессы `claude`, поэтому обнулить общий счётчик
-    /// нечем. Раньше такая сессия висела в бейдже как работающая до четырёх часов.
-    /// Со своим pid ответ известен сразу.
+    /// The ghost itself: the session was killed (kill, force quit — `SessionEnd` never
+    /// arrived), but other `claude` processes are alive nearby, so there is nothing to
+    /// zero the shared counter with. Such a session used to hang in the badge as
+    /// working for up to four hours. With its own pid the answer is known at once.
     func testDeadAgentProcessCrashesAWorkingSessionAtOnceEvenWithOtherClaudesAlive() {
         let store = SessionStore()
         store.apply(hook: agentEvent("SessionStart", agentPID: 4242), now: t0)
@@ -526,11 +526,11 @@ extension SessionStoreTests {
                         isAgentAlive: { _ in false })
         XCTAssertEqual(store.ordered[0].status, .crashed)
         XCTAssertEqual(store.ordered[0].finishedAt, t0.addingTimeInterval(30),
-                       "TTL показа отсчитывается от момента, когда сессия оборвалась")
+                       "the display TTL counts from the moment the session died")
     }
 
-    /// Сессию просто закрыли, ничего не запуская. Это не авария — показывать
-    /// «оборвалась» не за что, строку надо убрать.
+    /// The session was simply closed without anything being run. That is not a
+    /// failure — there is nothing to show "stopped" for, and the row should go.
     func testDeadAgentProcessRemovesASessionThatWasNotWorking() {
         for (name, message) in [("SessionStart", nil), ("Notification", "permission"),
                                 ("Stop", nil)] as [(String, String?)] {
@@ -539,14 +539,14 @@ extension SessionStoreTests {
                                         message: message, agentPID: 4242), now: t0)
             store.reconcile(claudeProcessCount: 3, now: t0.addingTimeInterval(30),
                             isAgentAlive: { _ in false })
-            XCTAssertTrue(store.ordered.isEmpty, "\(name): сессии больше нет")
+            XCTAssertTrue(store.ordered.isEmpty, "\(name): the session is gone")
             XCTAssertEqual(store.aggregate, .sleeping)
         }
     }
 
-    /// Зеркало: молчание живой сессии не значит ничего. Один длинный вызов
-    /// инструмента, открытая вкладка, к которой вернутся завтра — пока её процесс
-    /// жив, убивать её нельзя, сколько бы ни прошло времени.
+    /// The mirror: silence from a live session means nothing. One long tool call, an
+    /// open tab someone will return to tomorrow — while its process is alive it must
+    /// not be killed, however much time has passed.
     func testLiveAgentProcessKeepsAQuietSessionEvenPastTheLongStaleThreshold() {
         let store = SessionStore()
         store.apply(hook: agentEvent("SessionStart", agentPID: 4242), now: t0)
@@ -556,19 +556,19 @@ extension SessionStoreTests {
         XCTAssertEqual(store.ordered[0].status, .working)
     }
 
-    /// У сессии, найденной только по транскрипту, своего pid нет — спрашивать не у
-    /// кого, и для неё остаются прежние пороги тишины.
+    /// A session found only through the transcript has no pid of its own — there is
+    /// nobody to ask, and the old silence thresholds remain for it.
     func testSessionWithoutAgentPIDStillFallsBackToTheStalenessThresholds() {
         let store = SessionStore()
         startWorking(store, at: t0)
         store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300),
-                        isAgentAlive: { _ in XCTFail("спрашивать не про кого"); return true })
+                        isAgentAlive: { _ in XCTFail("there is nobody to ask about"); return true })
         XCTAssertEqual(store.ordered[0].status, .crashed)
     }
 
-    /// Событие от старой версии хука (без `agent_pid`) не должно стирать уже
-    /// известный pid: иначе сессия теряла бы единственный точный признак жизни
-    /// ровно в тот момент, когда о ней пришла новость.
+    /// An event from an older hook build (with no `agent_pid`) must not erase an
+    /// already known pid: the session would lose its one exact sign of life at the very
+    /// moment news about it arrived.
     func testAnEventWithoutAgentPIDDoesNotClearAKnownOne() {
         let store = SessionStore()
         store.apply(hook: agentEvent("SessionStart", agentPID: 4242), now: t0)
@@ -583,10 +583,10 @@ extension SessionStoreTests {
         XCTAssertEqual(try JSONDecoder().decode(HookEvent.self, from: json).agentPID, 4242)
     }
 
-    // MARK: - Сколько живёт открытая, но неработающая сессия
+    // MARK: - How long an open but idle session lives
 
-    /// Без своего pid судьбу открытой сессии определяет тот же TTL, что и у
-    /// законченной: держать её строку вечно не за чем.
+    /// Without its own pid, an open session's fate is decided by the same TTL as a
+    /// finished one's: there is no reason to keep its row forever.
     func testIdleSessionWithoutAgentPIDExpiresOnTheUsualTTL() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
@@ -596,8 +596,8 @@ extension SessionStoreTests {
         XCTAssertTrue(store.ordered.isEmpty)
     }
 
-    /// А если её процесс можно спросить — строка остаётся, пока сессия жива: по ней
-    /// можно кликнуть и вернуться в свою вкладку. В бейдж она при этом не попадает.
+    /// But if its process can be asked, the row stays as long as the session lives: it
+    /// can be clicked to return to its tab. It does not enter the badge meanwhile.
     func testIdleSessionWithAKnownAgentSurvivesTheTTL() {
         let store = SessionStore()
         store.apply(hook: agentEvent("SessionStart", agentPID: 4242), now: t0)
@@ -669,7 +669,7 @@ extension SessionStoreTests {
         store.apply(hook: routedEvent("SessionStart"), now: start)
         store.apply(activity: TranscriptActivity(
             sessionId: "s1", projectPath: "/tmp/project",
-            description: "правит файл", timestamp: start.addingTimeInterval(5)))
+            description: "editing a file", timestamp: start.addingTimeInterval(5)))
         XCTAssertEqual(store.sessions["s1"]?.hostPID, 4242)
         XCTAssertEqual(store.sessions["s1"]?.tty, "/dev/ttys001")
     }
@@ -710,7 +710,7 @@ extension SessionStoreTests {
         let store = SessionStore()
         store.apply(activity: TranscriptActivity(
             sessionId: "only-transcript", projectPath: "/tmp/p",
-            description: "работает", timestamp: Date()))
+            description: "working", timestamp: Date()))
         XCTAssertNil(store.sessions["only-transcript"]?.hostPID)
         XCTAssertNil(store.sessions["only-transcript"]?.tty)
     }
@@ -739,7 +739,7 @@ extension SessionStoreTests {
     func testBadgeCountWaitingOutranksWorking() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart", id: "n", cwd: "/n"), now: t0)
-        store.apply(hook: hook("Notification", id: "n", message: "нужно разрешение"),
+        store.apply(hook: hook("Notification", id: "n", message: "permission needed"),
                     now: t0.addingTimeInterval(10))
         startWorking(store, id: "w1", cwd: "/w1", at: t0)
         startWorking(store, id: "w2", cwd: "/w2", at: t0)
@@ -751,7 +751,7 @@ extension SessionStoreTests {
         let store = SessionStore()
         for id in ["n1", "n2", "n3"] {
             store.apply(hook: hook("SessionStart", id: id, cwd: "/\(id)"), now: t0)
-            store.apply(hook: hook("Notification", id: id, message: "нужно разрешение"),
+            store.apply(hook: hook("Notification", id: id, message: "permission needed"),
                         now: t0.addingTimeInterval(10))
         }
         startWorking(store, id: "w1", cwd: "/w1", at: t0)
@@ -760,7 +760,7 @@ extension SessionStoreTests {
         XCTAssertEqual(store.badgeCount, 3)
     }
 
-    /// Оборвавшаяся сессия не работает — числа у неё нет, только поза тревоги.
+    /// A session that died is not working — it has no number, only the alarmed pose.
     func testProblemShowsThePoseWithoutANumber() {
         let store = SessionStore()
         // c1 works, then goes stale with no claude processes alive -> crashed.
@@ -773,10 +773,10 @@ extension SessionStoreTests {
         XCTAssertEqual(store.badgeCount, 0)
     }
 
-    /// Жалоба, ради которой правило и переписано: «ничего не запущено, а на бейдже
-    /// 2» — это были две сессии, закончившие турн в последние десять минут. Кот
-    /// показывает, что работа сделана, позой; число же значит ровно «столько агентов
-    /// сейчас заняты», и здесь оно ноль.
+    /// The complaint the rule was rewritten for: "nothing is running and the badge
+    /// says 2" — those were two sessions that had finished their turn within the last
+    /// ten minutes. The cat shows that the work is done with its pose; the number means
+    /// exactly "this many agents are busy right now", and here it is zero.
     func testFinishedSessionsShowThePoseWithoutANumber() {
         let store = SessionStore()
         for id in ["d1", "d2"] {
@@ -787,8 +787,8 @@ extension SessionStoreTests {
         XCTAssertEqual(store.badgeCount, 0)
     }
 
-    /// И зеркало: как только в одной из них снова начинается работа — ровно единица,
-    /// а не «две законченные плюс одна».
+    /// And the mirror: as soon as work starts again in one of them — exactly one, not
+    /// "two finished plus one".
     func testOneWorkingSessionAmongFinishedOnesBadgesExactlyOne() {
         let store = SessionStore()
         for id in ["d1", "d2"] {
@@ -806,9 +806,9 @@ extension SessionStoreTests {
         XCTAssertEqual(store.badgeCount, 0)
     }
 
-    /// Инвариант числа на бейдже: оно никогда не больше того, что стор реально
-    /// держит, и оно ненулевое ровно тогда, когда есть чем быть занятым — то есть в
-    /// состояниях «работает» и «ждёт тебя», и только в них.
+    /// The badge count's invariant: it is never larger than what the store actually
+    /// holds, and it is non-zero exactly when there is something to be busy with — that
+    /// is, in "working" and "waiting for you", and only there.
     func testBadgeCountInvariantNeverExceedsOrderedCountAndIsNonZeroOnlyForWorkOrWaiting() {
         func assertInvariant(_ store: SessionStore, file: StaticString = #filePath,
                              line: UInt = #line) {
@@ -831,7 +831,7 @@ extension SessionStoreTests {
 
         let waiting = SessionStore()
         waiting.apply(hook: hook("SessionStart", id: "n1", cwd: "/n1"), now: t0)
-        waiting.apply(hook: hook("Notification", id: "n1", message: "нужно разрешение"),
+        waiting.apply(hook: hook("Notification", id: "n1", message: "permission needed"),
                      now: t0.addingTimeInterval(10))
         startWorking(waiting, id: "w1", cwd: "/w1", at: t0)
         assertInvariant(waiting)
@@ -867,21 +867,21 @@ extension SessionStoreTests {
     /// its real `startedAt` from a cache entry left by the hook before the restart.
     func testWatcherDiscoveredSessionGainsRouteAndStartedAtFromCache() {
         let cache = SessionRouteCache()
-        let realStart = t0.addingTimeInterval(-3600) // сессия шла час до перезапуска CodeCat
+        let realStart = t0.addingTimeInterval(-3600) // the session ran an hour before CodeCat restarted
         cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
                     hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
                     startedAt: realStart, now: realStart)
 
         let store = SessionStore(routeCache: cache)
         store.apply(activity: TranscriptActivity(
-            sessionId: "s1", projectPath: "/proj", description: "правит файл", timestamp: t0))
+            sessionId: "s1", projectPath: "/proj", description: "editing a file", timestamp: t0))
 
         let session = store.sessions["s1"]
         XCTAssertEqual(session?.hostPID, 4242)
         XCTAssertEqual(session?.hostBundlePath, "/Applications/Claude.app")
         XCTAssertEqual(session?.hostBundleID, "com.anthropic.claudefordesktop")
         XCTAssertEqual(session?.tty, "/dev/ttys001")
-        XCTAssertEqual(session?.startedAt, realStart, "должен унаследовать реальное время старта, а не момент обнаружения вотчером")
+        XCTAssertEqual(session?.startedAt, realStart, "must inherit the real start time, not the moment the watcher noticed it")
     }
 
     /// Same substitution, but the first sighting comes through the hook (e.g. the
@@ -899,7 +899,7 @@ extension SessionStoreTests {
         // cache is the only source of the route for a session this store has
         // never seen before.
         store.apply(hook: HookEvent(hookEventName: "Notification", sessionId: "s1",
-                                    cwd: "/proj", message: "нужно разрешение"), now: t0)
+                                    cwd: "/proj", message: "permission needed"), now: t0)
 
         let session = store.sessions["s1"]
         XCTAssertEqual(session?.hostPID, 4242)
@@ -923,7 +923,7 @@ extension SessionStoreTests {
                                     cwd: "/tmp/project", message: "permission"),
                     now: t0.addingTimeInterval(5))
         XCTAssertEqual(cache.route(for: "s1")?.hostPID, 4242,
-                       "поле, уже известное кэшу, не должно затираться событием без маршрута")
+                       "a field the cache already knows must not be erased by an event carrying no route")
         XCTAssertEqual(cache.route(for: "s1")?.hostBundlePath, "/Applications/Claude.app")
     }
 
@@ -959,7 +959,7 @@ extension SessionStoreTests {
                     hostBundleID: "a", tty: "/dev/t1", startedAt: t0, now: t0)
         let store = SessionStore(routeCache: cache)
         store.apply(activity: TranscriptActivity(
-            sessionId: "s1", projectPath: "/proj", description: "думает", timestamp: t0))
+            sessionId: "s1", projectPath: "/proj", description: "thinking", timestamp: t0))
         XCTAssertNil(store.sessions["s1"]?.hostPID)
     }
 
@@ -972,14 +972,14 @@ extension SessionStoreTests {
     // (captured from a live `claude -p` / `claude --resume` run against a listener
     // bound to the hook socket — see route-cache-report.md). Without this fix,
     // `newSession` took `startedAt` straight from the stale cache entry, so the row
-    // read "длится N ч" for a session that had just started.
+    // read "running for N h" for a session that had just started.
 
     /// The bug, pinned: a stale cache entry plus a real `SessionStart(source: resume)`
     /// must produce a session whose `startedAt` is the event's own time, not the
     /// cache's frozen one.
     func testSessionStartWithSourceResumeResetsAStaleCachedStartedAt() {
         let cache = SessionRouteCache()
-        let staleStart = t0.addingTimeInterval(-72 * 60 * 60) // «застряло» 72 часа назад
+        let staleStart = t0.addingTimeInterval(-72 * 60 * 60) // "stuck" 72 hours ago
         cache.record(sessionId: "s1", hostPID: 4242, hostBundlePath: "/Applications/Claude.app",
                     hostBundleID: "com.anthropic.claudefordesktop", tty: "/dev/ttys001",
                     startedAt: staleStart, now: staleStart)
@@ -993,7 +993,7 @@ extension SessionStoreTests {
                     now: t0)
 
         XCTAssertEqual(store.sessions["s1"]?.startedAt, t0,
-                       "resume — это настоящий новый запуск, длительность должна отсчитываться заново")
+                       "resume is a genuine new start; the duration must count from scratch")
     }
 
     /// A missing/unknown `source` must reset too — that is the safe default, since
@@ -1030,7 +1030,7 @@ extension SessionStoreTests {
                     now: t0)
 
         XCTAssertEqual(store.sessions["s1"]?.startedAt, realStart,
-                       "автокомпакция не должна сбрасывать время начала ещё идущей сессии")
+                       "auto-compaction must not reset the start time of a still-running session")
     }
 
     /// The core feature this cache exists for must be unaffected by the fix above:
@@ -1047,10 +1047,10 @@ extension SessionStoreTests {
 
         let store = SessionStore(routeCache: cache)
         store.apply(activity: TranscriptActivity(
-            sessionId: "s1", projectPath: "/proj", description: "правит файл", timestamp: t0))
+            sessionId: "s1", projectPath: "/proj", description: "editing a file", timestamp: t0))
 
         XCTAssertEqual(store.sessions["s1"]?.startedAt, realStart,
-                       "без SessionStart перезапуск CodeCat не должен сбрасывать время начала")
+                       "without SessionStart, a CodeCat restart must not reset the start time")
     }
 
     /// The reset must also reach the persisted cache entry itself — otherwise a
@@ -1072,7 +1072,7 @@ extension SessionStoreTests {
                     now: t0)
 
         XCTAssertEqual(cache.route(for: "s1")?.startedAt, t0,
-                       "сброс должен попасть и в сам кэш, иначе следующий сбой без SessionEnd снова унаследует старое время")
+                       "the reset must reach the cache too, or the next failure without SessionEnd inherits the old time again")
     }
 
     // MARK: - Fix wave 2
@@ -1082,13 +1082,13 @@ extension SessionStoreTests {
     /// absent from `sessions`. A session CodeCat still remembers (lingering `.done`
     /// inside `expireFinished`'s TTL) is very much still present, so a real
     /// `SessionStart(source: "resume")` for it must still reset `startedAt` to the
-    /// event's own time — that is exactly the reachable "длится 72 ч" case the
+    /// event's own time — that is exactly the reachable "running for 72 h" case the
     /// previous wave's fix silently failed to cover.
     func testSessionStartResumeResetsStartedAtEvenWhenSessionStillLingersInStore() {
         let store = SessionStore()
         store.apply(hook: routedEvent("SessionStart"), now: t0)
         store.apply(hook: hook("Stop"), now: t0.addingTimeInterval(10)) // done, but still in `sessions`
-        XCTAssertNotNil(store.sessions["s1"], "сессия должна ещё жить в сторе — TTL не истёк")
+        XCTAssertNotNil(store.sessions["s1"], "the session must still be in the store — its TTL has not expired")
 
         let muchLater = t0.addingTimeInterval(72 * 60 * 60)
         store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1",
@@ -1099,7 +1099,7 @@ extension SessionStoreTests {
                     now: muchLater)
 
         XCTAssertEqual(store.sessions["s1"]?.startedAt, muchLater,
-                       "resume сессии, всё ещё лежащей в сторе, должен сбросить время начала")
+                       "resuming a session still sitting in the store must reset its start time")
     }
 
     /// The mirror case: a session reappearing with no `SessionStart` at all (a plain
@@ -1109,10 +1109,10 @@ extension SessionStoreTests {
         let store = SessionStore()
         store.apply(hook: routedEvent("SessionStart"), now: t0)
         let originalStart = store.sessions["s1"]?.startedAt
-        store.apply(hook: hook("Notification", message: "нужно разрешение"),
+        store.apply(hook: hook("Notification", message: "permission needed"),
                     now: t0.addingTimeInterval(5))
         XCTAssertEqual(store.sessions["s1"]?.startedAt, originalStart,
-                       "не-SessionStart событие не должно трогать startedAt")
+                       "a non-SessionStart event must not touch startedAt")
     }
 
     /// Item 2: the host triple must be replaced as a unit in `upsert`, not merged
@@ -1136,7 +1136,7 @@ extension SessionStoreTests {
         XCTAssertEqual(session?.hostPID, 4343)
         XCTAssertEqual(session?.hostBundlePath, "/Applications/Utilities/Terminal.app")
         XCTAssertNil(session?.hostBundleID,
-                     "новый хост без bundle id не должен унаследовать bundle id старого хоста")
+                     "a new host with no bundle id must not inherit the old host's bundle id")
     }
 
     /// Item 3: when `resetStartedAt` is true, `record` must be called even when the
@@ -1160,6 +1160,6 @@ extension SessionStoreTests {
 
         XCTAssertEqual(store.sessions["s1"]?.startedAt, t0)
         XCTAssertEqual(cache.route(for: "s1")?.startedAt, t0,
-                       "сброс должен попасть в кэш, даже если событие не несёт полей маршрута")
+                       "the reset must reach the cache even when the event carries no route fields")
     }
 }

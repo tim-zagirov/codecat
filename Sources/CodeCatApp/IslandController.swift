@@ -3,45 +3,45 @@ import SwiftUI
 import Combine
 import CodeCatCore
 
-/// Остров: чёрная плашка вокруг физического выреза встроенного экрана.
+/// The island: a black slab around the physical notch of a built-in display.
 ///
-/// Работает только там, где вырез есть. Внешний монитор, закрытая крышка и Mac
-/// без выреза — это `geometry() == nil`, и тогда контроллер не показывает ничего:
-/// управление остаётся в иконке статус-бара, откуда можно вернуться к плавающему
-/// коту.
+/// It only works where a notch exists. An external monitor, a closed lid and a Mac
+/// without a notch all mean `geometry() == nil`, and then the controller shows
+/// nothing: control stays in the status-bar icon, from which the floating cat can
+/// be brought back.
 final class IslandController: NSObject, MascotPresenting {
 
-    /// Строка меню лежит на уровне 24, чужие статус-иконки — на 25, раскрытые
-    /// системные меню — на 101 (замерено `CGWindowLevelForKey`). Остров кладётся
-    /// на 26: выше строки меню и иконок, но ниже раскрытых меню, поэтому они
-    /// рисуются поверх него и драки за клики не возникает.
+    /// The menu bar sits at level 24 and other apps' status icons at 25; open system
+    /// menus are at 101 (measured with `CGWindowLevelForKey`). The island goes to 26:
+    /// above the menu bar and the icons but below open menus, so those draw over it
+    /// and no fight over clicks arises.
     static let islandLevel = NSWindow.Level(
         rawValue: Int(CGWindowLevelForKey(.statusWindow)) + 1)
 
     private let appState: AppState
     private var islandPanel: OverlayPanel?
     private var menuLevel: IslandMenuLevel?
-    /// Меню схлопывается пружиной, но его содержимое ещё смонтировано: снимут его
-    /// по `pendingTeardown`.
+    /// The menu collapses on a spring while its content is still mounted;
+    /// `pendingTeardown` takes the content down afterwards.
     private var isCollapsing = false
-    /// Какой уровень меню сейчас схлопывается: содержимое обязано остаться на
-    /// экране, пока силуэт едет обратно, иначе схлопывать будет нечего.
+    /// Which menu level is collapsing right now: the content has to stay on screen
+    /// while the silhouette travels back, or there would be nothing to collapse.
     private var collapsingLevel: IslandMenuLevel?
     private var pendingClose: DispatchWorkItem?
-    /// Уборка окна меню после того, как анимация закрытия доехала. Держится
-    /// отдельно от `pendingClose` (та решает, *закрывать ли* короткое меню по уходу
-    /// курсора): открыть меню заново можно прямо посреди закрытия, и тогда уборку
-    /// надо отменить, не трогая логику наведения.
+    /// Tearing the menu window down after the closing animation arrives. Kept apart
+    /// from `pendingClose` (which decides *whether to close* the short menu when the
+    /// cursor leaves): the menu can be reopened in the middle of closing, and then the
+    /// teardown must be cancelled without touching the hover logic.
     private var pendingTeardown: DispatchWorkItem?
     private var cancellables: Set<AnyCancellable> = []
-    /// Последняя запрошенная видимость острова. Читает её `screensChanged()`: она
-    /// зовёт `setVisible(isVisible)`, чтобы перепоказать остров после смены
-    /// конфигурации дисплеев, не спрашивая заново `AppState.showMascot` (который к
-    /// этому моменту мог и не измениться).
+    /// The last requested visibility of the island. `screensChanged()` reads it: it
+    /// calls `setVisible(isVisible)` to redisplay the island after a display
+    /// configuration change, without asking `AppState.showMascot` again (which by then
+    /// may not have changed at all).
     private var isVisible = false
 
-    /// Всё, что нужно знать о геометрии в текущий момент. Пересчитывается на
-    /// каждое изменение состояния: облик мог смениться, экран — отключиться.
+    /// Everything worth knowing about the geometry right now. Recomputed on every
+    /// state change: the skin may have changed, a display may have been disconnected.
     struct Geometry {
         let screen: NSScreen
         let notch: CGRect
@@ -62,8 +62,8 @@ final class IslandController: NSObject, MascotPresenting {
             self, selector: #selector(menuDidResignKey(_:)),
             name: NSWindow.didResignKeyNotification, object: nil)
 
-        // Встроенный экран могли отключить или подключить обратно — вырез при этом
-        // появляется и исчезает, а вместе с ним и место для острова.
+        // The built-in display can be disconnected and reconnected — the notch appears
+        // and disappears with it, and so does the room for the island.
         NotificationCenter.default.addObserver(
             self, selector: #selector(screensChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
@@ -72,16 +72,16 @@ final class IslandController: NSObject, MascotPresenting {
     }
 
     deinit {
-        // Панель надо увести с экрана явно: контроллер умирает при смене режима,
-        // и оставленное видимым окно пережило бы его.
+        // The panel has to be taken off screen explicitly: the controller dies when the
+        // display mode changes, and a window left visible would outlive it.
         NotificationCenter.default.removeObserver(self)
         islandPanel?.orderOut(nil)
     }
 
     func setVisible(_ visible: Bool) {
         isVisible = visible
-        // `mascotShouldHideNow` — настройка «прятать, когда сессий нет». Меню при
-        // этом тоже уходит: его не к чему было бы привязать.
+        // `mascotShouldHideNow` is the "hide when nothing is running" setting. The menu
+        // goes with it: there would be nothing left to anchor it to.
         guard visible, !appState.mascotShouldHideNow, let geometry = geometry() else {
             dropMenu()
             islandPanel?.orderOut(nil)
@@ -107,11 +107,11 @@ final class IslandController: NSObject, MascotPresenting {
         setVisible(appState.showMascot)
     }
 
-    // MARK: - Наведение и клик
+    // MARK: - Hover and click
 
-    /// Курсор внутри окна. Окно теперь одно на остров и меню, поэтому и вопрос
-    /// один: раньше приходилось спрашивать про два окна и следить, чтобы переход
-    /// мышью с острова на меню не считался уходом.
+    /// The cursor is inside the window. One window now holds both the island and the
+    /// menu, so there is one question: this used to mean asking about two windows and
+    /// making sure moving the mouse from the island onto the menu did not count as leaving.
     private func pointerEnteredRegion() {
         pendingClose?.cancel()
         pendingClose = nil
@@ -119,15 +119,15 @@ final class IslandController: NSObject, MascotPresenting {
     }
 
     private func pointerLeftRegion() {
-        // Полное меню закрывается только кликом мимо: в нём тумблеры и выбор
-        // облика, и оно не должно исчезать, пока пользователь ведёт мышь к нужному
-        // переключателю.
+        // The full menu closes only on a click outside: it holds toggles and the skin
+        // picker, and it must not vanish while the user is moving the mouse towards the
+        // switch they want.
         guard menuLevel == .short else { return }
         pendingClose?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            // Опрос реального положения курсора, а не доверие порядку событий:
-            // окно в этот момент уже могло вырасти под курсором.
+            // Ask where the cursor actually is rather than trusting the order of
+            // events: by now the window may already have grown under it.
             guard !self.pointerIsInsideRegion() else { return }
             self.hideMenu()
         }
@@ -135,7 +135,7 @@ final class IslandController: NSObject, MascotPresenting {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
-    /// `NSEvent.mouseLocation` — в тех же экранных координатах, что и `NSWindow.frame`.
+    /// `NSEvent.mouseLocation` is in the same screen coordinates as `NSWindow.frame`.
     private func pointerIsInsideRegion() -> Bool {
         guard let panel = islandPanel, panel.isVisible else { return false }
         return panel.frame.contains(NSEvent.mouseLocation)
@@ -149,17 +149,17 @@ final class IslandController: NSObject, MascotPresenting {
         }
     }
 
-    /// Переход «короткое → полное» — это смена содержимого в том же окне, без
-    /// пересоздания: список сессий не имеет права мигнуть и пересобраться. Высота
-    /// доезжает той же пружиной внутри `IslandView`.
+    /// Going from short to full is a change of content in the same window, with no
+    /// recreation: the session list has no business blinking and rebuilding itself.
+    /// The height catches up on the same spring inside `IslandView`.
     private func expandMenu() {
         guard let panel = islandPanel, let hosting = hosting(of: panel),
               let geometry = geometry() else { return }
         menuLevel = .full
         hosting.rootView = content(for: geometry)
         applyFrame(panel: panel, hosting: hosting, geometry: geometry)
-        // Полное меню обязано становиться key, иначе тумблеры, переключатель вида
-        // и кнопка хуков внутри него не получают кликов.
+        // The full menu has to become key, or the toggles, the mode picker and the
+        // hooks button inside it never receive clicks.
         panel.makeKeyAndOrderFront(nil)
     }
 
@@ -185,9 +185,9 @@ final class IslandController: NSObject, MascotPresenting {
         }
     }
 
-    /// - Parameter animated: закрывать пружиной, зеркально раскрытию. `false` —
-    ///   для путей, где ждать нельзя: остров уходит с экрана целиком, меняется
-    ///   режим отображения, на его месте немедленно открывается другое меню.
+    /// - Parameter animated: close on a spring, mirroring the reveal. `false` for the
+    ///   paths where waiting is not possible: the island is leaving the screen
+    ///   entirely, the display mode is changing, another menu is opening in its place.
     private func hideMenu(animated: Bool = true) {
         pendingClose?.cancel()
         pendingClose = nil
@@ -200,9 +200,9 @@ final class IslandController: NSObject, MascotPresenting {
             return
         }
 
-        // Меню больше не считается открытым с этого момента: клик по острову во
-        // время закрытия обязан открыть его заново, а не закрыть повторно. Само
-        // содержимое остаётся смонтированным — силуэт его схлопывает.
+        // From this moment the menu no longer counts as open: a click on the island
+        // while it closes must reopen it, not close it a second time. The content
+        // itself stays mounted — the silhouette is what collapses it.
         collapsingLevel = menuLevel
         menuLevel = nil
         isCollapsing = true
@@ -218,8 +218,8 @@ final class IslandController: NSObject, MascotPresenting {
                                       execute: teardown)
     }
 
-    /// Снимает содержимое меню и сжимает окно обратно до полосы острова. Окно
-    /// держится тем же, что и было: это одна форма, а не две.
+    /// Takes the menu's content down and shrinks the window back to the island strip.
+    /// The window stays the same one: this is a single shape, not two.
     private func dropMenu() {
         pendingTeardown?.cancel()
         pendingTeardown = nil
@@ -236,17 +236,17 @@ final class IslandController: NSObject, MascotPresenting {
         panel.contentView as? IslandHostingView
     }
 
-    /// Ставит рамку окна и контур для hit-теста ОДНИМ действием.
+    /// Sets the window frame and the hit-test outline in ONE action.
     ///
-    /// Вместе, а не порознь, намеренно: отставший контур режет клики по
-    /// нарисованному, то есть хуже отсутствующего. Первая версия этой правки
-    /// обновляла контур только в двух местах из четырёх — ошибку поймал grep, а не
-    /// тесты, потому что вживую она проявилась бы лишь в тех редких переходах.
-    /// Единственная точка входа делает такую ошибку невозможной.
+    /// Together rather than separately, deliberately: an outline that lags behind cuts
+    /// clicks on painted area, which is worse than having none. The first version of
+    /// this fix updated the outline in only two of four places — caught by grep rather
+    /// than by tests, because in practice it would only have shown up in those rare
+    /// transitions. A single entry point makes that mistake impossible.
     ///
-    /// Контур считается ровно теми же аргументами, какими `IslandView` строит свою
-    /// маску: `IslandShape(bottomRadius: IslandLayout.cornerRadius)` на всю ширину
-    /// окна.
+    /// The outline is computed with exactly the arguments `IslandView` builds its own
+    /// mask from: `IslandShape(bottomRadius: IslandLayout.cornerRadius)` across the
+    /// window's full width.
     private func applyFrame(panel: OverlayPanel, hosting: IslandHostingView,
                             geometry: Geometry) {
         let frame = windowFrame(for: geometry, hosting: hosting)
@@ -256,9 +256,9 @@ final class IslandController: NSObject, MascotPresenting {
             bottomRadius: IslandLayout.cornerRadius)
     }
 
-    /// Рамка окна под текущее содержимое. Высоту спрашиваем у самой вёрстки
-    /// (`fittingSize`), а не считаем: меню собирается из списка сессий и настроек,
-    /// и его высота зависит от того, сколько сессий сейчас есть.
+    /// The window frame for the current content. The height is asked of the layout
+    /// itself (`fittingSize`) rather than computed: the menu is assembled from the
+    /// session list and the settings, and its height depends on how many sessions exist.
     private func windowFrame(for geometry: Geometry, hosting: IslandHostingView) -> NSRect {
         let fitting = hosting.fittingSize.height
         let total = fitting > 0 ? fitting : geometry.island.height
@@ -273,13 +273,13 @@ final class IslandController: NSObject, MascotPresenting {
         hideMenu()
     }
 
-    /// Экран сменил конфигурацию — вырез мог появиться или исчезнуть вместе с ним.
-    /// `didChangeScreenParametersNotification` нигде не документирован как
-    /// гарантированно приходящий на главном потоке (Apple подтверждает только сам
-    /// факт отправки уведомления, не поток), а `geometry()` — через
-    /// `assumeIsolated` — не прощает ошибку: не предупреждает о нарушении, а
-    /// роняет процесс. Поэтому переход на главный поток здесь сделан явно, а не
-    /// просто предположен.
+    /// The display configuration changed — a notch may have appeared or disappeared
+    /// with it. `didChangeScreenParametersNotification` is documented nowhere as
+    /// guaranteed to arrive on the main thread (Apple confirms only that the
+    /// notification is posted, not on which thread), and `geometry()` — through
+    /// `assumeIsolated` — does not forgive that mistake: it does not warn about a
+    /// violation, it kills the process. So the hop to the main thread here is explicit
+    /// rather than merely assumed.
     @objc private func screensChanged() {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in self?.screensChanged() }
@@ -290,10 +290,11 @@ final class IslandController: NSObject, MascotPresenting {
     }
 
     private func makePanel() -> OverlayPanel {
-        // `allowsKey: true`: окно одно на остров и меню, а в полном меню живут
-        // тумблеры и кнопки — без права становиться key они не получают кликов.
-        // Ключевым окно делается только по клику (`makeKeyAndOrderFront`), наведение
-        // показывает меню через `orderFrontRegardless` и фокус не трогает.
+        // `allowsKey: true`: one window holds both the island and the menu, and the
+        // full menu contains toggles and buttons — without the right to become key they
+        // receive no clicks. The window is only made key by a click
+        // (`makeKeyAndOrderFront`); hover shows the menu with `orderFrontRegardless`
+        // and does not touch focus.
         let panel = OverlayPanel(contentRect: .zero, allowsKey: true)
         panel.level = Self.islandLevel
         panel.acceptsMouseMovedEvents = true
@@ -311,18 +312,18 @@ final class IslandController: NSObject, MascotPresenting {
                    onJump: { [weak self] in self?.hideMenu() })
     }
 
-    /// Экран с вырезом и вся производная геометрия. `nil` — острову негде жить.
+    /// The notched display and all the geometry derived from it. `nil` means the
+    /// island has nowhere to live.
     private func geometry() -> Geometry? {
-        // Ищем сразу по тому, что нужно — по первому экрану, для которого
-        // строится вырез, а не по `safeAreaInsets.top > 0` (`IslandLayout.hasNotch`).
-        // Порядок `NSScreen.screens` нигде не документирован как «встроенный
-        // первым», и поведение `safeAreaInsets.top` на внешних дисплеях не
-        // проверено. Если бы фильтр стоял на инсете, а не на самом вырезе, экран
-        // без выреза, но с ненулевым инсетом, мог бы прокрасться первым и
-        // остановить поиск до того, как встроенный экран будет рассмотрен —
-        // остров молча не появился бы. `hasNotch` при этом не лишний: это
-        // самостоятельный документированный предикат со своим тестом, просто не
-        // единственный фильтр здесь.
+        // Search directly for what is needed — the first screen a notch can be built
+        // for — rather than for `safeAreaInsets.top > 0` (`IslandLayout.hasNotch`).
+        // The order of `NSScreen.screens` is documented nowhere as "built-in first",
+        // and the behaviour of `safeAreaInsets.top` on external displays is untested.
+        // If the filter were on the inset rather than the notch itself, a display with
+        // no notch but a non-zero inset could sneak in first and stop the search before
+        // the built-in screen was ever considered — and the island would silently fail
+        // to appear. `hasNotch` is not redundant for that: it is a documented predicate
+        // in its own right with its own test, just not the only filter here.
         guard let found = NSScreen.screens.lazy.compactMap({ screen in
             IslandLayout.notchRect(auxLeft: screen.auxiliaryTopLeftArea,
                                    auxRight: screen.auxiliaryTopRightArea).map { (screen, $0) }
@@ -330,37 +331,36 @@ final class IslandController: NSObject, MascotPresenting {
         else { return nil }
         let (screen, notch) = found
 
-        // `SpriteSheetStore` изолирован `@MainActor` (см. его доккомментарий: все
-        // вызывающие уже работают на главном потоке). Сам `IslandController` не
-        // помечен `@MainActor` — это каскадом потянуло бы `@MainActor` на
-        // `AppDelegate`, а оттуда — на глобальный `delegate` в `main.swift`, то есть
-        // далеко за рамки этой задачи. Но фактически сюда всегда приходят с
-        // главного потока: AppKit-панели и `Combine`-сток, подписанный через
-        // `.receive(on: DispatchQueue.main)`. `assumeIsolated` просто констатирует
-        // этот факт, а не меняет архитектуру.
+        // `SpriteSheetStore` is `@MainActor`-isolated (see its doc comment: every
+        // caller already runs on the main thread). `IslandController` itself is not
+        // marked `@MainActor` — that would cascade `@MainActor` onto `AppDelegate` and
+        // from there onto the global `delegate` in `main.swift`, well beyond the scope
+        // of this work. But in fact everything reaches here from the main thread:
+        // AppKit panels, and a Combine sink subscribed through
+        // `.receive(on: DispatchQueue.main)`. `assumeIsolated` simply states that fact
+        // rather than changing the architecture.
         //
-        // Инвариант: всякий путь сюда приходит на главном потоке. Сегодня в
-        // `geometry()` ведут шесть вызовов:
-        //  - из `init` (через `setVisible(appState.showMascot)`);
-        //  - из `handleStateChange()` дважды — через `setVisible(...)` и напрямую,
-        //    при перекладке уже открытого меню под новую геометрию;
-        //  - из `pointerEnteredRegion()` (через `showMenu(.short)`) — вызывается из
-        //    `mouseEntered` хоста острова и хоста меню;
-        //  - из `islandClicked()` (через `showMenu(.full)`) — вызывается из
-        //    `mouseUp` хоста острова;
-        //  - из `screensChanged()` (через `setVisible(isVisible)`) — сама явно
-        //    переходит на главный поток перед вызовом, см. её комментарий.
-        // `handleStateChange()` доходит сюда через `Combine`-сток с
-        // `.receive(on: DispatchQueue.main)`, а `pointerEnteredRegion()` и
-        // `islandClicked()` — из переопределений `NSResponder.mouseEntered` /
-        // `mouseUp`, которые AppKit всегда доставляет на главном потоке. Если
-        // появится путь не с главного потока, `assumeIsolated` не предупредит об
-        // этом, а уронит процесс — держи это в уме при правках.
-        // Есть и седьмой путь: `setVisible(false)` из `AppDelegate.syncPresenter()`
-        // (сам он выполняется на главном потоке). Сегодня он до `geometry()` не
-        // доходит — `guard visible` в `setVisible` отсекает его раньше. Если
-        // `setVisible(false)` когда-нибудь начнёт считать геометрию, этот путь
-        // придётся проверить отдельно.
+        // The invariant: every path here arrives on the main thread. Six calls reach
+        // `geometry()` today:
+        //  - from `init` (via `setVisible(appState.showMascot)`);
+        //  - from `handleStateChange()` twice — via `setVisible(...)` and directly,
+        //    when relaying an already-open menu under new geometry;
+        //  - from `pointerEnteredRegion()` (via `showMenu(.short)`) — called from
+        //    `mouseEntered` on the island's host view and the menu's;
+        //  - from `islandClicked()` (via `showMenu(.full)`) — called from `mouseUp` on
+        //    the island's host view;
+        //  - from `screensChanged()` (via `setVisible(isVisible)`), which hops to the
+        //    main thread explicitly before calling — see its comment.
+        // `handleStateChange()` gets here through a Combine sink with
+        // `.receive(on: DispatchQueue.main)`, and `pointerEnteredRegion()` and
+        // `islandClicked()` through overrides of `NSResponder.mouseEntered` / `mouseUp`,
+        // which AppKit always delivers on the main thread. If a path from another
+        // thread ever appears, `assumeIsolated` will not warn about it — it will kill
+        // the process. Keep that in mind when editing.
+        // There is a seventh path: `setVisible(false)` from `AppDelegate.syncPresenter()`
+        // (itself running on the main thread). Today it never reaches `geometry()` —
+        // the `guard visible` in `setVisible` cuts it off earlier. If `setVisible(false)`
+        // ever starts computing geometry, that path needs checking separately.
         let spriteSize = MainActor.assumeIsolated {
             SpriteSheetStore.shared.load(appState.skin)?
                 .drawingSize(targetHeight: SpriteScale.islandTargetHeight,

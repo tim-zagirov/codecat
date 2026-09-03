@@ -42,24 +42,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         syncPresenter()
     }
 
-    /// Держит на экране ровно один режим. Смена режима — это уничтожение старого
-    /// контроллера и создание нового: у них разные окна, разная геометрия и разная
-    /// модель ввода, и жить одновременно им незачем. Старый обязательно уводится с
-    /// экрана до обнуления ссылки — иначе его окно осталось бы висеть.
+    /// Keeps exactly one mode on screen. Changing mode means destroying the old
+    /// controller and creating a new one: they have different windows, different
+    /// geometry and different input models, and no reason to coexist. The old one is
+    /// always taken off screen before its reference is cleared — otherwise its window
+    /// would be left hanging.
     ///
-    /// `.receive(on: DispatchQueue.main)` в подписке на `appState.objectWillChange`
-    /// выше — не оптимизация, а условие корректности этого метода, по двум
-    /// причинам:
-    ///  1. `@Published` шлёт `objectWillChange` из `willSet`, то есть до того, как
-    ///     новое значение записано. Без перехода на отдельный проход очереди
-    ///     `syncPresenter()` читал бы `appState.displayMode` ещё старым,
-    ///     `guard presentedMode != appState.displayMode` был бы всегда истинным
-    ///     для «пока не записанного» значения, и режим не переключился бы вовсе.
-    ///  2. Уничтожение старого контроллера здесь может уничтожить и панель меню,
-    ///     из которой только что кликнули по `Picker` виду — переключить режим
-    ///     можно прямо из меню острова. `.receive(on:)` откладывает это на
-    ///     следующий проход `RunLoop`, когда стек обработки клика уже размотался,
-    ///     а не рвёт из-под ног view, которая всё ещё обрабатывает событие.
+    /// The `.receive(on: DispatchQueue.main)` in the subscription to
+    /// `appState.objectWillChange` above is not an optimisation but a precondition for
+    /// this method's correctness, for two reasons:
+    ///  1. `@Published` sends `objectWillChange` from `willSet`, i.e. before the new
+    ///     value is stored. Without hopping to a separate pass of the queue,
+    ///     `syncPresenter()` would read `appState.displayMode` still holding the old
+    ///     value, `guard presentedMode != appState.displayMode` would always be true
+    ///     for the not-yet-written value, and the mode would never switch at all.
+    ///  2. Destroying the old controller here can also destroy the menu panel the
+    ///     `Picker` was just clicked in — the mode can be switched from inside the
+    ///     island menu. `.receive(on:)` defers that to the next pass of the `RunLoop`,
+    ///     once the click's handling stack has unwound, instead of pulling the ground
+    ///     out from under a view that is still processing the event.
     private func syncPresenter() {
         guard presentedMode != appState.displayMode else { return }
         presenter?.setVisible(false)
@@ -140,10 +141,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             appState.soundsEnabled, #selector(toggleSounds)))
         menu.addItem(toggle(L10n.t("setting.show.cat", "Show the cat"),
                             appState.showMascot, #selector(toggleMascot)))
-        // Дубликат пункта из панели настроек, и он здесь обязателен, а не для
-        // удобства: включив «прятать», пользователь убирает с экрана и самого
-        // маскота, и меню, которое живёт внутри него, — выключить обратно было бы
-        // неоткуда. Меню-бар остаётся на месте всегда.
+        // A duplicate of the item in the settings panel, and mandatory here rather than
+        // a convenience: turning "hide" on removes both the mascot and the menu living
+        // inside it from the screen, leaving nowhere to turn it back off. The menu bar
+        // is always there.
         menu.addItem(toggle(L10n.t("setting.hide.when.idle", "Hide the cat when nothing is running"),
                             appState.hidesWhenNoSessions, #selector(toggleHideWhenIdle)))
         menu.addItem(.separator())
@@ -159,9 +160,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
         menu.addItem(loginItem)
         menu.addItem(.separator())
-        // Версия видна прямо в меню, потому что иначе по установленному бандлу не
-        // понять, что именно стоит: до 0.2.0 CFBundleVersion был «1» во всех сборках,
-        // и две разные сборки на руках было нечем различить.
+        // The version is visible right in the menu, because otherwise there is no way
+        // to tell what is installed: before 0.2.0 CFBundleVersion was "1" in every
+        // build, and two different builds were indistinguishable.
         let versionItem = NSMenuItem(title: "CodeCat \(Self.versionString)",
                                      action: nil, keyEquivalent: "")
         versionItem.isEnabled = false
@@ -188,9 +189,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.requestLidModeChange(to: !appState.lidModeEnabled)
     }
 
-    /// Переключение вида живёт и здесь, а не только в панели: если остров окажется
-    /// негде показать (встроенный экран отключён), маскота не будет видно вовсе, и
-    /// вернуться к плавающему коту надо откуда-то ещё.
+    /// The mode switch lives here too, not only in the panel: if the island turns out
+    /// to have nowhere to appear (the built-in display is disconnected), the mascot is
+    /// not visible at all, and getting back to the floating cat has to be possible.
     @objc private func selectDisplayMode(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String else { return }
         appState.displayMode = MascotDisplayMode.mode(withID: raw)
@@ -200,9 +201,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func removeHooks() { appState.removeHooks() }
 
-    /// «0.2.0 (136)». Build — число коммитов, проставляется в Info.plist при сборке
-    /// бандла (см. Makefile). Запасные «?» на случай запуска не из бандла — при
-    /// `swift run` Info.plist рядом нет, и падать из-за этого приложение не должно.
+    /// "0.2.0 (136)". The build is the commit count, written into Info.plist when the
+    /// bundle is assembled (see the Makefile). The "?" fallbacks are for running
+    /// outside a bundle — with `swift run` there is no Info.plist beside the binary,
+    /// and the app must not crash over that.
     private static var versionString: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
@@ -211,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleLoginItem() {
-        // работает только из собранного .app-бандла; при swift run молча игнорируем ошибку
+        // works only from an assembled .app bundle; with swift run the error is ignored
         if SMAppService.mainApp.status == .enabled {
             try? SMAppService.mainApp.unregister()
         } else {

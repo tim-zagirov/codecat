@@ -1,68 +1,69 @@
 import CoreGraphics
 
-/// Геометрия «острова» — чёрной плашки, накрывающей физический вырез экрана и
-/// заходящей крыльями влево и вправо.
+/// Geometry of the "island" — the black slab that covers a display's physical
+/// notch and extends into wings on either side.
 ///
-/// Всё считается из двух вспомогательных областей, которые macOS сообщает для
-/// экрана с вырезом (`NSScreen.auxiliaryTopLeftArea` / `auxiliaryTopRightArea`):
-/// это участки строки меню слева и справа от выреза. Сам вырез — дырка между
-/// ними, и другого способа узнать его ширину система не даёт.
+/// Everything is derived from the two auxiliary areas macOS reports for a notched
+/// display (`NSScreen.auxiliaryTopLeftArea` / `auxiliaryTopRightArea`): the parts
+/// of the menu bar to the left and right of the notch. The notch itself is the gap
+/// between them, and the system offers no other way to learn its width.
 ///
-/// Здесь нет прямоугольников содержимого (кота, счётчика): `IslandView` кладёт
-/// три известные ширины — левое крыло, вырез, правое крыло — обычным `HStack`,
-/// и заводить ради этого вторую систему координат незачем.
+/// There are no content rectangles here (the cat, the counter): `IslandView` lays
+/// three known widths — left wing, notch, right wing — out in an ordinary `HStack`,
+/// and a second coordinate system for that would earn nothing.
 public enum IslandLayout {
 
-    /// Отступ от спрайта до края крыла с каждой стороны. Крылья физически
-    /// перекрывают строку меню (слева меню приложения, справа чужие статус-иконки),
-    /// поэтому они делаются ровно по спрайту, а не «пошире на глаз».
+    /// Padding from the sprite to the wing's edge on each side. The wings physically
+    /// overlap the menu bar (the app menu on the left, other apps' status icons on
+    /// the right), so they are cut to the sprite rather than made generously wide.
     public static let wingPadding: CGFloat = 8
 
-    /// Ширина крыла, одна и та же слева и справа.
+    /// Wing width, the same on the left and the right.
     ///
-    /// Крылья намеренно не подгоняются под текущий облик. Кот — объект с
-    /// габаритом, счётчик — штрих, и уравновесить их можно только геометрией:
-    /// равные крылья ставят всё чёрное пятно ровно по центру выреза при любом
-    /// облике. Раньше крыло считалось по спрайту (48–72 pt слева против
-    /// фиксированных 34 справа), и пятно уезжало от центра экрана на 9.5 pt.
+    /// The wings deliberately do not adapt to the current skin. The cat is an object
+    /// with bulk, the counter is a mark, and the only way to balance them is with
+    /// geometry: equal wings put the whole black shape exactly at the notch's centre
+    /// for every skin. The wing used to be sized from the sprite (48–72 pt on the
+    /// left against a fixed 34 on the right), and the shape drifted 9.5 pt off centre.
     ///
-    /// 72 = 56 (самый широкий спрайт: LuizMelo `cat-4`, 28×16 px при
-    /// обязательном целочисленном ×2) плюс отступ с обеих сторон. Облики поуже
-    /// просто получают больше воздуха вокруг кота; ширина острова при смене
-    /// облика не меняется, и в строке меню ничего не дёргается.
+    /// 72 = 56 (the widest sprite: LuizMelo `cat-4`, 28×16 px at the mandatory
+    /// integer ×2) plus padding on both sides. Narrower skins simply get more air
+    /// around the cat; the island's width does not change when the skin does, so
+    /// nothing in the menu bar jumps.
     public static let wingWidth: CGFloat = 72
 
-    /// Скругление в местах, где остров упирается в верхнюю кромку экрана —
-    /// вогнутое, внутрь корпуса.
+    /// The fillet where the island meets the top edge of the screen — concave,
+    /// curving into the body.
     ///
-    /// Прямой угол на стыке читается как ступенька: чёрная плашка приставлена к
-    /// кромке, а не растёт из неё. Галтель убирает ступеньку — стенка корпуса
-    /// плавно заворачивает в кромку экрана, а угол обоев рядом получает скругление.
-    /// Дуга касается кромки сверху и стенки корпуса сбоку; если перепутать
-    /// касательные, она выгнется наружу и у острова вырастут плечи.
+    /// A right angle at that junction reads as a step: the black slab is placed
+    /// against the edge rather than growing out of it. The fillet removes the step —
+    /// the body's wall sweeps into the screen edge, and the corner of the wallpaper
+    /// beside it picks up a matching curve. The arc is tangent to the edge above and
+    /// to the body's wall at the side; swap those tangents and it bulges outward,
+    /// giving the island shoulders.
     ///
-    /// Плашка ради этого становится шире на `edgeRadius` с каждой стороны: галтель
-    /// лежит снаружи корпуса острова, и без запаса ей негде поместиться. Ширина
-    /// самого корпуса при этом не меняется — крылья остаются по 72 pt.
+    /// The slab grows by `edgeRadius` on each side to make room: the fillet lies
+    /// outside the island's body and has nowhere to go without that margin. The body
+    /// itself is unchanged — the wings stay 72 pt.
     public static let edgeRadius: CGFloat = 10
 
-    /// Скругление нижних углов острова и меню. Верхние углы острова прямые —
-    /// они упираются в кромку экрана.
+    /// Rounding on the island's and the menu's bottom corners. The island's top
+    /// corners are square — they run into the screen's edge.
     ///
-    /// 16 pt при высоте острова 32 pt — это половина высоты, то есть нижняя
-    /// кромка закруглена целиком, без прямого участка между дугами по бокам.
-    /// Так плашка читается формой, а не прямоугольником со сглаженными углами;
-    /// физический вырез рядом закруглён примерно так же, и меньший радиус рядом
-    /// с ним смотрится сухо. Больше половины высоты брать нельзя: фигура зажимает
-    /// радиус этим пределом, и разница перестала бы быть видимой.
+    /// 16 pt against an island height of 32 pt is half the height, meaning the bottom
+    /// edge is rounded end to end with no straight run between the two arcs. That
+    /// reads as a shape rather than a rectangle with softened corners; the physical
+    /// notch beside it is curved to roughly the same degree, and a smaller radius
+    /// next to it looks dry. More than half the height is impossible: the shape
+    /// clamps the radius at that limit, so the difference would stop being visible.
     public static let cornerRadius: CGFloat = 16
 
-    /// Есть ли у экрана вырез. На экране без выреза верхний safe-area-инсет равен
-    /// нулю; на встроенном экране MacBook Pro он равен высоте строки меню (32 pt).
+    /// Whether the display has a notch. On one without, the top safe-area inset is
+    /// zero; on a MacBook Pro's built-in display it equals the menu bar's height (32 pt).
     public static func hasNotch(safeAreaTop: CGFloat) -> Bool { safeAreaTop > 0 }
 
-    /// Вырез — промежуток между вспомогательными областями. `nil`, если система их
-    /// не сообщила (экран без выреза) или если между ними нет положительной ширины.
+    /// The notch — the gap between the auxiliary areas. `nil` if the system did not
+    /// report them (a display with no notch) or if there is no positive width between them.
     public static func notchRect(auxLeft: CGRect?, auxRight: CGRect?) -> CGRect? {
         guard let auxLeft, let auxRight else { return nil }
         let width = auxRight.minX - auxLeft.maxX
@@ -70,8 +71,8 @@ public enum IslandLayout {
         return CGRect(x: auxLeft.maxX, y: auxLeft.minY, width: width, height: auxLeft.height)
     }
 
-    /// Вся плашка: вырез плюс два одинаковых крыла. Высота равна высоте выреза —
-    /// остров не выходит за строку меню.
+    /// The whole slab: the notch plus two equal wings. Its height equals the notch's —
+    /// the island does not extend past the menu bar.
     public static func islandFrame(notch: CGRect) -> CGRect {
         CGRect(x: notch.minX - wingWidth,
                y: notch.minY,
@@ -79,32 +80,34 @@ public enum IslandLayout {
                height: notch.height)
     }
 
-    /// Прямоугольник окна острова: корпус плюс место под галтели с обеих сторон.
-    /// Отдельно от `islandFrame`, потому что это разные величины: `islandFrame` —
-    /// то, по чему раскладывается содержимое (крыло, вырез, крыло), а это — то, что
-    /// нужно закрасить.
+    /// The island window's rectangle: the body plus room for a fillet on each side.
+    /// Kept apart from `islandFrame` because they are different quantities:
+    /// `islandFrame` is what the content is laid out against (wing, notch, wing), and
+    /// this is what has to be painted.
     public static func silhouetteFrame(island: CGRect) -> CGRect {
         island.insetBy(dx: -edgeRadius, dy: 0)
     }
 
-    /// Контур острова в координатах SwiftUI (ось Y вниз, начало — левый верхний
-    /// угол): вогнутые галтели у кромки экрана сверху, скруглённые углы снизу.
+    /// The island's outline in SwiftUI coordinates (y grows downward, origin at the
+    /// top-left): concave fillets against the screen edge at the top, rounded corners
+    /// at the bottom.
     ///
-    /// `rect` — весь прямоугольник окна (`silhouetteFrame`), то есть корпус плюс
-    /// галтели по краям. `edgeRadius` нулевой (или не влезающий) просто даёт прямые
-    /// верхние углы — форма остаётся корректной.
+    /// `rect` is the whole window rectangle (`silhouetteFrame`) — the body plus the
+    /// fillets at its edges. An `edgeRadius` of zero (or one that will not fit)
+    /// simply yields square top corners; the shape stays correct.
     ///
-    /// Дуги строятся кубическими Безье с константой 0.5523: квадратичная кривая для
-    /// четверти окружности ошибается примерно на 5%, и на стыке с настоящей дугой
-    /// выреза это было бы видно.
+    /// The arcs are cubic Béziers with the 0.5523 constant: a quadratic curve is off
+    /// by about 5% on a quarter circle, and that would be visible where it meets the
+    /// notch's real arc.
     public static func silhouettePath(in rect: CGRect,
                                       bottomRadius: CGFloat,
                                       edgeRadius: CGFloat = IslandLayout.edgeRadius) -> CGPath {
         let k: CGFloat = 0.5523
-        // Зажимаем так, чтобы форма не выворачивалась на узком или низком острове:
-        // галтель не шире половины ширины и не выше самого острова, а нижний радиус
-        // не больше половины оставшегося корпуса и того, что осталось от высоты
-        // после галтели. Иначе вертикальная стенка корпуса пошла бы снизу вверх.
+        // Clamped so the shape cannot turn itself inside out on a narrow or short
+        // island: the fillet is no wider than half the width and no taller than the
+        // island, and the bottom radius no more than half the remaining body and
+        // whatever height is left after the fillet. Otherwise the body's vertical wall
+        // would run upward from the bottom.
         let e = max(0, min(edgeRadius, min(rect.width / 2, rect.height)))
         let bodyWidth = rect.width - 2 * e
         let b = max(0, min(bottomRadius, min(bodyWidth / 2, rect.height - e)))
@@ -114,10 +117,10 @@ public enum IslandLayout {
         let path = CGMutablePath()
         path.move(to: CGPoint(x: left, y: top))
         path.addLine(to: CGPoint(x: right, y: top))
-        // Правая галтель: дуга касается кромки экрана сверху и стенки корпуса сбоку.
-        // Касательные именно так, а не наоборот: при обратной паре контрольных точек
-        // дуга выгибается наружу, и вместо перетекания в кромку у острова вырастают
-        // плечи — проверено отрисовкой, выглядит как уши.
+        // Right fillet: the arc is tangent to the screen edge above and to the body's
+        // wall at the side. Those tangents and not the reverse — with the control
+        // points swapped the arc bulges outward, and instead of flowing into the edge
+        // the island grows shoulders. Confirmed by rendering it; they look like ears.
         if e > 0 {
             path.addCurve(to: CGPoint(x: bodyRight, y: top + e),
                           control1: CGPoint(x: right - e * k, y: top),
@@ -136,7 +139,7 @@ public enum IslandLayout {
                           control2: CGPoint(x: bodyLeft, y: bottom - b + b * k))
         }
         path.addLine(to: CGPoint(x: bodyLeft, y: top + e))
-        // Левая галтель, зеркально правой.
+        // Left fillet, mirroring the right.
         if e > 0 {
             path.addCurve(to: CGPoint(x: left, y: top),
                           control1: CGPoint(x: bodyLeft, y: top + e - e * k),
@@ -146,16 +149,16 @@ public enum IslandLayout {
         return path
     }
 
-    /// Рамка окна острова при полной высоте `totalHeight` (полоса острова плюс
-    /// раскрытое меню).
+    /// The island window's frame at a full height of `totalHeight` (the island strip
+    /// plus the expanded menu).
     ///
-    /// Верхняя кромка не двигается никогда: окно растёт вниз от кромки экрана.
-    /// Ширина — всегда ширина силуэта, потому что остров и меню теперь одна форма в
-    /// одном окне; отдельной ширины у меню больше нет, а значит нет и уступа на
-    /// стыке, который раньше приходилось прятать.
+    /// The top edge never moves: the window grows downward from the screen's edge.
+    /// The width is always the silhouette's, because the island and the menu are now
+    /// one shape in one window; the menu has no width of its own any more, and so
+    /// there is no ledge at the join that used to need hiding.
     ///
-    /// Высота зажата снизу полосой острова (меньше неё окно быть не может) и сверху
-    /// нижним краем экрана.
+    /// The height is clamped below by the island strip (the window cannot be shorter)
+    /// and above by the bottom of the screen.
     public static func windowFrame(island: CGRect,
                                    totalHeight: CGFloat,
                                    screenFrame: CGRect) -> CGRect {

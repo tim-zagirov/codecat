@@ -49,6 +49,5 @@ jobs:
           test -d dist/CodeCat.app/Contents/Resources/Skins
           test -f dist/CodeCat.app/Contents/Resources/CodeCat.icns
           test -f dist/CodeCat.app/Contents/Resources/en.lproj/Localizable.strings
-          test -f dist/CodeCat.app/Contents/Resources/ru.lproj/Localizable.strings
           test -x dist/CodeCat.app/Contents/MacOS/CodeCat
           test -x dist/CodeCat.app/Contents/MacOS/codecat-hook

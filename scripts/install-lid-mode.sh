@@ -1,13 +1,13 @@
 #!/bin/bash
-# Устанавливает поддержку режима закрытой крышки CodeCat.
-# Запускается от root (через osascript with administrator privileges).
+# Installs support for CodeCat's closed-lid mode.
+# Runs as root (through osascript with administrator privileges).
 set -euo pipefail
 
-# Не полагаемся только на $SUDO_USER/$USER: когда скрипт запущен через
-# `osascript ... with administrator privileges`, процесс выполняется как root
-# с чистым окружением, и оба этих значения могут оказаться "root". Реальный
-# залогиненный пользователь консоли — самый надёжный источник в обоих случаях
-# (обычный sudo и osascript-эскалация).
+# Do not rely on $SUDO_USER/$USER alone: when the script is run through
+# `osascript ... with administrator privileges` the process executes as root with a
+# clean environment, and both of those can turn out to be "root". The actual
+# logged-in console user is the most reliable source in both cases (ordinary sudo
+# and osascript escalation).
 TARGET_USER="${SUDO_USER:-$(stat -f%Su /dev/console)}"
 SUDOERS_FILE=/etc/sudoers.d/codecat
 DAEMON_PLIST=/Library/LaunchDaemons/com.codecat.sleepreset.plist
@@ -15,43 +15,42 @@ DAEMON_PLIST=/Library/LaunchDaemons/com.codecat.sleepreset.plist
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
 cat > "$TMP" <<EOF
-# CodeCat: разрешает переключать только disablesleep без пароля
+# CodeCat: allows toggling disablesleep and nothing else, without a password
 $TARGET_USER ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
 EOF
 visudo -cf "$TMP"
 install -m 0440 -o root -g wheel "$TMP" "$SUDOERS_FILE"
 
-# Демон СНАЧАЛА проверяет флаг и только потом пишет. Без этой проверки он
-# выполнял `pmset -a disablesleep 0` безусловно каждые StartInterval секунд всё
-# время, пока CodeCat не запущен, — то есть навсегда после того, как человек вышел
-# из приложения. Каждый такой вызов заставляет powerd перечитать и переписать
-# настройки энергосбережения («Energy Saver Prefs have changed» в системном
-# журнале), от root, раз в минуту, вечно. На машине разработчика набежало 1957
-# запусков за двое суток. Ничего не ломалось, но так вести себя утилита не имеет
-# права, и в раздаваемой сборке этого быть не должно.
+# The daemon checks the flag FIRST and only then writes. Without that check it ran
+# `pmset -a disablesleep 0` unconditionally every StartInterval seconds for as long
+# as CodeCat was not running — that is, forever, once someone quit the app. Every
+# such call makes powerd re-read and rewrite the energy settings ("Energy Saver
+# Prefs have changed" in the system log), as root, once a minute, indefinitely. On
+# the developer's machine that added up to 1957 runs over two days. Nothing broke,
+# but a utility has no right to behave that way, and a build that ships to people
+# must not.
 #
-# Записано тремя командами с ранними `exit 0`, а не цепочкой `A || { B && C; }`,
-# ради двух вещей сразу.
+# Written as three commands with early `exit 0` rather than a chain of
+# `A || { B && C; }`, for two things at once.
 #
-# Первая — правильность. Наивное `A || B && C` в bash разбирается как
-# `(A || B) && C`: при ЖИВОМ CodeCat (A истинно) выполнился бы C и снял флаг прямо
-# во время работы агентов, ровно наоборот задуманному. Проверено подставными
-# pgrep/pmset: без группировки флаг действительно снимается.
+# First, correctness. A naive `A || B && C` parses in bash as `(A || B) && C`: with
+# CodeCat ALIVE (A true) C would run and clear the flag while agents were working —
+# exactly the opposite of the intent. Verified with stub pgrep/pmset: without the
+# grouping the flag really does get cleared.
 #
-# Вторая — честный код возврата. В варианте со скобками «делать нечего» давало
-# exit 1, и launchd показывал `last exit code = 1` у совершенно исправного демона,
-# то есть врал тому, кто придёт разбираться. Теперь ненулевой код означает ровно
-# одно: pmset действительно не отработал.
+# Second, an honest exit code. In the parenthesised version "nothing to do" produced
+# exit 1, and launchd reported `last exit code = 1` for a perfectly healthy daemon —
+# lying to whoever came to investigate. Now a non-zero code means exactly one thing:
+# pmset genuinely failed.
 #
-# Раньше демон срабатывал только один раз при загрузке (RunAtLoad), поэтому
-# если приложение падало (crash, kill -9, Force Quit) с уже включённым
-# disablesleep, флаг оставался выставленным до следующей перезагрузки — ровно
-# то, для защиты от чего этот демон и существует. Теперь демон реально
-# наблюдает: помимо RunAtLoad он перезапускается каждые StartInterval секунд
-# и снимает disablesleep, если процесс CodeCat не запущен. Пока CodeCat жив,
-# демон ничего не трогает — переключение disablesleep в 1 остаётся за самим
-# приложением (через отдельное узкое sudoers-правило, см. выше), это не
-# расширяет то, что демон делает от имени root.
+# The daemon used to fire only once at boot (RunAtLoad), so if the app died (crash,
+# kill -9, Force Quit) with disablesleep already on, the flag stayed set until the
+# next reboot — precisely what this daemon exists to prevent. Now it actually
+# watches: besides RunAtLoad it restarts every StartInterval seconds and clears
+# disablesleep if no CodeCat process is running. While CodeCat is alive the daemon
+# touches nothing — setting disablesleep to 1 remains the app's own job, through the
+# separate narrow sudoers rule above, so this does not widen what the daemon does as
+# root.
 cat > "$DAEMON_PLIST" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -73,4 +72,4 @@ chmod 644 "$DAEMON_PLIST"
 # upgrade actually picks up a changed plist, not just the first-install case.
 launchctl bootout system "$DAEMON_PLIST" 2>/dev/null || true
 launchctl bootstrap system "$DAEMON_PLIST" 2>/dev/null || true
-echo "Режим закрытой крышки CodeCat установлен для пользователя $TARGET_USER"
+echo "CodeCat closed-lid mode installed for user $TARGET_USER"

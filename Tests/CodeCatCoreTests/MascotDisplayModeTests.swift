@@ -3,21 +3,21 @@ import XCTest
 
 final class MascotDisplayModeTests: XCTestCase {
 
-    /// rawValue уходит в UserDefaults, поэтому менять эти строки нельзя — иначе
-    /// у пользователя молча слетит выбранный режим.
+    /// The rawValue goes into UserDefaults, so these strings must never change — the
+    /// user's chosen mode would silently reset.
     func testRawValuesAreStable() {
         XCTAssertEqual(MascotDisplayMode.floating.rawValue, "floating")
         XCTAssertEqual(MascotDisplayMode.island.rawValue, "island")
     }
 
-    /// По умолчанию — то, что было всегда: плавающий кот. Установка обновлённого
-    /// приложения не имеет права сама сменить пользователю вид.
+    /// The default is what it has always been: the floating cat. Installing an updated
+    /// app has no right to change the user's view by itself.
     func testDefaultIsTheFloatingMascot() {
         XCTAssertEqual(MascotDisplayMode.default, .floating)
     }
 
-    /// Мусор и отсутствие значения в настройках приводят к режиму по умолчанию,
-    /// а не к падению.
+    /// Garbage and a missing value in the settings both land on the default mode rather
+    /// than crashing.
     func testUnknownIdentifiersFallBackToTheDefault() {
         XCTAssertEqual(MascotDisplayMode.mode(withID: nil), .floating)
         XCTAssertEqual(MascotDisplayMode.mode(withID: ""), .floating)

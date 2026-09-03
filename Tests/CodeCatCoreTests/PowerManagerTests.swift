@@ -29,7 +29,7 @@ final class PowerManagerTests: XCTestCase {
         let (pm, mock) = makeSUT(grace: 120)
         pm.update(anyWorking: true, now: t0)
         pm.update(anyWorking: false, now: t0.addingTimeInterval(60))
-        XCTAssertTrue(mock.isHeld, "в grace-периоде ещё держим")
+        XCTAssertTrue(mock.isHeld, "still held during the grace period")
         pm.tick(now: t0.addingTimeInterval(60 + 119))
         XCTAssertTrue(mock.isHeld)
         pm.tick(now: t0.addingTimeInterval(60 + 121))
@@ -42,7 +42,7 @@ final class PowerManagerTests: XCTestCase {
         pm.update(anyWorking: false, now: t0.addingTimeInterval(10))
         pm.update(anyWorking: true, now: t0.addingTimeInterval(20))
         pm.tick(now: t0.addingTimeInterval(500))
-        XCTAssertTrue(mock.isHeld, "работа возобновилась — не отпускаем")
+        XCTAssertTrue(mock.isHeld, "work resumed — do not release")
     }
 
     func testDisabledManagerNeverAcquiresAndReleasesExisting() {
@@ -61,7 +61,7 @@ final class PowerManagerTests: XCTestCase {
         XCTAssertTrue(mock.isHeld)
         level = 10
         pm.tick(now: t0.addingTimeInterval(30))
-        XCTAssertFalse(mock.isHeld, "батарея ниже порога — отпускаем сразу")
+        XCTAssertFalse(mock.isHeld, "battery below the floor — release at once")
     }
 
     func testNilBatteryMeansNoRestriction() {
@@ -75,10 +75,10 @@ final class PowerManagerTests: XCTestCase {
         var level = 10
         let (pm, mock) = makeSUT(floor: 15, battery: { level })
         pm.update(anyWorking: true, now: t0)
-        XCTAssertFalse(mock.isHeld, "батарея уже ниже порога — не берём assertion")
+        XCTAssertFalse(mock.isHeld, "battery is already below the floor — do not take an assertion")
         level = 50
         pm.tick(now: t0.addingTimeInterval(10))
-        XCTAssertTrue(mock.isHeld, "батарея восстановилась, работа продолжается — берём снова")
+        XCTAssertTrue(mock.isHeld, "battery recovered and work continues — take it again")
     }
 
     func testNeverLeaksAssertionAcrossMixedTransitions() {
@@ -92,19 +92,19 @@ final class PowerManagerTests: XCTestCase {
         pm.update(anyWorking: false, now: t0.addingTimeInterval(5))
         level = 5
         pm.tick(now: t0.addingTimeInterval(10))
-        XCTAssertFalse(mock.isHeld, "низкая батарея освобождает немедленно, даже в grace-периоде")
+        XCTAssertFalse(mock.isHeld, "a low battery releases immediately, even in the grace period")
 
         // Battery recovers, but there is no more work — must stay released.
         level = 80
         pm.tick(now: t0.addingTimeInterval(20))
-        XCTAssertFalse(mock.isHeld, "работы нет — не берём assertion просто потому что батарея ок")
+        XCTAssertFalse(mock.isHeld, "no work — do not take an assertion just because the battery is fine")
 
         // Work resumes and the feature is disabled at the same moment: must not hold.
         pm.update(anyWorking: true, now: t0.addingTimeInterval(30))
         XCTAssertTrue(mock.isHeld)
         pm.isEnabled = false
-        XCTAssertFalse(mock.isHeld, "выключение немедленно освобождает")
+        XCTAssertFalse(mock.isHeld, "switching off releases immediately")
         pm.tick(now: t0.addingTimeInterval(1000))
-        XCTAssertFalse(mock.isHeld, "выключено — тик не должен снова взять assertion")
+        XCTAssertFalse(mock.isHeld, "switched off — a tick must not take an assertion again")
     }
 }

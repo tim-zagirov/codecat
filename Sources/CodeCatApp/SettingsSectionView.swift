@@ -2,20 +2,20 @@ import SwiftUI
 import AppKit
 import CodeCatCore
 
-/// Облики и тумблеры. Вынесены из `DetailsPanelView` ради меню острова, где
-/// показываются на чёрном фоне и только на полном уровне.
+/// Skins and toggles. Split out of `DetailsPanelView` for the island menu, where
+/// they are shown on a black background and only at the full level.
 ///
-/// Всё, что здесь показано, вычисляется прямо из `appState` в момент вычисления
-/// `body`, поэтому отражает живое состояние само по себе — отдельной подписки
-/// на `store`/`awayLog` не нужно.
+/// Everything here is computed straight from `appState` while `body` runs, so it
+/// reflects live state on its own — no separate subscription to `store`/`awayLog`
+/// is needed.
 struct SettingsSectionView: View {
     @ObservedObject var appState: AppState
 
-    /// Экран с вырезом — тот, для которого действительно строится
-    /// `IslandLayout.notchRect`, а не тот, у которого просто ненулевой
-    /// safe-area-инсет (см. `IslandController.geometry()`): один и тот же
-    /// признак «есть вырез» должен использоваться и там, где остров реально
-    /// появляется, и здесь, где об этом предупреждают заранее.
+    /// A notched display is one `IslandLayout.notchRect` can actually be built for,
+    /// not one that merely has a non-zero safe-area inset (see
+    /// `IslandController.geometry()`): the same test for "there is a notch" has to be
+    /// used both where the island really appears and here, where the user is warned
+    /// about it in advance.
     private static var hasScreenWithNotch: Bool {
         NSScreen.screens.contains { screen in
             IslandLayout.notchRect(auxLeft: screen.auxiliaryTopLeftArea,
@@ -43,22 +43,22 @@ struct SettingsSectionView: View {
                     .foregroundStyle(style.tertiary)
             }
 
-            // Тумблер работает в обоих режимах — и для острова, и для плавающего
-            // кота. Дубликат этого же пункта есть в меню-баре, и он там обязателен:
-            // включи тумблер здесь, пока сессий нет, и маскот вместе с этим меню
-            // исчезнет с экрана — выключить обратно было бы неоткуда.
+            // The toggle works in both modes — for the island and for the floating cat.
+            // The menu bar carries a duplicate of it, and that duplicate is mandatory:
+            // turn this on here while there are no sessions and the mascot disappears
+            // along with this very menu, leaving nowhere to turn it off.
             SettingToggle(L10n.t("setting.hide.when.idle", "Hide the cat when nothing is running"),
                           isOn: $appState.hidesWhenNoSessions)
 
             MenuSeparator()
-            // Заголовок «Облик» рисует сам `SkinPickerView` — он же им и владеет.
+            // `SkinPickerView` draws the "Skin" heading itself — it owns it.
             SkinPickerView(appState: appState)
 
             MenuSeparator()
-            // Заголовка «Настройки» в панели никогда не было, и добавлять его
-            // сюда — значит менять плавающий режим, чего эта работа не делает.
-            // `MenuSectionHeader` рисует себя только там, где заголовки секций
-            // предусмотрены стилем, то есть на острове.
+            // The panel never had a "Settings" heading, and adding one here would mean
+            // changing the floating mode, which this work does not do.
+            // `MenuSectionHeader` draws itself only where the style provides for section
+            // headings — that is, on the island.
             MenuSectionHeader(title: L10n.t("settings.title", "Settings"))
             SettingToggle(L10n.t("setting.keep.awake", "Keep the Mac awake"),
                           isOn: $appState.keepAwakeEnabled)
@@ -86,10 +86,10 @@ struct SettingsSectionView: View {
         .modifier(ToggleTint(color: style.toggleTint))
     }
 
-    /// Заголовок секции. В панели это обычный текст того же кегля, каким он там
-    /// был всегда; в меню острова — приглушённый заголовочный стиль, общий для
-    /// всех секций. Разводить их приходится потому, что панель заголовков секций
-    /// почти не имела, а на чёрном без них список настроек читается как свалка.
+    /// A section heading. In the panel it is ordinary text at the size it has always
+    /// been; in the island menu it is the muted heading style shared by every section.
+    /// They have to be told apart because the panel had almost no section headings,
+    /// and on black without them the settings list reads as a heap.
     @ViewBuilder
     private func sectionTitle(_ title: String) -> some View {
         if style.separator == nil {
@@ -100,16 +100,17 @@ struct SettingsSectionView: View {
     }
 }
 
-/// Строка настройки с переключателем.
+/// A settings row with a switch.
 ///
-/// В панели это обычный `Toggle`, каким он там был всегда: подпись и выключатель
-/// стоят вплотную, ширина по тексту. В меню острова выключатели собираются в
-/// колонку у правого края — иначе они встают лесенкой, каждый там, где кончилась
-/// его подпись, и три строки настроек читаются как рваный край.
+/// In the panel this is an ordinary `Toggle`, as it has always been: label and
+/// switch side by side, width following the text. In the island menu the switches
+/// gather into a column at the right edge — otherwise they form a staircase, each
+/// one wherever its label happened to end, and three settings rows read as a ragged
+/// edge.
 ///
-/// Колонка строится руками, `HStack` со `Spacer`: `Toggle` со `switch`-стилем,
-/// растянутый рамкой, прижимает к правому краю не выключатель, а всю пару вместе
-/// с подписью — то есть ровно не то, что нужно.
+/// The column is built by hand with an `HStack` and a `Spacer`: a `switch`-styled
+/// `Toggle` stretched by a frame pushes not the switch to the right edge but the
+/// whole pair together with its label — precisely the wrong thing.
 private struct SettingToggle: View {
     let title: String
     @Binding var isOn: Bool
@@ -135,9 +136,9 @@ private struct SettingToggle: View {
     }
 }
 
-/// Системный акцентный синий на тумблерах острова означал бы то же, что синяя
-/// точка в списке сессий, — «закончил». Поэтому у острова тумблеры белые, а у
-/// панели остаются системными.
+/// The system accent blue on the island's toggles would mean what the blue dot in
+/// the session list means — "done". So the island's toggles are white while the
+/// panel's stay systemic.
 private struct ToggleTint: ViewModifier {
     let color: Color?
 
