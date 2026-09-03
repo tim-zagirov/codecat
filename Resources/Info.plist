@@ -13,6 +13,8 @@
 	<string>CodeCat</string>
 	<key>CFBundleExecutable</key>
 	<string>CodeCat</string>
+	<key>CFBundleIconFile</key>
+	<string>CodeCat</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.codecat.app</string>
 	<key>CFBundleName</key>

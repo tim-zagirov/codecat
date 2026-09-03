@@ -38,6 +38,11 @@ bundle: assets
 	cp .build/release/CodeCatApp $(APP)/Contents/MacOS/CodeCat
 	cp .build/release/codecat-hook $(APP)/Contents/MacOS/codecat-hook
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
+	# Иконка. Лежит в Contents/Resources под тем именем, которое названо в
+	# CFBundleIconFile; перерисовывается `swift scripts/make-icon.swift`, а не
+	# сборкой — генератор рисует кота из `CatView` заново, и гонять его на каждую
+	# сборку значит перекладывать 350 КБ ради файла, который не меняется.
+	cp Resources/CodeCat.icns $(APP)/Contents/Resources/
 	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD)" $(APP)/Contents/Info.plist
 	cp scripts/install-lid-mode.sh scripts/uninstall-lid-mode.sh $(APP)/Contents/Resources/
 	# Локализация. `.strings`, а не `.xcstrings`: каталог строк компилирует сборочная
@@ -102,8 +107,19 @@ notarize: sign
 # а эта — вердикт самого Gatekeeper.
 release: notarize
 	rm -f $(DMG) $(ZIP)
-	hdiutil create -volname "CodeCat $(VERSION)" -srcfolder $(APP) \
+	# Образ собирается из подготовленной папки, а не прямо из бандла, ради двух
+	# вещей: ссылки на /Applications (иначе установка — это «перетащи куда-нибудь
+	# сам») и иконки тома. Флаг «у тома своя иконка» ставит SetFile из инструментов
+	# Xcode; если его нет, образ всё равно собирается — просто с обычной иконкой.
+	rm -rf dist/dmg && mkdir -p dist/dmg
+	cp -R $(APP) dist/dmg/
+	ln -s /Applications dist/dmg/Applications
+	cp Resources/CodeCat.icns dist/dmg/.VolumeIcon.icns
+	@command -v SetFile >/dev/null && SetFile -a C dist/dmg \
+		|| echo "ПРЕДУПРЕЖДЕНИЕ: SetFile не найден — у образа будет обычная иконка тома"
+	hdiutil create -volname "CodeCat $(VERSION)" -srcfolder dist/dmg \
 		-ov -format UDZO $(DMG)
+	rm -rf dist/dmg
 	codesign --force --timestamp --sign "$(SIGN_ID)" $(DMG)
 	xcrun notarytool submit $(DMG) --keychain-profile "$(NOTARY_PROFILE)" --wait
 	xcrun stapler staple $(DMG)
@@ -131,6 +147,8 @@ verify-skins:
 	# та ошибка сборки, которую никто не заметит без проверки.
 	@test -f "$(APP)/Contents/Resources/ru.lproj/Localizable.strings" \
 		|| (echo "ОШИБКА: локализация не попала в бандл"; exit 1)
+	@test -f "$(APP)/Contents/Resources/CodeCat.icns" \
+		|| (echo "ОШИБКА: иконка не попала в бандл"; exit 1)
 	@out=$$(CODECAT_SKINS_DIR="$(CURDIR)/$(APP)/Contents/Resources/Skins" swift test --filter SkinAssetsTests 2>&1); \
 		echo "$$out" | grep -qE "Executed [1-9][0-9]* tests?, with 0 failures" \
 		&& echo "$$out" | grep -q "SKINS DIR: .*Contents/Resources/Skins" \
