@@ -1,52 +1,71 @@
-# CodeCat — передача в новую сессию
+# CodeCat — handoff to the next session
 
-Дата: 2026-08-31 (третья передача). Читай этот файл первым.
+Last updated 2026-09-03, during the public-release pass. Read this first.
 
-## Где всё стоит сейчас
+**Summary.** The code is done and green; what is left is release mechanics —
+a Developer ID certificate, notarisation credentials, the GitHub rename, and the
+manual checklist. Sections below cover where things stand, what to do next, how
+work is done in this repository, and the loose ends. The working notes further
+down are in Russian: they are the author's own, and translating them would only
+blur them. Anything a user reads is English — see the [README](../README.md).
 
-- Ветка `claude/codecat-mascot-skins-spec-b6a4de` (облики котика), **238 тестов зелёные** (`swift test`), рабочее дерево чистое. В `master` она на момент записи не влита.
-- Приложение собрано, установлено в **`/Applications/CodeCat.app`** и запущено; подпись запечатана (`codesign -v --deep --strict` проходит).
-- **Хуки установлены** в `~/.claude/settings.json` — все четыре события указывают на `/Applications/CodeCat.app/Contents/MacOS/codecat-hook`. Резервная копия: `~/.claude/settings.json.backup-before-codecat`.
-- **Режим закрытой крышки установлен и проверен на реальной машине.**
+## Where things stand
 
-Сборка: `make app` кладёт бандл в `dist/`. После пересборки обязательно скопировать в `/Applications`, иначе хуки зовут старый бинарник:
+- `master` is green: **394 tests**, `swift test`, clean working tree. The public
+  release pass (licence, English UI, icon, CI, docs) is on top of it.
+- Installed at `/Applications/CodeCat.app`, ad-hoc signed. That is fine locally
+  and **not** fine for distribution: see `docs/release.md`.
+- Hooks are installed in `~/.claude/settings.json` — all **five** events point at
+  `/Applications/CodeCat.app/Contents/MacOS/codecat-hook`. Backup:
+  `~/.claude/settings.json.backup-before-codecat`.
+- Closed-lid mode is installed and was verified on the real machine.
+- One skin (Elthen's "Silver") is no longer in the repository — its licence
+  forbids redistribution. `make bundle` fetches it; without it the app shows
+  seven skins instead of eight, which is a supported state.
+
+Building: `make app` puts the bundle in `dist/`. After a rebuild you **must**
+copy it to `/Applications`, or the installed hooks keep calling the old binary:
 
 ```bash
 make app && pkill -x CodeCat; rm -rf /Applications/CodeCat.app && cp -R dist/CodeCat.app /Applications/ && open -a /Applications/CodeCat.app
 ```
 
-## Что сделано в позапрошлой сессии
+## What to do next
 
-**1. Баг с обрезанным хвостом — починен и проверен глазами.** Причина: окно панели было ровно 96×96, как и рисунок, поэтому всё, что анимация выносила за край, срезалось границей окна. Замер (рендер `CatView` во всех состояниях и обеих фазах анимаций, bounding box непрозрачных пикселей) показал максимум 55.2 pt от центра → нужен холст ≥110.5 pt. Теперь окно и холст 128 pt, вся геометрия в `MascotLayout`, сохранённая позиция кота мигрирует со старого размера, чтобы он не прыгнул.
+In order. The first two need a human; nothing else is blocked.
 
-**2. Фича «переход к сессии» — реализована полностью** по спеку `docs/superpowers/specs/2026-08-30-session-jump-design.md`, план — `docs/superpowers/plans/2026-08-30-session-jump.md`. Все 11 задач прошли ревью, плюс финальное ревью всей ветки и четыре волны исправлений после него. Влито в master.
+1. **Get a Developer ID Application certificate and store notarisation
+   credentials.** This is the only real blocker for shipping to anyone else, and
+   it cannot be automated: it needs an Apple Developer account. Exact commands:
+   [docs/release.md](release.md). Until then every reinstall changes the
+   signature, so macOS asks for the automation permission again each time
+   (`tccutil reset AppleEvents com.codecat.app` to re-test that path).
+2. **Rename the GitHub repository** `vibe-coding-utility` → `codecat`, and
+   force-push the history-rewritten `master` (the Elthen sheet was purged from
+   history — see RELEASE_NOTES.md).
+3. **Run [docs/verification-checklist.md](verification-checklist.md) end to
+   end** on a fresh build. Item 34 needs a second Mac and a real release build;
+   item 35 is new and covers the Russian localisation.
+4. **Replace the app icon** if the generated one is not good enough — it is drawn
+   from `CatView`, not designed.
+5. Then the loose ends below, none of which block a release.
 
-**3. Облики котика — брейншторм и спек.** Реализованы в следующей сессии, см. ниже.
+### Still unverified by eye: jump-to-session
 
-## Что делать дальше
+Всё, что ниже слоя интерфейса, покрыто тестами и проверено сквозь (хук на живом дереве процессов, AppleScript — компиляцией против настоящего словаря Terminal.app). **Не проверено глазами** и ждёт человека — пункты 10–13 чек-листа в `docs/verification-checklist.md`:
 
-**Сборка к проду — отдельный документ:** `docs/superpowers/plans/2026-09-01-release-checklist.md`.
-Там по шагам: репозиторий, подпись и нотаризация, версия и упаковка, ручной
-чек-лист, дыры (логов нет, у app-таргета нет тестов, нет пути удаления хуков) и
-порядок, если делать одним заходом. Начинать оттуда.
-
-
-### Доделать проверку «перехода к сессии» руками
-
-Всё, что ниже слоя интерфейса, покрыто тестами и проверено сквозь (хук на живом дереве процессов, AppleScript — компиляцией против настоящего словаря Terminal.app). **Не проверено глазами** и ждёт человека — пункты 9–12 ручного чек-листа в `README.md`:
-
-9. Навести на строку сессии → подсветка и курсор-указатель.
-10. Клик по строке сессии из Terminal.app → разрешение на автоматизацию (один раз), потом переключение ровно в её вкладку.
-11. Клик по строке сессии десктопного Claude → приложение выходит вперёд.
-12. Отказать в разрешении → приложение всё равно выведено вперёд и **видно сообщение** (не спрятано за окном).
+10. Навести на строку сессии → подсветка и курсор-указатель.
+11. Клик по строке сессии из Terminal.app → разрешение на автоматизацию (один раз), потом переключение ровно в её вкладку.
+12. Клик по строке сессии десктопного Claude → приложение выходит вперёд.
+13. Отказать в разрешении → приложение всё равно выведено вперёд и **видно сообщение** (не спрятано за окном).
 
 Программно это не проверить: CodeCat — `LSUIElement`, инструменты управления экраном его не находят (`request_access` отвечает «not installed»). Ветка iTerm2 не проверялась вовсе — iTerm2 на машине нет.
 
 Приложение переустанавливалось в этой сессии, поэтому подпись сменилась и разрешение на
-автоматизацию спросят заново. Сбросить выданное, чтобы проверить пункт 12:
+автоматизацию спросят заново. Сбросить выданное, чтобы проверить пункт 13:
 `tccutil reset AppleEvents com.codecat.app`.
 
-### Облики котика — сделано
+### Skins — done
 
 Спек вычитан и уточнён, план написан, реализация прошла все восемь задач с ревью,
 два круга финальных исправлений. Ветка `claude/codecat-mascot-skins-spec-b6a4de`.
@@ -65,7 +84,7 @@ make app && pkill -x CodeCat; rm -rf /Applications/CodeCat.app && cp -R dist/Cod
   не нашёл ни одного теста.
 - Приложение пересобрано и установлено в `/Applications/CodeCat.app`, подпись запечатана.
 
-**Что осталось человеку:** пункты 13–16 ручного чек-листа в `README.md` (сетка обликов,
+**Что осталось человеку:** пункты 14–17 чек-листа в `docs/verification-checklist.md` (сетка обликов,
 переключение кликом, сохранение выбора между запусками, «Об ассетах» с CC BY 4.0 у mxmaze).
 
 Уроки этой работы, которые стоит помнить:
@@ -84,7 +103,7 @@ make app && pkill -x CodeCat; rm -rf /Applications/CodeCat.app && cp -R dist/Cod
   сохранял ширину и высоту, поэтому дамп метрик его не видел; ломался только Elthen. Ловится
   сравнением `origin` с эталоном, посчитанным независимо (PIL по тем же PNG).
 
-## Как здесь принято работать
+## How work is done here
 
 Скилл `subagent-driven-development`: на каждую задачу свежий субагент-исполнитель, потом субагент-ревьюер (соответствие спеку + качество), правки — отдельным субагентом, в конце широкое ревью всей ветки. Прогресс пишется в `.superpowers/sdd/progress.md` (в gitignore) — **читай его после компактификации, он переживает потерю контекста**.
 
@@ -99,26 +118,24 @@ make app && pkill -x CodeCat; rm -rf /Applications/CodeCat.app && cp -R dist/Cod
 - **Хук проверяется сквозь.** Останови CodeCat, подними на его сокете (`~/Library/Application Support/CodeCat/codecat.sock`) слушателя unix datagram, прогони `codecat-hook` — увидишь ровно тот JSON, который получает приложение. Для tty-веток заворачивай запуск в `script -q /dev/null`, он выделяет псевдотерминал.
 - **Панель CodeCat нельзя проверить инструментами управления экраном:** приложение `LSUIElement`, `request_access` его не находит. Всё про наведение, курсор и клики проверяет только человек.
 
-## Известные мелочи, до которых не дошли руки
+## Known loose ends
 
 Ни одна не блокирует:
 
 - Текущее состояние питания не выводится ни в панели, ни в меню-баре (спек MVP это обещал).
 - Grace-период (2 мин) и порог батареи (15%) зашиты константами.
-- Нет пункта меню «Удалить хуки», хотя `HooksInstaller.remove` написан и покрыт тестами.
 - Меню-бар перестраивается целиком на каждое событие сессии.
 - `hooksInstalled` вычисляется только при запуске.
-- Дублируется отображение `SessionStatus` в русские подписи между `AppDelegate` и `DetailsPanelView`.
 - Тумблер «показывать котика» есть только в меню-баре, в панели его нет.
 - Звук повторяется при переходе `.waiting(1) → .waiting(2)`.
 - `AppState.presentJumpAlert` поднимает своё окно поверх возможного системного диалога разрешения — проверить без запуска диалога не вышло.
 - `jumpDeadline` — один максимум на все параллельные переходы, поэтому зависший короткий не отмечается, пока идёт длинный.
 - Крылья острова перекрывают строку меню: клики по меню приложения слева и по статус-иконкам справа в зоне крыльев достаются острову. Это цена выбранной формы, крылья сделаны минимально возможными. С появлением галтелей у кромки (2026-09-01) окно шире корпуса ещё на 10 pt с каждой стороны — перекрытие выросло на столько же.
 
-## Что пользователь ещё не проверял глазами
+## What the user has still not seen with their own eyes
 
-Плавность анимаций, перетаскивание котика и сохранение позиции между запусками, отклик переключателей в панели деталей, сводка «пока тебя не было» после разблокировки экрана, весь переход к сессии (пункты 9–12) и весь переключатель обликов (пункты 13–16). Спрайтовые облики проверены только рендером в PNG — все 45 сочетаний «облик × состояние» отрисованы и просмотрены, но в живом приложении их никто не видел. И весь остров целиком — второй режим отображения, в вырезе экрана, в живом приложении никто не видел: пункты 17–26.
+Плавность анимаций, перетаскивание котика и сохранение позиции между запусками, отклик переключателей в панели деталей, сводка «пока тебя не было» после разблокировки экрана, весь переход к сессии (пункты 10–13) и весь переключатель обликов (пункты 14–17). Спрайтовые облики проверены только рендером в PNG — все 45 сочетаний «облик × состояние» отрисованы и просмотрены, но в живом приложении их никто не видел. И весь остров целиком — второй режим отображения, в вырезе экрана, в живом приложении никто не видел: пункты 18–27.
 
-## Открытый вопрос
+## Open question
 
 Отчёт `docs/cat-assets-research.md` содержит и покупные варианты (самый выгодный — около 6 долларов). Пользователь говорил, что готов купить, если недорого; решение не принято и в спек обликов не входит.

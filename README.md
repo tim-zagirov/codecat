@@ -1,228 +1,193 @@
 # CodeCat 🐈
 
-Меню-бар утилита для macOS: следит за сессиями Claude Code, не даёт маку
-уснуть, пока агенты работают, и показывает котика-оверлея, который эмоциями
-отражает состояние работы.
+A menu-bar cat that watches your Claude Code sessions, keeps the Mac awake while
+agents are working, and waves a paw when one of them needs you.
 
-## Возможности
+*[Русская версия](README.ru.md)*
 
-- Трекинг всех локальных сессий Claude Code (CLI и desktop) в реальном времени.
-- Котик на экране: спит / работает / машет лапой, когда агент ждёт тебя.
-- Переход к сессии: клик по строке в панели деталей переключает туда, где
-  эта сессия живёт.
-- Мак не засыпает, пока идёт работа, и сам засыпает, когда всё закончилось.
-- Режим закрытой крышки: закрой макбук и уходи — агенты доработают.
-- Кейс коворкинга: блокируй экран — работа продолжается.
-- «Пока тебя не было»: сводка событий после разблокировки.
+## How it works, in 30 seconds
 
-## Сборка
+Claude Code fires hooks on five session events. CodeCat installs a tiny binary
+(`codecat-hook`) as the handler for all five; it forwards each event over a unix
+socket to the app, which keeps the state of every live session. Transcripts in
+`~/.claude/projects` fill in the detail — which project, and what the agent is
+doing right now ("editing api.ts", "running a command").
 
-    make app          # dist/CodeCat.app, подпись ad-hoc — для работы на своей машине
-    make sign         # то же, но подпись Developer ID + hardened runtime
-    make release      # + нотаризация, stapler и dist/CodeCat-<версия>.dmg
-    swift test        # прогонит тесты
+That state drives three things: the cat's pose, an IOKit power assertion that
+keeps the Mac awake while any agent is working, and a list you can click to jump
+straight to the terminal tab a session lives in.
 
-`make app` достаточно, пока приложение не покидает эту машину. Для раздачи нужен
-`make release`, а для него — сертификат `Developer ID Application` и заведённый
-профиль нотаризации:
+Nothing leaves the machine. There is no network code in CodeCat at all.
 
-    security find-identity -v -p codesigning | grep "Developer ID"
-    xcrun notarytool store-credentials codecat \
-        --apple-id ТВОЙ@EMAIL --team-id TEAMID --password app-specific-password
+## Install
 
-Маркетинговая версия правится руками в `Resources/Info.plist`; `CFBundleVersion`
-собирается из числа коммитов, поэтому две сборки всегда различимы — версия видна
-пунктом в меню.
+Download the latest `CodeCat-<version>.dmg` from
+[Releases](https://github.com/tim-zagirov/codecat/releases), open it, drag
+`CodeCat.app` to `/Applications`, and launch it. The build is signed and
+notarised, so it opens on a double-click — no right-click-and-Open dance.
 
-**Почему hardened runtime требует entitlement.** Нотаризация невозможна без
-hardened runtime, а он по умолчанию запрещает слать Apple events — то есть ломает
-переход к сессии, с `errAEEventNotPermitted (-1743)`, независимо от того, что
-разрешено в системных настройках. Право возвращает
-`Resources/CodeCat.entitlements`. На ad-hoc сборке этой поломки не видно вовсе:
-там hardened runtime нет. `make sign` проверяет, что entitlement действительно
-попал в подпись, а не только в файл.
+Then, from the cat's menu:
 
-## Установка
+1. **Install Claude Code hooks…** — without them CodeCat still works, but it
+   learns about session changes late (from transcripts rather than events).
+2. Optionally **Closed-lid mode** — asks for an administrator password once.
 
-1. Перенеси `dist/CodeCat.app` в `/Applications` и запусти.
-2. В меню котика выбери «Установить хуки Claude Code» — точные сигналы
-   «агент ждёт тебя» / «агент закончил».
-3. (Опционально) Включи «Режим закрытой крышки» — попросит пароль
-   администратора один раз.
+A Homebrew cask is planned but does not exist yet.
 
-Пересобрал — обязательно скопируй в `/Applications`, иначе хуки продолжат звать
-старый бинарник:
+Requires macOS 14 or later. Apple silicon and Intel.
 
-    make app && pkill -x CodeCat
-    rm -rf /Applications/CodeCat.app && cp -R dist/CodeCat.app /Applications/
-    open -a /Applications/CodeCat.app
+## What it does
 
-## Удаление
+- **Tracks every local Claude Code session** — CLI and the desktop app — in real
+  time.
+- **Shows a cat.** It sleeps when nothing is running, works while agents work,
+  waves a paw when one is waiting for you, and stretches out and settles down
+  when the work is done. Eight sprite skins to pick from.
+- **Two ways to show it:** a floating cat you drag where you like, or an
+  *island* — a black slab drawn around the notch of a built-in display, which
+  expands into a menu on hover.
+- **Jumps to a session.** Click a row and you land in the exact terminal tab
+  that session is running in.
+- **Keeps the Mac awake** while agents work, and lets it sleep again once they
+  stop.
+- **Closed-lid mode.** Shut the laptop and walk away; the agents keep going.
+- **"While you were away"** — a summary of what happened while the screen was
+  locked.
 
-1. Меню котика → «Убрать хуки Claude Code…» — вычищает записи CodeCat из
-   `~/.claude/settings.json`, не трогая чужие хуки и остальные настройки.
-   Сделай это **до** удаления бандла: иначе в настройках останутся пять записей,
-   зовущих несуществующий бинарник, на каждое событие каждой сессии.
-2. Если включал режим крышки:
-   `sudo bash /Applications/CodeCat.app/Contents/Resources/uninstall-lid-mode.sh`
-3. `rm -rf /Applications/CodeCat.app`
-4. `rm -rf ~/Library/Application\ Support/CodeCat` — сокет, кэш маршрутов, лог.
+## Hooks: what gets written, and how to take it back
 
-## Лог и разбор неисправностей
+**Install Claude Code hooks…** merges one entry per event into
+`~/.claude/settings.json`:
 
-`~/Library/Application Support/CodeCat/codecat.log` — приложение `LSUIElement`, у
-него нет ни окна, ни консоли, и это единственный способ узнать, что происходило
-внутри.
+```jsonc
+{
+  "hooks": {
+    "SessionStart":     [{ "hooks": [{ "type": "command", "command": "/Applications/CodeCat.app/Contents/MacOS/codecat-hook" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "/Applications/CodeCat.app/Contents/MacOS/codecat-hook" }] }],
+    "Stop":             [{ "hooks": [{ "type": "command", "command": "/Applications/CodeCat.app/Contents/MacOS/codecat-hook" }] }],
+    "Notification":     [{ "hooks": [{ "type": "command", "command": "/Applications/CodeCat.app/Contents/MacOS/codecat-hook" }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "/Applications/CodeCat.app/Contents/MacOS/codecat-hook" }] }]
+  }
+}
+```
 
-    tail -f ~/Library/Application\ Support/CodeCat/codecat.log
+Five events, one binary, no arguments. Every other key in the file — your
+permission allowlist, MCP servers, other people's hooks — is preserved exactly,
+and installing twice does not duplicate anything.
 
-Пишут два процесса, и метка источника в строке — главное, что там есть:
-`[hook]` — событие ушло из хука, `[app]` — приложение его приняло. Строка `[hook]`
-без парной `[app]` означает, что событие потерялось между ними; отсутствие обеих
-означает, что Claude Code хук не позвал (хуки не установлены или установлены на
-другой бинарник). Снаружи обе неисправности выглядят одинаково — котик просто не
-шевелится.
+`codecat-hook` reads the event on stdin, sends it to
+`~/Library/Application Support/CodeCat/hook.sock`, and exits. It never blocks
+Claude Code: if CodeCat is not running, the send fails, the hook writes one line
+to the log and exits 0.
 
-Пара приходит в порядке `[app]`, потом `[hook]`: `sendto` в хуке возвращается до
-того, как получатель дочитал, поэтому приложение успевает записать первым. Метка
-времени у обеих строк совпадает до миллисекунды.
+**To remove them:** cat's menu → **Remove Claude Code hooks…**. It deletes only
+entries whose command is CodeCat's own and leaves everything else alone. Do this
+*before* deleting the app — otherwise five entries pointing at a binary that no
+longer exists stay in your settings, and Claude Code will try to run them on
+every event of every session.
 
-Файл ротируется приложением на 1 МБ в `codecat.log.1`, то есть занимает не больше
-двух мегабайт. Наружу не уходит ничего: CodeCat читает только `~/.claude/projects`
-и пишет только в `~/Library/Application Support/CodeCat`, сети не касается.
+Full uninstall:
 
-## Как это работает
+```bash
+# 1. Remove the hooks from the menu first, then:
+sudo bash /Applications/CodeCat.app/Contents/Resources/uninstall-lid-mode.sh  # if you enabled lid mode
+rm -rf /Applications/CodeCat.app
+rm -rf ~/Library/Application\ Support/CodeCat
+```
 
-- События хуков Claude Code приходят в unix-сокет через `codecat-hook`.
-- Транскрипты в `~/.claude/projects` дают детали (проект, текущая активность).
-- `codecat-hook` — потомок процесса `claude`, поэтому по дереву предков
-  находит приложение-владельца сессии (самый внешний `.app` в цепочке) и её
-  терминал, и добавляет это в пересылаемое событие. По этим данным клик по
-  строке сессии переключает пользователя к ней.
-- Пока есть работающая сессия, удерживается IOKit power assertion;
-  режим крышки дополнительно переключает `pmset disablesleep`
-  (sudoers-правило только на эти две команды + сброс флага при загрузке).
+## Closed-lid mode, and exactly what it may do as root
 
-## Что проверено, а что нет
+macOS sleeps when you close the lid, which kills whatever your agents were in the
+middle of. Closed-lid mode toggles `pmset -a disablesleep` while agents are
+working and clears it when they stop.
 
-Автоматически проверено (см. `swift test` и сборку `make app` в CI/локально):
+`pmset -a disablesleep` needs root, so enabling this once runs
+`scripts/install-lid-mode.sh` under an administrator password. It installs
+exactly two things.
 
-- Вся логика в `CodeCatCore` (390 тестов): парсинг хуков и транскриптов,
-  агрегатный статус сессий, power assertion, away-log, установка хуков
-  в `settings.json`, обход дерева процессов и выбор маршрута перехода.
-- Бандл `dist/CodeCat.app` действительно запускается (`open`), держится
-  живым несколько секунд и штатно завершается.
-- `codecat-hook` внутри собранного бандла принимает синтетический payload
-  события `SessionStart` и завершается с кодом 0.
-- **Сквозная цепочка проверена скриншотами на реальном рабочем столе.**
-  Запущенный `dist/CodeCat.app` рисует спящего котика поверх чужих окон;
-  после `SessionStart` он так и остаётся спящим (сессию открыли, работы в
-  ней ещё нет — см. ниже), а после `Notification` — поднимает
-  лапу и бейдж становится красным. То есть связка
-  `codecat-hook` → unix-сокет → `SessionStore` → агрегатный статус → маскот
-  работает целиком.
+**1. A sudoers rule at `/etc/sudoers.d/codecat`**, for your user only:
 
-Не проверено автоматически — нужен пользователь с доступом к GUI/паролю
-администратора:
+```
+<you> ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
+```
 
-- **Режим закрытой крышки ни разу не запускался.** Скрипт
-  `scripts/install-lid-mode.sh` требует пароль администратора (правит
-  sudoers и ставит демона), поэтому не выполнялся ни при разработке, ни при
-  финальной проверке. Работоспособность `pmset disablesleep` и сброс флага
-  при загрузке — не подтверждены на реальной машине.
-- **Анимации и перетаскивание котика не подтверждены.** Позы проверены
-  скриншотами (см. выше), но плавность движения — дыхание, качание хвоста,
-  взмах лапы — статичный снимок показать не может. Так же не проверены
-  перетаскивание котика мышью и сохранение его позиции между запусками.
-  Смотри пункты 1, 3, 4, 5 из ручного чек-листа ниже.
-- Полный сценарий «установить хуки → запустить `claude`-сессию → дождаться
-  вопроса агента → assertion в `pmset -g assertions`» — не прогонялся
-  сквозным образом с реальным Claude Code CLI.
-- **Переход к сессии не кликался руками.** Сбор маршрута проверен на живом
-  дереве процессов (хук находит `/Applications/Claude.app` и его PID),
-  AppleScript для Terminal.app проверен компиляцией против настоящего словаря
-  приложения, вся логика выбора маршрута и сообщений покрыта тестами. Но
-  подсветка строки, курсор-указатель, само переключение во вкладку, диалог
-  разрешения на автоматизацию и видимость сообщений об ошибке — только
-  глазами: пункты 9–12 чек-листа. Ветка iTerm2 не проверялась вовсе —
-  iTerm2 на машине не установлен.
+Two literal command lines. Not `pmset` in general, not a wildcard — the two exact
+argument vectors CodeCat runs and nothing else. `visudo -cf` validates the file
+before it is installed.
 
-## Переход к сессии
+**2. A launch daemon, `com.codecat.sleepreset`**, which every 60 seconds asks: is
+CodeCat running? If yes, it does nothing at all. If no, and `SleepDisabled` is
+still 1, it clears it. That is the safety net for a crash or a Force Quit while
+the flag was set — without it the flag would survive until the next reboot. It
+checks before it writes, so an idle Mac is not having its energy preferences
+rewritten by root once a minute forever.
 
-Клик по строке сессии в панели деталей переключает туда, где она работает:
+`scripts/uninstall-lid-mode.sh` removes both.
 
-- Сессия запущена в Terminal.app или iTerm2 → выбирается ровно та вкладка,
-  в которой она живёт. При первом переходе macOS один раз спросит разрешение
-  на автоматизацию терминала — это лёгкое разрешение, не Accessibility и не
-  Запись экрана. Если отказать, приложение всё равно будет выведено вперёд,
-  и CodeCat об этом скажет.
-- Сессия запущена в десктопном Claude → приложение выводится вперёд.
-  Навести на конкретное окно нельзя: у сессий десктопного Claude нет
-  собственных окон, все окна принадлежат главному процессу.
-- Сессия, о которой знает только вотчер транскриптов (запущена до CodeCat),
-  перехода не имеет: строка не подсвечивается, под ней подпись, почему.
+## Privacy
 
-Приложение подписывается ad-hoc (`codesign -s -`), а macOS привязывает
-разрешение на автоматизацию к подписи. Поэтому после каждой пересборки и
-переустановки разрешение спросят заново — это не баг.
+- **No network.** CodeCat makes no outbound connections. There is no analytics,
+  no telemetry, no crash reporting, no update check.
+- **Reads** `~/.claude/projects` (session transcripts) and
+  `~/.claude/settings.json` (only to add or remove its own hook entries).
+- **Writes** only to `~/Library/Application Support/CodeCat` — the socket, a
+  route cache, and a log.
+- The log at `~/Library/Application Support/CodeCat/codecat.log` rotates at 1 MB
+  and never exceeds two files. It stays on your disk; nothing reads it but you.
 
-### Ручной чек-лист
+## Building from source
 
-1. Запустить `dist/CodeCat.app` — котик и иконка в меню-баре появились.
-2. Установить хуки из меню → `cat ~/.claude/settings.json` содержит `codecat-hook` во всех ПЯТИ событиях: `SessionStart`, `UserPromptSubmit`, `Stop`, `Notification`, `SessionEnd`.
-3. Открыть `claude`-сессию и ничего не запускать → котик спит, бейджа нет: открытая
-   вкладка — это не работающий агент.
-4. Дать задачу → котик работает, бейдж «1», assertion в `pmset -g assertions`.
-5. Дождаться вопроса/permission от агента → котик машет лапой, бейдж красный.
-6. Ответить, дождаться конца → котик доволен, через ~2 мин assertion отпущен.
-7. Заблокировать экран во время работы агента, разблокировать после конца → в панели блок «Пока тебя не было».
-8. Включить режим крышки (пароль) → при работающем агенте `pmset -g | grep SleepDisabled` = 1, после конца + grace = 0.
-9. Выйти из приложения → хуки можно оставить (codecat-hook тихо выходит, Claude Code не страдает).
-10. Открыть панель, навести на строку сессии → строка подсвечивается, курсор — указатель.
-11. Кликнуть по строке сессии, запущенной в Terminal.app → разрешение на автоматизацию
-    (один раз), затем переключение ровно в её вкладку, панель закрывается.
-12. Кликнуть по строке сессии десктопного Claude → приложение выходит вперёд, панель закрывается.
-13. Отказать в разрешении на автоматизацию → приложение всё равно выведено вперёд,
-    показано сообщение про разрешение (сообщение должно быть видно, а не спрятано за окном).
-14. Открыть панель → сетка обликов 4×2, все восемь превью анимированы,
-    горизонтальной прокрутки нет.
-15. Кликнуть по превью → кот на экране меняется сразу, панель не закрывается,
-    у выбранного облика рамка.
-16. Перезапустить приложение → выбранный облик сохранился.
-17. Раскрыть «Об ассетах» → три набора, у mxmaze видно «CC BY 4.0» и имя автора.
-18. Остров совпадает по высоте с вырезом; шов между чёрной плашкой и вырезом не виден на светлых обоях.
-19. Кот в крыле анимируется, пиксели квадратные (спрайт не мыльный), спрайт не обрезан сверху и снизу. Самые высокие облики (mxmaze, cat-4, cat-5) заполняют строку меню целиком — если это выглядит тесно, запасной ход описан в спеке: поднять высоту острова до `safeAreaInsets.top + 4`.
-20. Счётчик справа: точка в покое, число при сессиях, красное число когда агент ждёт.
-21. Наведение открывает короткое меню; переход мышью с острова на меню его не закрывает; уход в сторону закрывает примерно через треть секунды.
-22. Клик открывает полное меню; тумблеры, выбор облика и кнопка хуков в нём работают; клик мимо закрывает; повторный клик по острову закрывает.
-23. Включить тумблер «Прятать котика, когда сессий нет» при нуле сессий → маскот исчезает; запустить сессию → возвращается сам, без клика по меню. Проверить в ОБОИХ видах: до 0.2.0 настройку читал только остров, в плавающем режиме тумблер стоял мёртвым.
-24. Клик по строке сессии прыгает в терминал и закрывает меню.
-25. Переключение вида в обе стороны: плавающий кот возвращается на сохранённое место, остров исчезает без остатка; панель плавающего режима после распила выглядит и ведёт себя как раньше.
-26. На машине, где встроенный экран не главный и стоит не в начале координат в настройках «Расположение» дисплеев (Системные настройки → Дисплеи → Расположение), остров всё равно на месте — не сдвинут и не обрезан. Весь расчёт предполагает, что вспомогательные области выреза приходят в тех же глобальных координатах, что и `NSScreen.frame`; на целевой машине встроенный экран стоит в начале координат, поэтому две интерпретации неразличимы и ни один тест их не разводит.
-27. Выбрать «Остров» на экране без выреза (внешний монитор, закрытая крышка) → под переключателем вида появляется подсказка «На этом экране нет выреза — остров не появится», а не молчаливое исчезновение маскота.
-28. В меню-баре видна версия — «CodeCat <версия> (<build>)», и число в скобках совпадает с `git rev-list --count HEAD` той сборки, что стоит.
-29. `tail -f` лога во время работы агента: на каждое событие появляется пара строк — `[app] событие …` и `[hook] отправлено …`. Порядок именно такой: приложение успевает принять датаграмму и записать раньше, чем хук допишет свою строку (`sendto` возвращается до того, как получатель дочитал). Одиночная `[hook]` без парной `[app]` означает потерю между процессами.
-30. «Убрать хуки Claude Code…» → спрашивает подтверждение, после согласия пункт меняется на «Установить хуки Claude Code…», в `~/.claude/settings.json` не осталось `codecat`, а все прочие ключи (`enabledPlugins`, `statusLine`, `tui`, …) на месте. Установить обратно — все пять событий вернулись.
-31. Тумблер «Прятать котика, когда сессий нет» есть и в меню-баре (клик по иконке кота), не только в панели настроек. Это не удобство: включив его в панели при нуле сессий, пользователь убирает с экрана и маскота, и меню внутри него — выключить обратно можно только отсюда.
-32. **Перезапуск при работающем агенте.** Выйти из приложения, пока агент работает, и сразу запустить снова → маскот показывает работу за доли секунды, а не через десятки секунд. До 0.2.0 приложение не узнавало о живых сессиях никак, пока агент не напишет в транскрипт: замерено от 4 до 89 секунд слепоты. С включённым «прятать» маскота в это время не было на экране вовсе.
-33. **Выход при включённом режиме крышки.** Убедиться, что `pmset -g | grep SleepDisabled` = 1, затем выйти из приложения → экран НЕ гаснет мгновенно, мак ведёт себя как обычно. Раньше `pmset -a disablesleep 0` из `resetOnExit()` ронял мак в сон через 37 мс: ядро перечитывало настройки и видело простой, накопленный за всё время, пока флаг стоял. Проверить заодно, что `SleepDisabled` после выхода всё-таки стал 0.
-34. **Только для релизной сборки.** После `make release` на **другом** маке: скачать `.dmg`, открыть двойным кликом без правого клика и без «Всё равно открыть», перенести в `/Applications`, запустить. Затем — клик по строке сессии в Terminal.app: переход обязан сработать. Это единственная проверка entitlement на Apple events; на ad-hoc сборке hardened runtime нет, и поломка там не воспроизводится.
+```bash
+git clone https://github.com/tim-zagirov/codecat.git
+cd codecat
+swift test        # 394 tests
+make app          # dist/CodeCat.app, ad-hoc signed — fine on your own machine
+```
 
-## Облики котика
+`make app` is all you need for local use. Distribution needs a Developer ID
+certificate and a notarisation profile — see [docs/release.md](docs/release.md)
+for `make sign` / `make notarize` / `make release` and the exact credentials to
+set up.
 
-Доступны восемь спрайтовых обликов из трёх бесплатных наборов: шесть котов
-LuizMelo (CC0), кот Elthen (условия автора) и котёнок mxmaze (CC BY 4.0,
-атрибуция обязательна). Переключаются в панели деталей сеткой живых превью;
-там же строка «Об ассетах» с авторами, лицензиями и ссылками. Выбор хранится в
-`UserDefaults` (`mascotSkin`), по умолчанию — Рыжий кот LuizMelo
-(`luizmelo-cat-1`). Нарисованный кот, который раньше был обликом по умолчанию,
-больше не выбирается — он остался в коде только как аварийная отрисовка на
-случай, если файлы облика не читаются.
+One skin ("Silver") is not in this repository: its author allows using the
+sprites but not redistributing the files. `make bundle` runs
+`scripts/fetch-optional-assets.sh`, which downloads it from itch.io. If that
+fails — offline, or itch.io changed its download flow — the build succeeds and
+the skin simply does not appear. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-В наборах есть не все пять состояний, которые показывает маскот. В таких случаях
-берётся ближайшая анимация **того же** набора — стили не смешиваются никогда, а
-смысловое различие несёт бейдж. Подробности и таблицы соответствий:
-`docs/superpowers/specs/2026-08-30-mascot-skins-design.md`.
+### What is and is not verified
 
-Ассеты лежат в `Sources/CodeCatApp/Skins/` вместе с `CREDITS.md` и оригинальными
-файлами лицензий; `fetch-assets.sh` воспроизводит скачивание с itch.io.
+Automatically, on every `swift test`: all of `CodeCatCore` — hook and transcript
+parsing, aggregate session status, the power assertion, the away log, the
+`settings.json` rewrite, the process-tree walk that picks a jump route, the
+sprite registry against the real PNGs, and both string catalogs against the call
+sites. The build additionally checks that the assembled `.app` really contains
+the skins and the localisations.
+
+By hand, because an `LSUIElement` app has no window for a screen-control tool to
+find: everything in [docs/verification-checklist.md](docs/verification-checklist.md).
+Closed-lid mode in particular has never run end to end on a machine — it needs an
+administrator password, so it was never executed during development.
+
+### How this was built
+
+Every line of CodeCat was written by AI agents, driven by specs. If that is the
+interesting part for you, [docs/how-this-was-built.md](docs/how-this-was-built.md)
+has the workflow, the timeline, and the one review lesson that cost the most.
+
+## Credits and licence
+
+CodeCat's source code is [MIT](LICENSE) © 2026 Timur Zagirov.
+
+The cats are not. Sprite artwork belongs to its authors and ships under their
+terms — the full list, with sources and licences, is in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md):
+
+- **LuizMelo**, [Pet Cats Pack](https://luizmelo.itch.io/pet-cat-pack) — CC0 1.0.
+  Six of the eight skins.
+- **Maze.Bit.Boutique (mxmaze)**, [16-Bit Kitty](https://mxmaze.itch.io/16-bit-kitty-free)
+  — **CC BY 4.0**. Attribution is required, and is shown in the app under *About
+  the assets* as well as here.
+- **Elthen's Pixel Art Shop**,
+  [2D Pixel Art Cat Sprites](https://elthen.itch.io/2d-pixel-art-cat-sprites) —
+  author's own terms. Downloaded at build time, not redistributed here.
