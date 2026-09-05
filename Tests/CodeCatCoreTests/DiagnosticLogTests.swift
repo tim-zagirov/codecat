@@ -50,16 +50,16 @@ final class DiagnosticFormatTests: XCTestCase {
     }
 
     func testRedactCollapsesHomeButKeepsProjectNames() {
-        let text = "cwd=/Users/tim/Projects/secret-app tty=/dev/ttys003"
-        let out = DiagnosticFormat.redact(text, home: "/Users/tim")
+        let text = "cwd=/Users/dev/Projects/secret-app tty=/dev/ttys003"
+        let out = DiagnosticFormat.redact(text, home: "/Users/dev")
         XCTAssertEqual(out, "cwd=~/Projects/secret-app tty=/dev/ttys003")
         XCTAssertTrue(out.contains("secret-app"), "the project name has to stay — it is what identifies the session")
-        XCTAssertFalse(out.contains("/Users/tim"), "the login must not leak into the clipboard")
+        XCTAssertFalse(out.contains("/Users/dev"), "the login must not leak into the clipboard")
     }
 
     func testRedactHandlesTrailingSlashAndEmptyHome() {
-        XCTAssertEqual(DiagnosticFormat.redact("/Users/tim/x", home: "/Users/tim/"), "~/x")
-        XCTAssertEqual(DiagnosticFormat.redact("/Users/tim/x", home: ""), "/Users/tim/x")
+        XCTAssertEqual(DiagnosticFormat.redact("/Users/dev/x", home: "/Users/dev/"), "~/x")
+        XCTAssertEqual(DiagnosticFormat.redact("/Users/dev/x", home: ""), "/Users/dev/x")
     }
 }
 

@@ -12,22 +12,22 @@ final class LidHelperInstallTests: XCTestCase {
     }
 
     func testAppleScriptHandlesPathWithSpaces() {
-        let script = LidHelperInstall.appleScript(forScriptAt: "/Users/tz/My Applications/CodeCat.app/install-lid-mode.sh")
+        let script = LidHelperInstall.appleScript(forScriptAt: "/Users/dev/My Applications/CodeCat.app/install-lid-mode.sh")
         // The path must stay a single shell argument, i.e. single-quoted.
-        XCTAssertTrue(script.contains("bash '/Users/tz/My Applications/CodeCat.app/install-lid-mode.sh'"))
+        XCTAssertTrue(script.contains("bash '/Users/dev/My Applications/CodeCat.app/install-lid-mode.sh'"))
     }
 
     func testAppleScriptEscapesSingleQuoteInPath() {
-        let script = LidHelperInstall.appleScript(forScriptAt: "/Users/tz/it's here/install-lid-mode.sh")
+        let script = LidHelperInstall.appleScript(forScriptAt: "/Users/dev/it's here/install-lid-mode.sh")
         // Shell-level quoting turns `'` into `'\''` (one backslash); that backslash then
         // goes through the AppleScript-literal escaping pass too, so it doubles up in the
         // final string — this is correct: `do shell script` un-escapes it back down to a
         // single backslash before the shell ever sees it.
-        XCTAssertTrue(script.contains("'/Users/tz/it'\\\\''s here/install-lid-mode.sh'"))
+        XCTAssertTrue(script.contains("'/Users/dev/it'\\\\''s here/install-lid-mode.sh'"))
     }
 
     func testAppleScriptEscapesDoubleQuoteInPathForAppleScriptLiteral() {
-        let script = LidHelperInstall.appleScript(forScriptAt: "/Users/tz/weird\"path/install-lid-mode.sh")
+        let script = LidHelperInstall.appleScript(forScriptAt: "/Users/dev/weird\"path/install-lid-mode.sh")
         // The whole shell command sits inside a double-quoted AppleScript string,
         // so any `"` from the path must come through escaped as \" in that literal.
         XCTAssertTrue(script.contains("weird\\\"path"))
@@ -35,7 +35,7 @@ final class LidHelperInstallTests: XCTestCase {
     }
 
     func testAppleScriptEscapesBackslashInPathForAppleScriptLiteral() {
-        let script = LidHelperInstall.appleScript(forScriptAt: "/Users/tz/weird\\path/install-lid-mode.sh")
+        let script = LidHelperInstall.appleScript(forScriptAt: "/Users/dev/weird\\path/install-lid-mode.sh")
         XCTAssertTrue(script.contains("weird\\\\path"))
     }
 

@@ -69,15 +69,16 @@ final class TranscriptParserTests: XCTestCase {
             #"{"type":"assistant","timestamp":"2026-08-28T10:00:00.123Z"}"#))
     }
 
-    // A real subagent line, taken from this machine's own archive. Its sessionId is
-    // the UUID of the PARENT session, not a session of the subagent's own.
+    // A subagent line in the shape Claude Code really writes, with every identifier
+    // and path replaced by a synthetic one. What matters is the shape: its sessionId
+    // is the UUID of the PARENT session, not a session of the subagent's own.
     func testRealSubagentLineParsesAsSubagentWithParentSessionId() {
         let l = """
-        {"parentUuid":"5f076459-26e1-4797-8fce-44631197ee44","isSidechain":true,"agentId":"a07414a563049c3f9","message":{"model":"claude-sonnet-5","id":"msg_011CeZbM5syeCksdghiXNpSU","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01X2GfzCULGks4E6AbFPAvSv","name":"Bash","input":{"command":"cd /Users/timzagirov/Projects/vibe-coding-utility/.claude/worktrees/codecat-mascot-skins-spec-b6a4de\\nswift build 2>&1 | tail -80"},"caller":{"type":"direct"}}],"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":2,"cache_creation_input_tokens":465,"cache_read_input_tokens":91762,"cache_creation":{"ephemeral_5m_input_tokens":465,"ephemeral_1h_input_tokens":0},"output_tokens":3,"service_tier":"standard","inference_geo":"not_available"},"diagnostics":null},"requestId":"req_011CeZbM5861NqheXad4BYwg","attributionAgent":"general-purpose","type":"assistant","uuid":"154ceedc-addd-4502-a538-b568c47d7ffd","timestamp":"2026-08-30T20:50:24.858Z","effort":"high","userType":"external","entrypoint":"claude-desktop","cwd":"/Users/timzagirov/Projects/vibe-coding-utility/.claude/worktrees/codecat-mascot-skins-spec-b6a4de","sessionId":"4a0d5329-c0ff-4f35-afb2-0a1ffa28f7c1","version":"2.1.247","gitBranch":"claude/codecat-mascot-skins-spec-b6a4de"}
+        {"parentUuid":"11111111-2222-3333-4444-555555555555","isSidechain":true,"agentId":"a1b2c3d4e5f60718","message":{"model":"claude-sonnet-5","id":"msg_01ExampleExampleExample","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_01ExampleExampleExampl","name":"Bash","input":{"command":"cd /Users/dev/Projects/example/.claude/worktrees/example-branch\\nswift build 2>&1 | tail -80"},"caller":{"type":"direct"}}],"stop_reason":null,"stop_sequence":null,"stop_details":null,"usage":{"input_tokens":2,"cache_creation_input_tokens":465,"cache_read_input_tokens":91762,"cache_creation":{"ephemeral_5m_input_tokens":465,"ephemeral_1h_input_tokens":0},"output_tokens":3,"service_tier":"standard","inference_geo":"not_available"},"diagnostics":null},"requestId":"req_01ExampleExampleExample","attributionAgent":"general-purpose","type":"assistant","uuid":"66666666-7777-8888-9999-aaaaaaaaaaaa","timestamp":"2026-08-30T20:50:24.858Z","effort":"high","userType":"external","entrypoint":"claude-desktop","cwd":"/Users/dev/Projects/example/.claude/worktrees/example-branch","sessionId":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","version":"2.1.0","gitBranch":"claude/example-branch"}
         """
         let a = TranscriptParser.parseLine(l)
         XCTAssertEqual(a?.isSubagent, true)
-        XCTAssertEqual(a?.sessionId, "4a0d5329-c0ff-4f35-afb2-0a1ffa28f7c1")
+        XCTAssertEqual(a?.sessionId, "bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
     }
 
     func testOrdinaryAssistantLineIsNotASubagent() {
