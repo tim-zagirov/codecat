@@ -4,7 +4,7 @@ A menu-bar cat that watches your Claude Code sessions, keeps the Mac awake while
 agents are working, and waves a paw when one of them needs you.
 
 
-![The island in the notch, with two agents working](docs/media/island-badge.png)
+![The cat asleep, then working with two agents, then waving because one needs you, then stretching out when the work is done — in the notch island and as the floating cat](docs/media/demo.gif)
 
 ## How it works, in 30 seconds
 
