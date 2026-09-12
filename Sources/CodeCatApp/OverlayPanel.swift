@@ -31,7 +31,11 @@ class OverlayPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         level = .floating
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        // `.stationary` keeps the panel on screen through Mission Control (Exposé),
+        // where every other window slides away; without it the cat vanished the
+        // moment the user pinched to see their desktops. Verified by screenshot: two
+        // otherwise identical panels, only the one with the flag survived.
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle, .stationary]
         // Dragging is implemented by hand in `CatHostingView` (see below), so the
         // window itself never needs to move the frame on a plain background click.
         isMovableByWindowBackground = false
