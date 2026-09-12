@@ -51,6 +51,18 @@ final class SystemJumpExecutor: JumpExecuting {
         case .application(let pid, let bundlePath):
             complete(activationOutcome(pid: pid, bundlePath: bundlePath), completion)
 
+        case .desktopSession(let pid, let bundlePath, let sessionID):
+            // Best case: the app opens that one chat. Anything short of it — no record
+            // for the session, or a link the app declines — degrades to the plain
+            // application route, so the user still gets a destination and the same
+            // outcomes (and alerts) as before.
+            if let local = DesktopSessionIndex.localSessionID(forCLISession: sessionID),
+               NSWorkspace.shared.open(DesktopSessionIndex.deepLink(localSessionID: local)) {
+                complete(.switchedToApplication, completion)
+            } else {
+                complete(activationOutcome(pid: pid, bundlePath: bundlePath), completion)
+            }
+
         case .terminalTab(let bundleID, let bundlePath, let pid, let tty):
             guard let source = TerminalJumpScript.script(bundleID: bundleID, tty: tty) else {
                 complete(activationOutcome(pid: pid, bundlePath: bundlePath), completion)
