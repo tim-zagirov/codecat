@@ -8,6 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 CodeCat uses [semantic versioning](https://semver.org/) — pre-1.0, so the minor
 number carries breaking changes.
 
+## [Unreleased]
+
+### Added
+- **Click a desktop-app session, land in that chat.** The desktop Claude app
+  keeps a record per Claude Code session with the CLI session id inside, and
+  registers `claude://code/continue?session=…`. Rows of desktop sessions now
+  open the exact chat through that link instead of just bringing the app
+  forward; when no record matches, the old behaviour stays as the fallback
+  (`DesktopSessionIndex`).
+
+### Fixed
+- **The cat no longer vanishes in Mission Control.** Both the floating cat and
+  the island stayed put through Space switches but slid away with everything
+  else on a pinch; one `.stationary` collection flag keeps them on screen.
+
 ## [0.3.0] — 2026-09-03
 
 The release that makes CodeCat publishable: an English interface, a licence, and

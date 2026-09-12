@@ -49,14 +49,35 @@ final class SessionRouterTests: XCTestCase {
     /// A tty in an app that is not a supported terminal is not actionable: there is
     /// no scripting interface to select a tab with.
     func testTtyInAnUnsupportedHostFallsBackToTheApplication() {
-        let s = session(tty: "/dev/ttys001")
+        let s = session(bundlePath: "/Applications/Warp.app", bundleID: "dev.warp.Warp-Stable",
+                        tty: "/dev/ttys001")
         XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
-                       .application(pid: 4242, bundlePath: "/Applications/Claude.app"))
+                       .application(pid: 4242, bundlePath: "/Applications/Warp.app"))
     }
 
-    func testDesktopAppRoutesToTheApplication() {
+    /// A tty in the desktop app (it does spawn Claude Code with one) changes nothing:
+    /// the app is not a scriptable terminal, so the deep link is still the best route.
+    func testTtyInTheDesktopAppStillRoutesToTheDesktopSession() {
+        let s = session(tty: "/dev/ttys001")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .desktopSession(pid: 4242, bundlePath: "/Applications/Claude.app",
+                                       sessionID: "s1"))
+    }
+
+    /// The desktop Claude app can open one exact chat by deep link, so its sessions
+    /// get their own route — resolved to a URL only at click time (see the executor),
+    /// which keeps this pure.
+    func testDesktopAppRoutesToTheDesktopSession() {
         XCTAssertEqual(SessionRouter.route(for: session(), isHostRunning: running),
-                       .application(pid: 4242, bundlePath: "/Applications/Claude.app"))
+                       .desktopSession(pid: 4242, bundlePath: "/Applications/Claude.app",
+                                       sessionID: "s1"))
+    }
+
+    /// Any other host without a tty is the plain application route.
+    func testUnknownHostRoutesToTheApplication() {
+        let s = session(bundlePath: "/Applications/Warp.app", bundleID: "dev.warp.Warp-Stable")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: running),
+                       .application(pid: 4242, bundlePath: "/Applications/Warp.app"))
     }
 
     /// A session the transcript watcher found on its own carries no route at all.

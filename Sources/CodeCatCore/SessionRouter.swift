@@ -4,9 +4,14 @@ import Foundation
 public enum JumpRoute: Equatable, Sendable {
     /// A terminal whose scripting interface can select the exact tab by tty.
     case terminalTab(bundleID: String, bundlePath: String, pid: pid_t, tty: String)
-    /// The owning application, brought forward. No window-level aiming: sessions of
-    /// the desktop Claude app are child processes with no windows of their own, so
-    /// picking a window would be guesswork (see the design spec).
+    /// A session of the desktop Claude app. The app opens one exact chat by deep
+    /// link (`DesktopSessionIndex`), which beats bringing the whole app forward. The
+    /// route carries the Claude Code session id only; the executor resolves it to
+    /// the app's own id at click time, so computing a route stays free of file I/O
+    /// and can be done for every visible row.
+    case desktopSession(pid: pid_t, bundlePath: String, sessionID: String)
+    /// The owning application, brought forward: any host that is neither a
+    /// scriptable terminal nor the desktop app.
     case application(pid: pid_t, bundlePath: String)
     case unavailable(reason: UnavailableReason)
 
@@ -17,6 +22,7 @@ public enum JumpRoute: Equatable, Sendable {
     public var bundlePath: String? {
         switch self {
         case .terminalTab(_, let bundlePath, _, _): return bundlePath
+        case .desktopSession(_, let bundlePath, _): return bundlePath
         case .application(_, let bundlePath): return bundlePath
         case .unavailable: return nil
         }
@@ -52,6 +58,9 @@ public enum SessionRouter {
         if let bundleID = session.hostBundleID, terminalBundleIDs.contains(bundleID),
            let tty = session.tty, !tty.isEmpty {
             return .terminalTab(bundleID: bundleID, bundlePath: bundlePath, pid: pid, tty: tty)
+        }
+        if session.hostBundleID == DesktopSessionIndex.desktopBundleID {
+            return .desktopSession(pid: pid, bundlePath: bundlePath, sessionID: session.id)
         }
         return .application(pid: pid, bundlePath: bundlePath)
     }
