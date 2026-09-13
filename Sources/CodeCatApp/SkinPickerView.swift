@@ -59,12 +59,11 @@ struct SkinPickerView: View {
     private func preview(_ skin: MascotSkin) -> some View {
         let isSelected = skin.id == appState.skinID
         // Every preview plays the "waiting" animation: that is the state the
-        // mascot exists for. `sessionCount: 0` is what suppresses the badge for
-        // the fallback `CatView` (its `MascotBadge` only draws when the count is
-        // positive), reachable here only for a skin that failed to load; the sprite
-        // path additionally passes `showsBadge: false` since the badge there is a
-        // separate view, not gated on the count. At 34pt the badge would cover the
-        // cat either way.
+        // mascot exists for. A `.sleeping`-tone indicator is what suppresses the badge
+        // for the fallback `CatView` (its `MascotBadge` draws nothing for that tone),
+        // reachable here only for a skin that failed to load; the sprite path
+        // additionally passes `showsBadge: false` since the badge there is a separate
+        // view, not gated on the tone. At 34pt the badge would cover the cat either way.
         let isHovered = hoveredSkin == skin.id
         // Scaled by the cell's smaller side: on the island the cell is wider than it is
         // tall, and dividing by the width would crop the cat top and bottom.
@@ -99,10 +98,12 @@ struct SkinPickerView: View {
         // emergency render, kept here so a broken skin still shows something in its
         // tile instead of an empty square.
         if let loaded = SpriteSheetStore.shared.load(skin) {
-            SpriteMascotView(loaded: loaded, status: .waiting(1), sessionCount: 0,
+            SpriteMascotView(loaded: loaded, status: .waiting(1),
+                             indicator: MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false),
                              maxFPS: previewFPS, showsBadge: false)
         } else {
-            CatView(status: .waiting(1), sessionCount: 0)
+            CatView(status: .waiting(1),
+                    indicator: MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false))
         }
     }
 

@@ -2,7 +2,7 @@ import SwiftUI
 import CodeCatCore
 
 /// A calm, hand-drawn orange cat that mirrors the aggregate state of every tracked
-/// session. Pure function of `status`/`sessionCount` — no timers, no app-state
+/// session. Pure function of `status`/`indicator` — no timers, no app-state
 /// access, no stored animation flags. Every repeating motion (breathing, tail
 /// sway, eye tracking, paw wave, badge pulse) is driven by its own
 /// `.phaseAnimator`, scoped to the exact subview it animates. That means each
@@ -32,11 +32,12 @@ private struct Triangle: Shape {
 
 struct CatView: View {
     let status: AggregateStatus
-    let sessionCount: Int
+    /// The single source the badge renders from — see `SessionStore.indicator`.
+    let indicator: MascotIndicator
 
-    init(status: AggregateStatus, sessionCount: Int) {
+    init(status: AggregateStatus, indicator: MascotIndicator) {
         self.status = status
-        self.sessionCount = sessionCount
+        self.indicator = indicator
     }
 
     private var bodyColor: Color {
@@ -57,7 +58,7 @@ struct CatView: View {
             } else {
                 sittingCat
             }
-            MascotBadge(sessionCount: sessionCount, status: status)
+            MascotBadge(indicator: indicator)
         }
         .frame(width: MascotLayout.canvasSize, height: MascotLayout.canvasSize)
     }

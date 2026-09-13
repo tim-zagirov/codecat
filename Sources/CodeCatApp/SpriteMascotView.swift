@@ -9,7 +9,8 @@ import CodeCatCore
 struct SpriteMascotView: View {
     let loaded: LoadedSkin
     let status: AggregateStatus
-    let sessionCount: Int
+    /// The single source the badge renders from — see `SessionStore.indicator`.
+    let indicator: MascotIndicator
     /// Previews in the details panel cap this: nine animations run at once there.
     var maxFPS: Double = 8
     var showsBadge: Bool = true
@@ -43,7 +44,7 @@ struct SpriteMascotView: View {
                 }
             }
             if showsBadge {
-                MascotBadge(sessionCount: sessionCount, status: status)
+                MascotBadge(indicator: indicator)
             }
         }
         .frame(width: canvasSize?.width ?? MascotLayout.canvasSize,
