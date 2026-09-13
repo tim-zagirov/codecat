@@ -88,7 +88,9 @@ struct MenuStyle {
         rowHover: Color.primary.opacity(0.08),
         rowRadius: 6,
         cellFill: Color.primary.opacity(0.05),
-        cellHover: Color.primary.opacity(0.05),
+        // Used to equal `cellFill`, so a hovered tile in the panel looked exactly
+        // like an idle one and read as a picture rather than a button.
+        cellHover: Color.primary.opacity(0.12),
         cellSelected: Color.primary.opacity(0.05),
         cellRadius: 6,
         cellSize: CGSize(width: 34, height: 34),
@@ -172,4 +174,67 @@ struct MenuSectionHeader: View {
                 .foregroundStyle(style.tertiary)
         }
     }
+}
+
+// MARK: - Hover
+
+/// The pointing hand while the cursor is over a pressable view.
+///
+/// The cursor is set with `NSCursor.set()` on every hover event rather than a
+/// `push()/pop()` pair, for the reason spelled out on `SessionListView.hovered`: a
+/// missed transition leaves `set()` wrong only until the next event, where a missed
+/// `pop()` leaves the hand stuck over the whole screen. `.active` re-asserts the hand
+/// on every move because AppKit re-applies its own cursor on each mouse-moved event.
+struct PointingHandOnHover: ViewModifier {
+    @State private var inside = false
+
+    func body(content: Content) -> some View {
+        content
+            .onContinuousHover { phase in
+                switch phase {
+                case .active:
+                    inside = true
+                    NSCursor.pointingHand.set()
+                case .ended:
+                    if inside {
+                        inside = false
+                        NSCursor.arrow.set()
+                    }
+                }
+            }
+            // A view that vanishes under the cursor (the credits collapsing, a tile
+            // scrolling away) never gets `.ended`; without this the hand would stay.
+            .onDisappear {
+                if inside {
+                    inside = false
+                    NSCursor.arrow.set()
+                }
+            }
+    }
+}
+
+/// Marks a line of the menu as pressable: the style's row highlight while the cursor
+/// is over it, plus the pointing hand. One modifier for every clickable line, so the
+/// question "can I press this?" is answered the same way on the panel and the island.
+struct HoverHighlight: ViewModifier {
+    @Environment(\.menuStyle) private var style
+    @State private var hovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.vertical, 3)
+            .padding(.horizontal, 4)
+            .background(
+                RoundedRectangle(cornerRadius: style.rowRadius)
+                    .fill(hovered ? style.rowHover : Color.clear))
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 }
+            .onDisappear { hovered = false }
+            .modifier(PointingHandOnHover())
+    }
+}
+
+extension View {
+    func pointingHandOnHover() -> some View { modifier(PointingHandOnHover()) }
+    func hoverHighlight() -> some View { modifier(HoverHighlight()) }
 }

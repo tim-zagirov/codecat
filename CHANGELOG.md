@@ -25,6 +25,13 @@ number carries breaking changes.
   as the built-in packs; anything larger is shrunk smoothly. Broken folders are
   skipped and named once in the log.
 
+- **Hover states on everything you can press.** Skin tiles in the floating
+  panel now highlight under the cursor (they used to look like pictures),
+  the "About the assets" row highlights and turns its chevron, both show the
+  pointing hand, and the floating cat lifts by a few percent under the cursor
+  (a still cursor change only under Reduce Motion). One `hoverHighlight`
+  modifier draws the same highlight on the panel and the island.
+
 ### Fixed
 - **The cat no longer vanishes in Mission Control.** Both the floating cat and
   the island stayed put through Space switches but slid away with everything
