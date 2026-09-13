@@ -94,7 +94,7 @@ final class PetSkinBuilderTests: XCTestCase {
     }
 
     func testSheetsThatDoNotDivideIntoTheGridAreRejected() {
-        XCTAssertNil(build(width: 1000, height: 1872))
+        XCTAssertNil(build(width: 1001, height: 1872))
         XCTAssertNil(build(width: 1536, height: 1000))
         XCTAssertNil(build(width: 0, height: 0))
         XCTAssertNil(build(width: -8, height: -9))
