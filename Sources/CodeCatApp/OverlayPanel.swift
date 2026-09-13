@@ -186,9 +186,15 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
 
     private func makeDetailsPanel() -> OverlayPanel {
         let panel = OverlayPanel(contentRect: NSRect(x: 0, y: 0, width: 290, height: 200), allowsKey: true)
-        panel.contentView = NSHostingView(rootView: DetailsPanelView(
+        // The rows and tiles inside compute their hover from the pointer the host
+        // publishes (`PointerTracker`), which needs mouse-moved events delivered.
+        panel.acceptsMouseMovedEvents = true
+        let hosting = HoverHostingView(rootView: DetailsPanelView(
             appState: appState,
-            onJump: { [weak self] in self?.hideDetails() }))
+            onJump: { [weak self] in self?.hideDetails() },
+            pointer: PointerTracker()))
+        hosting.pointer = hosting.rootView.pointer
+        panel.contentView = hosting
         return panel
     }
 

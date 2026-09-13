@@ -20,6 +20,7 @@ final class IslandController: NSObject, MascotPresenting {
 
     private let appState: AppState
     private var islandPanel: OverlayPanel?
+    private let pointer = PointerTracker()
     private var menuLevel: IslandMenuLevel?
     /// The menu collapses on a spring while its content is still mounted;
     /// `pendingTeardown` takes the content down afterwards.
@@ -91,6 +92,7 @@ final class IslandController: NSObject, MascotPresenting {
         islandPanel = panel
         let hosting = self.hosting(of: panel) ?? {
             let hosting = IslandHostingView(rootView: content(for: geometry))
+            hosting.pointer = pointer
             hosting.onEnter = { [weak self] in self?.pointerEnteredRegion() }
             hosting.onExit = { [weak self] in self?.pointerLeftRegion() }
             hosting.onClick = { [weak self] in self?.islandClicked() }
@@ -309,7 +311,8 @@ final class IslandController: NSObject, MascotPresenting {
                    height: geometry.island.height,
                    menuLevel: menuLevel ?? (isCollapsing ? collapsingLevel : nil),
                    isCollapsing: isCollapsing,
-                   onJump: { [weak self] in self?.hideMenu() })
+                   onJump: { [weak self] in self?.hideMenu() },
+                   pointer: pointer)
     }
 
     /// The notched display and all the geometry derived from it. `nil` means the

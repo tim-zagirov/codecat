@@ -1,27 +1,71 @@
 import AppKit
 import SwiftUI
 
-/// An `NSHostingView` that reports when the cursor enters and leaves.
+/// Where the cursor is, in the hosting view's own coordinates — origin at the
+/// top-left, the frame SwiftUI's `.global` coordinate space uses inside an
+/// `NSHostingView` — or `nil` while it is outside the window.
+///
+/// SwiftUI's `.onHover` and `.onContinuousHover` report nothing in a window that is
+/// not key, and the island's window is deliberately never made key by hover: a key
+/// panel would take keystrokes away from the terminal the user is typing in while
+/// the mouse wanders onto the notch. An `.activeAlways` tracking area on the AppKit
+/// host does fire in that situation, so the host publishes the position here and
+/// `onHoverRegion` (`MenuStyle.swift`) decides "hovered" from each view's own frame.
+/// The floating details panel uses the same path even though it is key, so the two
+/// surfaces cannot drift apart.
+final class PointerTracker: ObservableObject {
+    @Published var location: CGPoint?
+}
+
+/// An `NSHostingView` that reports when the cursor enters and leaves, and publishes
+/// where it is in between (`pointer`).
 ///
 /// Hover is caught with `NSTrackingArea` rather than SwiftUI's hover for two
 /// reasons: the island's window must not activate and steal focus, and the event
-/// is needed even when the app is not active (`.activeAlways`).
+/// is needed even when the app is not active (`.activeAlways`). Mouse-moved events
+/// reach a tracking area's owner only with `.mouseMoved` in its options AND
+/// `acceptsMouseMovedEvents` on the window; both panels set the flag.
 class HoverHostingView<Content: View>: NSHostingView<Content> {
     var onEnter: (() -> Void)?
     var onExit: (() -> Void)?
+    /// Set by the controller before the view is shown, and handed to the SwiftUI
+    /// content as an environment object by the same controller.
+    var pointer = PointerTracker()
+    /// Only this view's own area is replaced on update: `NSHostingView` registers
+    /// tracking areas of its own for SwiftUI, and those are not ours to remove.
+    private var hoverArea: NSTrackingArea?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        for area in trackingAreas { removeTrackingArea(area) }
+        if let hoverArea { removeTrackingArea(hoverArea) }
         // `.inVisibleRect` avoids recomputing the rectangle every time the window
-        // resizes — and it resizes whenever the skin changes.
-        addTrackingArea(NSTrackingArea(rect: .zero,
-                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                       owner: self, userInfo: nil))
+        // resizes — and it resizes whenever the skin changes or the menu opens.
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
     }
 
-    override func mouseEntered(with event: NSEvent) { onEnter?() }
-    override func mouseExited(with event: NSEvent) { onExit?() }
+    /// `NSHostingView` is flipped, so `convert(_:from: nil)` already yields the
+    /// top-left-origin coordinates SwiftUI's `.global` space reports frames in.
+    private func publish(_ event: NSEvent) {
+        pointer.location = convert(event.locationInWindow, from: nil)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        publish(event)
+        onEnter?()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        publish(event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        pointer.location = nil
+        onExit?()
+    }
 }
 
 /// The island's host view: on top of hover it reports a click — but only on the
