@@ -37,7 +37,7 @@
 "setting.sounds" = "Play a sound when an agent needs you";
 "setting.show.cat" = "Show the cat";
 "setting.hide.when.idle" = "Hide the cat when nothing is running";
-"settings.no.notch" = "This display has no notch, so the island won't appear.";
+"settings.no.notch" = "Island needs a display with a notch. This Mac doesn't have one, so the cat stays floating.";
 "settings.lid.password.hint" = "Turning this on the first time asks for an administrator password. One-time setup.";
 "settings.hooks.install" = "Set up Claude Code…";
 
