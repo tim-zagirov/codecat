@@ -60,3 +60,10 @@ The fallback cat in `Sources/CodeCatApp/CatView.swift` is drawn in SwiftUI
 shapes by the author of CodeCat and is covered by the MIT licence above. It is
 what you see if a sprite skin fails to load, and it is the source of the app
 icon.
+
+## Imported pets
+
+Pets in the Codex pet format that CodeCat finds in `~/.codex/pets` or in its own
+`Pets` folder are the user's files. CodeCat reads them in place, does not ship,
+copy or redistribute any of them, and makes no claim about their licences: each
+pet keeps its author's own terms, and the picker says so next to it.

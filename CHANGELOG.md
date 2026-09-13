@@ -17,6 +17,13 @@ number carries breaking changes.
   open the exact chat through that link instead of just bringing the app
   forward; when no record matches, the old behaviour stays as the fallback
   (`DesktopSessionIndex`).
+- **Pets in the Codex pet format.** Any pet folder in `~/.codex/pets` or in
+  `~/Library/Application Support/CodeCat/Pets` shows up in the skin picker and
+  drives the cat through all five states (`idle`, `running`, `waiting`, `failed`,
+  `jumping` then `review`). Upscaled pixel art is brought back to its native
+  pitch and, when the native drawing fits the cat's canvas, renders as crisply
+  as the built-in packs; anything larger is shrunk smoothly. Broken folders are
+  skipped and named once in the log.
 
 ### Fixed
 - **The cat no longer vanishes in Mission Control.** Both the floating cat and
