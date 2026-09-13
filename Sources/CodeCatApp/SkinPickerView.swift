@@ -132,7 +132,7 @@ struct SkinPickerView: View {
                     .foregroundStyle(style.tertiary)
                     .rotationEffect(.degrees(appState.creditsExpanded ? 90 : 0))
                     .animation(.easeOut(duration: 0.15), value: appState.creditsExpanded)
-                Text(L10n.t("skins.credits", "About the assets"))
+                Text(L10n.t("skins.credits", "Artists and licences"))
                     .foregroundStyle(style.primary)
                 Spacer(minLength: 0)
             }

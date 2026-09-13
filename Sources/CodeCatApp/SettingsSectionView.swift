@@ -60,9 +60,9 @@ struct SettingsSectionView: View {
             // `MenuSectionHeader` draws itself only where the style provides for section
             // headings — that is, on the island.
             MenuSectionHeader(title: L10n.t("settings.title", "Settings"))
-            SettingToggle(L10n.t("setting.keep.awake", "Keep the Mac awake"),
+            SettingToggle(L10n.t("setting.keep.awake", "Keep the Mac awake while agents work"),
                           isOn: $appState.keepAwakeEnabled)
-            SettingToggle(L10n.t("setting.lid.mode", "Closed-lid mode"), isOn: Binding(
+            SettingToggle(L10n.t("setting.lid.mode", "Keep agents running with the lid closed"), isOn: Binding(
                 get: { appState.lidModeEnabled },
                 set: { appState.requestLidModeChange(to: $0) }
             ))
@@ -73,7 +73,7 @@ struct SettingsSectionView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(style.tertiary)
             }
-            SettingToggle(L10n.t("setting.sounds", "Sounds"), isOn: $appState.soundsEnabled)
+            SettingToggle(L10n.t("setting.sounds", "Play a sound when an agent needs you"), isOn: $appState.soundsEnabled)
             if !appState.hooksInstalled {
                 Button(L10n.t("settings.hooks.install", "Install Claude Code hooks")) {
                     appState.installHooksIfNeeded()

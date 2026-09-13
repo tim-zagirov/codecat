@@ -368,7 +368,7 @@ final class AppState: ObservableObject {
             awayLog.record(L10n.t("away.done", "an agent finished its work"), at: Date())
             if soundsEnabled { NSSound(named: "Glass")?.play() }
         case .problem:
-            awayLog.record(L10n.t("away.crashed", "a session stopped"), at: Date())
+            awayLog.record(L10n.t("away.crashed", "a session ended"), at: Date())
         default:
             break
         }

@@ -155,7 +155,7 @@ struct SessionListView: View {
             L10n.t("activity.session.opened", "open, waiting for a task"),
             L10n.t("activity.waiting", "waiting for you"),
             L10n.t("activity.done", "finished the task"),
-            L10n.t("activity.session.stopped", "the session stopped"),
+            L10n.t("activity.session.stopped", "ended without finishing"),
             L10n.t("activity.session.started", "started on the task"),
         ]
     }

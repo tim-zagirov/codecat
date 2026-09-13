@@ -33,7 +33,7 @@ public enum SessionStatus: Equatable, Sendable {
         case .working: return L10n.t("session.status.working", "working")
         case .waitingForYou: return L10n.t("session.status.waiting", "waiting for you")
         case .done: return L10n.t("session.status.done", "done")
-        case .crashed: return L10n.t("session.status.crashed", "stopped")
+        case .crashed: return L10n.t("session.status.crashed", "ended")
         }
     }
 }
