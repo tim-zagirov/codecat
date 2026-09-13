@@ -31,8 +31,7 @@ public enum PetSkinBuilder {
     public static func skin(manifest: PetManifest, directory: URL,
                             sheetWidth: Int, sheetHeight: Int) -> MascotSkin? {
         guard sheetWidth > 0, sheetHeight > 0,
-              sheetWidth % columns == 0, sheetHeight % rows == 0,
-              sheetWidth % 48 == 0, sheetHeight % 52 == 0 else { return nil }
+              sheetWidth % columns == 0, sheetHeight % rows == 0 else { return nil }
         let sheet = manifest.spritesheetPath
 
         func frames(_ row: Row, count: Int) -> [SpriteFrame] {
