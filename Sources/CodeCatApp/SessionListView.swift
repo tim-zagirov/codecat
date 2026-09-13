@@ -70,15 +70,10 @@ struct SessionListView: View {
 
     private static var awayTitle: String { L10n.t("panel.away.title", "While you were away") }
 
-    /// In the panel the summary's heading is ordinary text at the size it always was;
-    /// in the island menu, sections have a heading style of their own.
-    @ViewBuilder
+    /// The summary's heading, drawn by the shared section-heading style so the panel
+    /// and the island match.
     private var awayLogHeader: some View {
-        if style.separator == nil {
-            Text(Self.awayTitle).font(.system(size: 12, weight: .medium))
-        } else {
-            MenuSectionHeader(title: Self.awayTitle)
-        }
+        MenuSectionHeader(title: Self.awayTitle)
     }
 
     var body: some View {
@@ -280,6 +275,12 @@ struct SessionListView: View {
             if hovered == session.id { hovered = nil }
             if hoveredHint == session.id { hoveredHint = nil }
         }
+        // S9: the row's own `.padding(.horizontal, 4)` insets its text 4 pt past the
+        // headings and the away summary. On the island this negative outer padding
+        // pulls the whole row (hover rectangle included) back by 4, so the hover keeps
+        // its inset while the text column lines up with everything else. The panel
+        // keeps its original inset (compensation is 0 there).
+        .padding(.horizontal, style.rowInsetCompensation)
 
         // Only a row with an actual route gets the tap target and hover/cursor
         // wiring — an unavailable row states its non-interactivity in the view

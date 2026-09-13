@@ -39,8 +39,8 @@ struct SettingsSectionView: View {
             if appState.displayMode == .island, !Self.hasScreenWithNotch {
                 Text(L10n.t("settings.no.notch",
                             "This display has no notch, so the island won't appear."))
-                    .font(.system(size: 10))
-                    .foregroundStyle(style.tertiary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(style.secondary)
             }
 
             // The toggle works in both modes — for the island and for the floating cat.
@@ -55,10 +55,8 @@ struct SettingsSectionView: View {
             SkinPickerView(appState: appState)
 
             MenuSeparator()
-            // The panel never had a "Settings" heading, and adding one here would mean
-            // changing the floating mode, which this work does not do.
-            // `MenuSectionHeader` draws itself only where the style provides for section
-            // headings — that is, on the island.
+            // The section heading now draws on both surfaces, so the panel gains the
+            // "Settings" heading it lacked and the two menus read as one design.
             MenuSectionHeader(title: L10n.t("settings.title", "Settings"))
             SettingToggle(L10n.t("setting.keep.awake", "Keep the Mac awake while agents work"),
                           isOn: $appState.keepAwakeEnabled)
@@ -70,8 +68,8 @@ struct SettingsSectionView: View {
                 Text(L10n.t("settings.lid.password.hint",
                             "Turning this on the first time asks for an administrator password. "
                             + "One-time setup."))
-                    .font(.system(size: 10))
-                    .foregroundStyle(style.tertiary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(style.secondary)
             }
             SettingToggle(L10n.t("setting.sounds", "Play a sound when an agent needs you"), isOn: $appState.soundsEnabled)
             if !appState.hooksInstalled {
@@ -86,17 +84,10 @@ struct SettingsSectionView: View {
         .modifier(ToggleTint(color: style.toggleTint))
     }
 
-    /// A section heading. In the panel it is ordinary text at the size it has always
-    /// been; in the island menu it is the muted heading style shared by every section.
-    /// They have to be told apart because the panel had almost no section headings,
-    /// and on black without them the settings list reads as a heap.
-    @ViewBuilder
+    /// A section heading, drawn by the shared muted heading style so the panel and
+    /// the island read as one design.
     private func sectionTitle(_ title: String) -> some View {
-        if style.separator == nil {
-            Text(title).font(.system(size: 12, weight: .medium))
-        } else {
-            MenuSectionHeader(title: title)
-        }
+        MenuSectionHeader(title: title)
     }
 }
 
