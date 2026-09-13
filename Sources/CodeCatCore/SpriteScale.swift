@@ -47,4 +47,22 @@ public enum SpriteScale {
         guard boundsWidth > 0, boundsHeight > 0 else { return 1 }
         return max(1, min(targetHeight / boundsHeight, maxWidth / boundsWidth))
     }
+
+    /// Like `factor`, but able to shrink. A drawing that fits the target at 1× gets
+    /// the same integer magnification `factor` gives, so the built-ins do not move
+    /// by a pixel; one that is larger than the target — an imported pet whose
+    /// native pitch could not be recovered — gets the exact fraction that fits.
+    /// The caller decides on interpolation from whether the result is integral.
+    public static func scale(boundsWidth: Int,
+                             boundsHeight: Int,
+                             targetHeight: Int = SpriteScale.targetHeight,
+                             maxWidth: Int = SpriteScale.maxWidth) -> Double {
+        guard boundsWidth > 0, boundsHeight > 0 else { return 1 }
+        if boundsHeight <= targetHeight && boundsWidth <= maxWidth {
+            return Double(factor(boundsWidth: boundsWidth, boundsHeight: boundsHeight,
+                                 targetHeight: targetHeight, maxWidth: maxWidth))
+        }
+        return min(Double(targetHeight) / Double(boundsHeight),
+                   Double(maxWidth) / Double(boundsWidth))
+    }
 }
