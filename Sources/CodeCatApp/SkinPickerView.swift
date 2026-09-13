@@ -100,23 +100,42 @@ struct SkinPickerView: View {
         }
     }
 
+    /// What one credits row shows. Built-in packs are grouped by author (six
+    /// LuizMelo cats are one line); imported pets are one row each, with the pet's
+    /// own description and the folder it came from instead of a web link.
+    private struct Credit: Identifiable {
+        let id: String
+        let heading: String
+        let terms: String
+        let note: String?
+        /// A link for the built-ins, a folder path for imported pets.
+        let source: String
+        let isFolder: Bool
+    }
+
     private var credits: some View {
         DisclosureGroup(L10n.t("skins.credits", "About the assets"),
                         isExpanded: $appState.creditsExpanded) {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(creditedPacks, id: \.author) { pack in
+                ForEach(creditRows) { credit in
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(pack.author).font(.system(size: 11, weight: .medium))
-                        Text(pack.license).font(.system(size: 10)).foregroundStyle(.secondary)
-                        // `URL(string:)` is not force-unwrapped: every `sourceURL` in
-                        // `MascotSkins` is a valid literal today, but this view has no
-                        // way to enforce that going forward, and a malformed URL must
-                        // read as a missing link, not crash the details panel.
-                        if let url = URL(string: pack.sourceURL) {
-                            Link(pack.sourceURL, destination: url)
-                                .font(.system(size: 10))
+                        Text(credit.heading).font(.system(size: 11, weight: .medium))
+                        if let note = credit.note {
+                            Text(note).font(.system(size: 10)).foregroundStyle(.secondary)
+                        }
+                        Text(credit.terms).font(.system(size: 10)).foregroundStyle(.secondary)
+                        if credit.isFolder {
+                            Text(L10n.f("skins.imported.from", "From %@", credit.source))
+                                .font(.system(size: 10)).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.middle)
+                        } else if let url = URL(string: credit.source) {
+                            // `URL(string:)` is not force-unwrapped: every `sourceURL` in
+                            // `MascotSkins` is a valid literal today, but this view has no
+                            // way to enforce that going forward, and a malformed URL must
+                            // read as a missing link, not crash the details panel.
+                            Link(credit.source, destination: url).font(.system(size: 10))
                         } else {
-                            Text(pack.sourceURL).font(.system(size: 10))
+                            Text(credit.source).font(.system(size: 10))
                         }
                     }
                 }
@@ -126,17 +145,23 @@ struct SkinPickerView: View {
         .font(.system(size: 11))
     }
 
-    /// One entry per pack, not per skin: six LuizMelo cats share one author and one
-    /// licence, and repeating them six times would bury the one line that is an
-    /// actual obligation (mxmaze is CC BY 4.0, where attribution is required).
-    private var creditedPacks: [(author: String, license: String, sourceURL: String)] {
+    /// One entry per built-in pack (not per skin — six LuizMelo cats share one
+    /// author and one licence, and repeating them six times would bury the one line
+    /// that is an actual obligation: mxmaze is CC BY 4.0), then one per imported pet.
+    private var creditRows: [Credit] {
         var seen = Set<String>()
-        var result: [(author: String, license: String, sourceURL: String)] = []
+        var result: [Credit] = []
         for skin in appState.availableSkins {
-            guard seen.insert(skin.author).inserted else { continue }
-            result.append((author: skin.author,
-                           license: licenseText(skin.license),
-                           sourceURL: skin.sourceURL))
+            if SkinRegistry.isImported(skin) {
+                result.append(Credit(id: skin.id, heading: skin.name,
+                                     terms: licenseText(skin.license), note: skin.note,
+                                     source: (skin.sourceURL as NSString).abbreviatingWithTildeInPath,
+                                     isFolder: true))
+            } else if seen.insert(skin.author).inserted {
+                result.append(Credit(id: skin.author, heading: skin.author,
+                                     terms: licenseText(skin.license), note: nil,
+                                     source: skin.sourceURL, isFolder: false))
+            }
         }
         return result
     }
