@@ -108,6 +108,17 @@ struct SettingsSectionView: View {
         .pickerStyle(.segmented)
         .labelsHidden()
 
+        // S15: the island is not free real estate — its wings sit over the menu
+        // bar. Say so plainly where the mode is chosen, but only on the island
+        // itself (`style.separator != nil`); the floating panel has nothing to
+        // warn about.
+        if style.separator != nil {
+            Text(L10n.t("settings.island.menubar",
+                        "The island covers a little of the menu bar on each side of the notch."))
+                .font(.system(size: 11))
+                .foregroundStyle(style.secondary)
+        }
+
         // Shown up front whenever there is no notch — not only after a (now
         // blocked) switch — so the user learns why "Island" does nothing before
         // reaching for it.
