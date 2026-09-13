@@ -98,4 +98,35 @@ final class SpriteScaleTests: XCTestCase {
                                           targetHeight: SpriteScale.targetHeight,
                                           maxWidth: SpriteScale.maxWidth), 4)
     }
+
+    // MARK: - Oversized sprites (imported pets whose pitch could not be detected)
+
+    /// Whatever fits keeps the integer rule bit for bit.
+    func testScaleAgreesWithFactorForEverythingThatFits() {
+        for (w, h) in [(27, 14), (18, 12), (16, 16), (1, 1), (120, 64)] {
+            XCTAssertEqual(SpriteScale.scale(boundsWidth: w, boundsHeight: h),
+                           Double(SpriteScale.factor(boundsWidth: w, boundsHeight: h)), "\(w)x\(h)")
+        }
+    }
+
+    /// Too tall: shrink to the target height exactly.
+    func testTallSpriteShrinksToTheTargetHeight() {
+        XCTAssertEqual(SpriteScale.scale(boundsWidth: 150, boundsHeight: 160), 0.4, accuracy: 1e-9)
+    }
+
+    /// Too wide: the width cap wins.
+    func testWideSpriteShrinksToTheWidthCap() {
+        XCTAssertEqual(SpriteScale.scale(boundsWidth: 300, boundsHeight: 20), 0.4, accuracy: 1e-9)
+    }
+
+    func testIslandShrinksTheSameWay() {
+        XCTAssertEqual(SpriteScale.scale(boundsWidth: 150, boundsHeight: 160,
+                                         targetHeight: SpriteScale.islandTargetHeight,
+                                         maxWidth: SpriteScale.islandMaxWidth), 0.2, accuracy: 1e-9)
+    }
+
+    func testDegenerateBoundsScaleToOne() {
+        XCTAssertEqual(SpriteScale.scale(boundsWidth: 0, boundsHeight: 0), 1)
+        XCTAssertEqual(SpriteScale.scale(boundsWidth: -3, boundsHeight: 5), 1)
+    }
 }

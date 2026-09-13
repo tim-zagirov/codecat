@@ -65,11 +65,20 @@ final class AppState: ObservableObject {
     @Published private(set) var statusSince = Date()
 
     /// Id of the selected skin. Persisted so the choice survives a restart; read
-    /// back through `MascotSkins.skin(withID:)`, which falls back to
-    /// `MascotSkins.default` for anything it does not recognise.
+    /// back through `registry.skin(withID:)`, which falls back to
+    /// `MascotSkins.default` for anything it does not recognise — a built-in id
+    /// that was renamed, or a pet id whose folder is no longer on disk.
     @Published var skinID: String {
         didSet { UserDefaults.standard.set(skinID, forKey: "mascotSkin") }
     }
+
+    /// Built-in skins plus the pets found on disk. Rebuilt at launch and every time
+    /// the skin picker appears (`rescanPets`); a scan is a few directory listings.
+    @Published private(set) var registry = SkinRegistry()
+
+    /// Folders already reported in the log this launch, so a broken pet is named
+    /// once rather than on every rescan.
+    private var reportedPetProblems: Set<URL> = []
 
     /// How to show the mascot. Persisted so the choice survives a restart; read back
     /// through `MascotDisplayMode.mode(withID:)`, which falls back to the default mode
@@ -115,7 +124,7 @@ final class AppState: ObservableObject {
     /// open clipped inside a panel whose AppKit content rect didn't grow with it.
     @Published var creditsExpanded = false
 
-    var skin: MascotSkin { MascotSkins.skin(withID: skinID) }
+    var skin: MascotSkin { registry.skin(withID: skinID) }
 
     /// The skins the picker may offer: everything in the registry whose sheets are
     /// actually on this machine.
@@ -130,7 +139,7 @@ final class AppState: ObservableObject {
     /// body, which already is.
     @MainActor
     var availableSkins: [MascotSkin] {
-        MascotSkins.all.filter { SpriteSheetStore.shared.hasAssets(for: $0) }
+        registry.installed.filter { SpriteSheetStore.shared.hasAssets(for: $0) }
     }
 
     /// Skins whose failure alert has already been shown. Only the *alert* is
@@ -158,7 +167,24 @@ final class AppState: ObservableObject {
         showMascot = defaults.bool(forKey: "showMascot")
         displayMode = MascotDisplayMode.mode(withID: defaults.string(forKey: "mascotDisplayMode"))
         hidesWhenNoSessions = defaults.bool(forKey: "islandHidesWhenIdle")
-        // Resolve through `MascotSkins.skin(withID:)` rather than trusting the raw
+        // Scan for pets before resolving the stored skin, so an imported id is
+        // recognised on the very launch that brings its folder back (or takes it
+        // away). `scanPets` is `static` and takes `reportedPetProblems` `inout`
+        // rather than being an instance method, because at this point in `init`
+        // not every stored property has a value yet, and an instance method may
+        // not be called on `self` until they all do; `log` and
+        // `reportedPetProblems` are safe to pass here because both are given their
+        // values inline, at declaration, rather than later in this initialiser.
+        // The result is kept in a local rather than read back out of `registry`
+        // immediately below: `registry` is `@Published`, so reading it goes
+        // through the wrapper's synthesized getter, which — like any other
+        // instance-property read — is not allowed until every stored property has
+        // a value, and several (`store`, `powerManager`, ...) still don't at this
+        // point.
+        let freshRegistry = Self.scanPets(reporting: &reportedPetProblems, log: log)
+        registry = freshRegistry
+
+        // Resolve through the freshly scanned registry rather than trusting the raw
         // stored string: an id from an older build (e.g. the retired `"drawn"`) must
         // migrate to the default skin here, at read time, so `skinID` and `skin.id`
         // never disagree. Assigning the raw value directly would leave a stale id
@@ -170,7 +196,7 @@ final class AppState: ObservableObject {
         // migration: it happens when CodeCat was built without running the
         // optional-asset download (Elthen's sheet is not in the repository), and it
         // is not the user's mistake to be told about.
-        let storedSkin = MascotSkins.skin(withID: defaults.string(forKey: "mascotSkin") ?? MascotSkins.default.id)
+        let storedSkin = freshRegistry.skin(withID: defaults.string(forKey: "mascotSkin") ?? MascotSkins.default.id)
         skinID = SpriteSheetStore.assetsExist(for: storedSkin) ? storedSkin.id : MascotSkins.default.id
 
         // Read once at startup (see the design spec): a route recorded by a hook
@@ -698,6 +724,46 @@ final class AppState: ObservableObject {
         alert.window.level = .modalPanel
         alert.window.orderFrontRegardless()
         alert.runModal()
+    }
+
+    /// Re-reads the pet folders. Cheap, so it runs whenever the picker appears; the
+    /// registry is only republished when something actually changed, so an
+    /// unchanged rescan does not redraw the panel.
+    /// `@MainActor`: only caller is `SkinPickerView`'s `onAppear`, and this now
+    /// touches `SpriteSheetStore.shared` directly (see `forgetImported()` below),
+    /// which is itself `@MainActor`.
+    @MainActor
+    func rescanPets() {
+        // Unconditional, before the registry comparison below: a pet's sheet can
+        // be re-hatched or edited in place without its id or manifest changing at
+        // all, in which case `fresh == registry` and the early return below would
+        // otherwise skip this entirely — leaving a stale sheet cached, or a sheet
+        // that failed to load once (read mid-write) stuck in `failed` forever.
+        SpriteSheetStore.shared.forgetImported()
+        let fresh = Self.scanPets(reporting: &reportedPetProblems, log: log)
+        if fresh != registry {
+            registry = fresh
+            // A pet the picker had selected can vanish from this very scan (folder
+            // deleted, or edited into something `PetLibrary` now rejects). Without
+            // this, `skinID` would keep pointing at an id the fresh registry no
+            // longer has — `skin` already falls back to the default via
+            // `registry.skin(withID:)`, but the picker's selection border compares
+            // `skin.id == skinID` directly, so it would show no tile selected at
+            // all while the mascot quietly rendered the default. See the `init`
+            // comment: `skinID` and `skin.id` must never disagree.
+            if registry.skin(withID: skinID).id != skinID {
+                skinID = MascotSkins.default.id
+            }
+        }
+    }
+
+    private static func scanPets(reporting reported: inout Set<URL>, log: DiagnosticLog) -> SkinRegistry {
+        let result = PetLibrary.discover(roots: PetLibrary.defaultRoots(),
+                                         sheetSize: SpriteSheetStore.imageSize(at:))
+        for report in result.skipped where reported.insert(report.folder).inserted {
+            log.write("pet skipped: \(report.folder.lastPathComponent) — \(report.reason)")
+        }
+        return SkinRegistry(imported: result.skins)
     }
 
     /// Reports a skin whose sheets could not be read, and switches back to the
