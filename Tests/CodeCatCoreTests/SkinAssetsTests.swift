@@ -46,7 +46,10 @@ final class SkinAssetsTests: XCTestCase {
     /// able to catch a packaging mistake.
     func testEveryDeclaredSheetExistsAndHoldsEveryDeclaredFrame() throws {
         for skin in MascotSkins.all {
-            let directory = skinsDirectory.appendingPathComponent(skin.directory)
+            guard case .bundled(let path) = skin.location else {
+                XCTFail("\(skin.id): a built-in skin must be bundled"); continue
+            }
+            let directory = skinsDirectory.appendingPathComponent(path)
             if !skin.bundled && !FileManager.default.fileExists(atPath: directory.path) {
                 continue
             }
@@ -65,16 +68,16 @@ final class SkinAssetsTests: XCTestCase {
                       let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
                     return XCTFail("\(skin.id): cannot read the PNG \(sheet)")
                 }
-                let columns = image.width / skin.frameSize
-                let rows = image.height / skin.frameSize
+                let columns = image.width / skin.frameWidth
+                let rows = image.height / skin.frameHeight
                 XCTAssertGreaterThan(columns, 0, "\(skin.id)/\(sheet): narrower than one frame")
                 XCTAssertGreaterThan(rows, 0, "\(skin.id)/\(sheet): shorter than one frame")
                 XCTAssertLessThan(highest, columns * rows,
                                   "\(skin.id)/\(sheet): frame \(highest) is outside a \(columns)x\(rows) sheet")
-                XCTAssertEqual(image.width % skin.frameSize, 0,
-                               "\(skin.id)/\(sheet): width is not a multiple of the frame size \(skin.frameSize)")
-                XCTAssertEqual(image.height % skin.frameSize, 0,
-                               "\(skin.id)/\(sheet): height is not a multiple of the frame size \(skin.frameSize)")
+                XCTAssertEqual(image.width % skin.frameWidth, 0,
+                               "\(skin.id)/\(sheet): width is not a multiple of the frame width \(skin.frameWidth)")
+                XCTAssertEqual(image.height % skin.frameHeight, 0,
+                               "\(skin.id)/\(sheet): height is not a multiple of the frame height \(skin.frameHeight)")
             }
         }
     }
@@ -94,7 +97,10 @@ final class SkinAssetsTests: XCTestCase {
     func testOnlyElthenIsAllowedToBeMissingFromTheRepository() {
         XCTAssertEqual(MascotSkins.all.filter { !$0.bundled }.map(\.id), ["elthen-cat"])
         for skin in MascotSkins.all where skin.bundled {
-            let directory = skinsDirectory.appendingPathComponent(skin.directory)
+            guard case .bundled(let path) = skin.location else {
+                XCTFail("\(skin.id): a bundled skin must have a bundled location"); continue
+            }
+            let directory = skinsDirectory.appendingPathComponent(path)
             XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path),
                           "\(skin.id): bundled skin has no assets at \(directory.path)")
         }

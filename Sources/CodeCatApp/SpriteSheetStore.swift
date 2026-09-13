@@ -118,10 +118,18 @@ final class SpriteSheetStore {
     /// before any view exists and has no main-actor context to borrow — can ask the
     /// same question without hopping actors.
     nonisolated static func assetsExist(for skin: MascotSkin) -> Bool {
-        guard let root = skinsRoot else { return false }
-        let directory = root.appendingPathComponent(skin.directory)
+        guard let directory = directory(of: skin) else { return false }
         return skin.declaredSheets.allSatisfy {
             FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path)
+        }
+    }
+
+    /// The directory holding this skin's sheets, or nil when a bundled skin's
+    /// `Skins/` root cannot be found at all.
+    nonisolated static func directory(of skin: MascotSkin) -> URL? {
+        switch skin.location {
+        case .bundled(let path): return skinsRoot?.appendingPathComponent(path)
+        case .external(let url): return url
         }
     }
 
@@ -170,15 +178,15 @@ final class SpriteSheetStore {
     // MARK: - Sheets
 
     private func sheet(named name: String, of skin: MascotSkin) -> CGImage? {
-        let key = "\(skin.directory)/\(name)"
+        let key = "\(skin.location.cacheKey)/\(name)"
         if let cached = sheets[key] { return cached }
         // `.copy("Skins")` keeps the directory tree, so the sheet sits at
         // <skinsRoot>/<directory>/<name>. `Bundle`'s `url(forResource:withExtension:)`
         // treats a whole "Skins/<key>" string as a single resource *name* rather than
         // a subdirectory path and fails to find it, so the lookup goes through the
         // resolved skins root URL and appends the path components directly.
-        guard let skinsRoot = Self.skinsRoot else { return nil }
-        let url = skinsRoot.appendingPathComponent(key)
+        guard let directory = Self.directory(of: skin) else { return nil }
+        let url = directory.appendingPathComponent(name)
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         sheets[key] = image
@@ -188,14 +196,14 @@ final class SpriteSheetStore {
     /// Where a frame sits in its sheet. The column count comes from the image's real
     /// width, never from declared data — see `SpriteFrame`.
     private func frameRect(_ frame: SpriteFrame, of skin: MascotSkin, in sheet: CGImage) -> CGRect? {
-        let size = skin.frameSize
-        guard size > 0 else { return nil }
-        let columns = sheet.width / size
-        let rows = sheet.height / size
+        let w = skin.frameWidth, h = skin.frameHeight
+        guard w > 0, h > 0 else { return nil }
+        let columns = sheet.width / w
+        let rows = sheet.height / h
         guard columns > 0, rows > 0, frame.index >= 0, frame.index < columns * rows else { return nil }
-        return CGRect(x: CGFloat((frame.index % columns) * size),
-                      y: CGFloat((frame.index / columns) * size),
-                      width: CGFloat(size), height: CGFloat(size))
+        return CGRect(x: CGFloat((frame.index % columns) * w),
+                      y: CGFloat((frame.index / columns) * h),
+                      width: CGFloat(w), height: CGFloat(h))
     }
 
     // MARK: - Measuring
