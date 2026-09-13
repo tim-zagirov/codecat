@@ -189,11 +189,12 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
         // The rows and tiles inside compute their hover from the pointer the host
         // publishes (`PointerTracker`), which needs mouse-moved events delivered.
         panel.acceptsMouseMovedEvents = true
+        let pointer = PointerTracker()
         let hosting = HoverHostingView(rootView: DetailsPanelView(
             appState: appState,
             onJump: { [weak self] in self?.hideDetails() },
-            pointer: PointerTracker()))
-        hosting.pointer = hosting.rootView.pointer
+            pointer: pointer))
+        hosting.pointer = pointer
         panel.contentView = hosting
         return panel
     }
