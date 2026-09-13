@@ -32,11 +32,15 @@ struct SessionListView: View {
     /// though: AppKit re-applies its own idea of the cursor (cursor rects /
     /// `cursorUpdate:`, falling back to the arrow) on every mouse-moved event, and
     /// that overrides a `set()` call made on a previous event. So each row also
-    /// re-asserts `NSCursor.pointingHand.set()` on every `onContinuousHover(.active)`
+    /// re-asserts `NSCursor.pointingHand.set()` on every `onHoverRegion(.active)`
     /// callback — i.e. on every mouse-moved event while inside a clickable row, not
     /// just on entry. See `sessionRow` for the three places `hovered` is cleared
     /// (pointer leaves the row, the row disappears, the panel closes on a click),
     /// each of which lets the arrow win back via the `onChange` below.
+    ///
+    /// Hover comes from `onHoverRegion`, not SwiftUI's own hover, so it works on the
+    /// island's menu, whose window is not key while it was opened by hover (see
+    /// `PointerTracker`).
     @State private var hovered: String?
 
     @Environment(\.menuStyle) private var style
@@ -172,7 +176,7 @@ struct SessionListView: View {
         if hasRoute {
             content
                 .contentShape(Rectangle())
-                .onContinuousHover { phase in
+                .onHoverRegion { phase in
                     switch phase {
                     case .active:
                         if hovered != session.id { hovered = session.id }

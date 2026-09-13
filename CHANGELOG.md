@@ -34,6 +34,13 @@ number carries breaking changes.
   `hoverHighlight` modifier draws the same highlight on the panel and the island.
 
 ### Fixed
+- **The island menu answers hover.** Session rows, skin tiles and the credits row
+  highlighted only in the floating panel; on the island nothing reacted to the
+  cursor. SwiftUI's hover is silent in a window that is not key, and the island's
+  window is never made key by hover on purpose (a key panel would take your
+  keystrokes from the terminal). The AppKit host now publishes the pointer and one
+  `onHoverRegion` modifier computes "hovered" from each view's own frame — the same
+  mechanism on both surfaces.
 - **The cat no longer vanishes in Mission Control.** Both the floating cat and
   the island stayed put through Space switches but slid away with everything
   else on a pinch; one `.stationary` collection flag keeps them on screen.

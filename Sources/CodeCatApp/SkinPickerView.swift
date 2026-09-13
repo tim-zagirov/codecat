@@ -18,7 +18,8 @@ struct SkinPickerView: View {
 
     @Environment(\.menuStyle) private var style
     /// The skin under the cursor. A cell that does not answer hover reads as a
-    /// picture rather than as something you can press.
+    /// picture rather than as something you can press. Read through `onHoverRegion`,
+    /// so the tile answers on the island too, where SwiftUI's own hover is silent.
     @State private var hoveredSkin: String?
 
     private var cell: CGSize { style.cellSize }
@@ -77,8 +78,8 @@ struct SkinPickerView: View {
                     .strokeBorder(isSelected ? style.selectionBorder : Color.clear,
                                   lineWidth: style.selectionBorderWidth))
             .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { hoveredSkin = skin.id }
+            .onHoverRegion { phase in
+                if case .active = phase { hoveredSkin = skin.id }
                 else if hoveredSkin == skin.id { hoveredSkin = nil }
             }
             .onTapGesture { appState.skinID = skin.id }

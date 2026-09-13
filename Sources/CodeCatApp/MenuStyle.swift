@@ -178,38 +178,88 @@ struct MenuSectionHeader: View {
 
 // MARK: - Hover
 
+/// Reports the cursor over this view — from the position the AppKit host publishes
+/// (`PointerTracker`), not from SwiftUI's own hover, which stays silent in a window
+/// that is not key. The island's menu is such a window whenever it was opened by
+/// hover, which is exactly when the user first looks at it; the floating panel is
+/// key, and uses the same path so that the two surfaces answer "can I press this?"
+/// identically.
+///
+/// Mirrors `onContinuousHover`: `.active(point)` on every move while inside, with
+/// the point in this view's local coordinates, and `.ended` once on leaving. A view
+/// that vanishes under the cursor (the credits collapsing, a row whose session
+/// ended) also gets `.ended`, so callers can clear their state.
+///
+/// The frame is read in `.global`, which inside an `NSHostingView` is the hosting
+/// view's own coordinate space — the space the host publishes the pointer in.
+struct HoverRegion: ViewModifier {
+    @EnvironmentObject private var pointer: PointerTracker
+    let action: (HoverPhase) -> Void
+    @State private var inside = false
+
+    func body(content: Content) -> some View {
+        content.background(
+            GeometryReader { proxy in
+                let frame = proxy.frame(in: .global)
+                let local: CGPoint? = pointer.location.flatMap { point in
+                    frame.contains(point)
+                        ? CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)
+                        : nil
+                }
+                Color.clear
+                    .onChange(of: local, initial: true) { _, point in
+                        if let point {
+                            inside = true
+                            action(.active(point))
+                        } else if inside {
+                            inside = false
+                            action(.ended)
+                        }
+                    }
+                    .onDisappear {
+                        if inside {
+                            inside = false
+                            action(.ended)
+                        }
+                    }
+            })
+    }
+}
+
 /// The pointing hand while the cursor is over a pressable view.
 ///
-/// The cursor is set with `NSCursor.set()` on every hover event rather than a
-/// `push()/pop()` pair, for the reason spelled out on `SessionListView.hovered`: a
-/// missed transition leaves `set()` wrong only until the next event, where a missed
-/// `pop()` leaves the hand stuck over the whole screen. `.active` re-asserts the hand
-/// on every move because AppKit re-applies its own cursor on each mouse-moved event.
+/// The cursor is set with `NSCursor.set()` rather than a `push()/pop()` pair, for the
+/// reason spelled out on `SessionListView.hovered`: a missed transition leaves `set()`
+/// wrong only until the next event, where a missed `pop()` leaves the hand stuck over
+/// the whole screen. `.active` re-asserts the hand whenever AppKit has taken it away
+/// (it re-applies its own cursor on a mouse-moved event), which is what the test on
+/// `NSCursor.current` detects — the hand is set again exactly when it is gone.
+///
+/// Re-asserting *unconditionally* would be simpler but costs the tooltips: setting a
+/// cursor cancels the tooltip AppKit has scheduled for the view under the pointer, and
+/// since the last `set()` lands on the last mouse-moved event before the cursor comes
+/// to rest, the skin tiles' `.help(skin.name)` never got to appear. Screenshotted both
+/// ways: unconditional `set()` — hand, no tooltip; guarded — hand and tooltip.
+///
+/// The hand appears only while the window is key (the floating panel, the island's
+/// full menu): macOS ignores a cursor set from a non-key window of an inactive app,
+/// so on the island's short menu the highlight alone answers the question.
 struct PointingHandOnHover: ViewModifier {
     @State private var inside = false
 
     func body(content: Content) -> some View {
-        content
-            .onContinuousHover { phase in
-                switch phase {
-                case .active:
-                    inside = true
-                    NSCursor.pointingHand.set()
-                case .ended:
-                    if inside {
-                        inside = false
-                        NSCursor.arrow.set()
-                    }
-                }
-            }
-            // A view that vanishes under the cursor (the credits collapsing, a tile
-            // scrolling away) never gets `.ended`; without this the hand would stay.
-            .onDisappear {
+        content.onHoverRegion { phase in
+            switch phase {
+            case .active:
+                inside = true
+                if NSCursor.current !== NSCursor.pointingHand { NSCursor.pointingHand.set() }
+            case .ended:
                 if inside {
                     inside = false
                     NSCursor.arrow.set()
                 }
             }
+        }
     }
 }
 
@@ -228,13 +278,17 @@ struct HoverHighlight: ViewModifier {
                 RoundedRectangle(cornerRadius: style.rowRadius)
                     .fill(hovered ? style.rowHover : Color.clear))
             .contentShape(Rectangle())
-            .onHover { hovered = $0 }
-            .onDisappear { hovered = false }
+            .onHoverRegion { phase in
+                if case .active = phase { hovered = true } else { hovered = false }
+            }
             .modifier(PointingHandOnHover())
     }
 }
 
 extension View {
+    func onHoverRegion(_ action: @escaping (HoverPhase) -> Void) -> some View {
+        modifier(HoverRegion(action: action))
+    }
     func pointingHandOnHover() -> some View { modifier(PointingHandOnHover()) }
     func hoverHighlight() -> some View { modifier(HoverHighlight()) }
 }
