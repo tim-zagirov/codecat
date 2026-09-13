@@ -6,8 +6,10 @@ import CodeCatCore
 /// A skin whose sheets have been read, measured and cached.
 struct LoadedSkin {
     let skin: MascotSkin
-    /// Integer magnification, from `SpriteScale`.
-    let scale: Int
+    /// Magnification from `SpriteScale.scale`: an integer for everything that fits
+    /// (all built-ins, and any pet whose pitch was recovered), a fraction below 1
+    /// for a sheet that had to be shrunk.
+    let scale: Double
     /// The union of every frame's opaque-pixel bounding box, in sheet pixels,
     /// expressed relative to a single frame's origin. One rectangle for the whole
     /// skin — deliberately not one per animation: LuizMelo's sleeping cat is 22x5
@@ -17,19 +19,18 @@ struct LoadedSkin {
 
     /// On-screen size of the drawing, in points.
     var drawingSize: CGSize {
-        CGSize(width: bounds.width * CGFloat(scale), height: bounds.height * CGFloat(scale))
+        CGSize(width: bounds.width * scale, height: bounds.height * scale)
     }
 
     /// The drawing size under a different normalisation — for the island, where the
     /// menu bar is only 32 pt. `scale` was computed at load time for the floating
     /// mascot's canvas, so the factor here is recomputed from the same measured bounds.
     func drawingSize(targetHeight: Int, maxWidth: Int) -> CGSize {
-        let factor = SpriteScale.factor(boundsWidth: Int(bounds.width),
-                                        boundsHeight: Int(bounds.height),
-                                        targetHeight: targetHeight,
-                                        maxWidth: maxWidth)
-        return CGSize(width: bounds.width * CGFloat(factor),
-                      height: bounds.height * CGFloat(factor))
+        let factor = SpriteScale.scale(boundsWidth: Int(bounds.width),
+                                       boundsHeight: Int(bounds.height),
+                                       targetHeight: targetHeight,
+                                       maxWidth: maxWidth)
+        return CGSize(width: bounds.width * factor, height: bounds.height * factor)
     }
 }
 
@@ -49,7 +50,14 @@ final class SpriteSheetStore {
 
     static let shared = SpriteSheetStore()
 
-    private var sheets: [String: CGImage] = [:]      // keyed by "<directory>/<sheet>"
+    /// A decoded sheet and the cell size that applies to *this* image — smaller
+    /// than the skin's declared cell when the sheet was reduced by its pixel pitch.
+    private struct Sheet {
+        let image: CGImage
+        let frameWidth: Int
+        let frameHeight: Int
+    }
+    private var sheets: [String: Sheet] = [:]        // keyed by "<location>/<sheet>"
     private var loaded: [String: LoadedSkin] = [:]   // keyed by skin id
     private var failed: Set<String> = []             // skin ids already known to be broken
     private var assetsPresent: [String: Bool] = [:]  // keyed by skin id, see hasAssets(for:)
@@ -153,8 +161,8 @@ final class SpriteSheetStore {
         for animation in skin.animations.values {
             for frame in animation.frames {
                 guard let sheet = sheet(named: frame.sheet, of: skin),
-                      let rect = frameRect(frame, of: skin, in: sheet),
-                      let opaque = opaqueBounds(of: sheet, in: rect) else {
+                      let rect = frameRect(frame, in: sheet),
+                      let opaque = opaqueBounds(of: sheet.image, in: rect) else {
                     failed.insert(skin.id)
                     return nil
                 }
@@ -167,7 +175,7 @@ final class SpriteSheetStore {
         }
         let result = LoadedSkin(
             skin: skin,
-            scale: SpriteScale.factor(boundsWidth: Int(union.width), boundsHeight: Int(union.height)),
+            scale: SpriteScale.scale(boundsWidth: Int(union.width), boundsHeight: Int(union.height)),
             bounds: union)
         loaded[skin.id] = result
         return result
@@ -178,16 +186,16 @@ final class SpriteSheetStore {
     /// animation is preserved in full.
     func image(for frame: SpriteFrame, of skin: MascotSkin, cropping bounds: CGRect) -> CGImage? {
         guard let sheet = sheet(named: frame.sheet, of: skin),
-              let rect = frameRect(frame, of: skin, in: sheet) else { return nil }
+              let rect = frameRect(frame, in: sheet) else { return nil }
         let crop = CGRect(x: rect.origin.x + bounds.origin.x,
                           y: rect.origin.y + bounds.origin.y,
                           width: bounds.width, height: bounds.height)
-        return sheet.cropping(to: crop)
+        return sheet.image.cropping(to: crop)
     }
 
     // MARK: - Sheets
 
-    private func sheet(named name: String, of skin: MascotSkin) -> CGImage? {
+    private func sheet(named name: String, of skin: MascotSkin) -> Sheet? {
         let key = "\(skin.location.cacheKey)/\(name)"
         if let cached = sheets[key] { return cached }
         // `.copy("Skins")` keeps the directory tree, so the sheet sits at
@@ -199,17 +207,71 @@ final class SpriteSheetStore {
         let url = directory.appendingPathComponent(name)
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
-        sheets[key] = image
-        return image
+        let sheet = Self.reducedIfPixelArt(Sheet(image: image, frameWidth: skin.frameWidth,
+                                                 frameHeight: skin.frameHeight),
+                                           external: skin.location.bundledPath == nil)
+        sheets[key] = sheet
+        return sheet
+    }
+
+    /// An external sheet drawn as upscaled pixel art is brought back to its native
+    /// size, so it renders through the same integer magnification as the built-ins.
+    /// The pitch is read off the first cell (frame 0 — the format's still frame,
+    /// which is never empty); a cell that is not pixel art leaves the sheet as is.
+    private static func reducedIfPixelArt(_ sheet: Sheet, external: Bool) -> Sheet {
+        guard external,
+              let cell = pixels(of: sheet.image, in: CGRect(x: 0, y: 0, width: sheet.frameWidth,
+                                                            height: sheet.frameHeight)),
+              let pitch = PixelPitch.detect(rows: cell),
+              sheet.image.width % pitch == 0, sheet.image.height % pitch == 0,
+              let reduced = sample(sheet.image, every: pitch) else { return sheet }
+        return Sheet(image: reduced, frameWidth: sheet.frameWidth / pitch,
+                     frameHeight: sheet.frameHeight / pitch)
+    }
+
+    /// Nearest-neighbour reduction by an exact integer: one device pixel out of
+    /// every `pitch × pitch` block, which for true pixel art is lossless.
+    private static func sample(_ image: CGImage, every pitch: Int) -> CGImage? {
+        let width = image.width / pitch, height = image.height / pitch
+        guard width > 0, height > 0,
+              let context = CGContext(data: nil, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.interpolationQuality = .none
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return context.makeImage()
+    }
+
+    /// The RGBA pixels of `rect`, one packed `UInt32` each, row-major, top-down.
+    private static func pixels(of image: CGImage, in rect: CGRect) -> [[UInt32]]? {
+        guard let tile = image.cropping(to: rect) else { return nil }
+        let width = tile.width, height = tile.height
+        guard width > 0, height > 0 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(data: &bytes, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.draw(tile, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return (0..<height).map { y in
+            (0..<width).map { x in
+                let i = (y * width + x) * 4
+                return UInt32(bytes[i]) << 24 | UInt32(bytes[i + 1]) << 16
+                     | UInt32(bytes[i + 2]) << 8 | UInt32(bytes[i + 3])
+            }
+        }
     }
 
     /// Where a frame sits in its sheet. The column count comes from the image's real
     /// width, never from declared data — see `SpriteFrame`.
-    private func frameRect(_ frame: SpriteFrame, of skin: MascotSkin, in sheet: CGImage) -> CGRect? {
-        let w = skin.frameWidth, h = skin.frameHeight
+    private func frameRect(_ frame: SpriteFrame, in sheet: Sheet) -> CGRect? {
+        let w = sheet.frameWidth, h = sheet.frameHeight
         guard w > 0, h > 0 else { return nil }
-        let columns = sheet.width / w
-        let rows = sheet.height / h
+        let columns = sheet.image.width / w
+        let rows = sheet.image.height / h
         guard columns > 0, rows > 0, frame.index >= 0, frame.index < columns * rows else { return nil }
         return CGRect(x: CGFloat((frame.index % columns) * w),
                       y: CGFloat((frame.index / columns) * h),
