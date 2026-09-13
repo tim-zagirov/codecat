@@ -49,6 +49,10 @@
 "panel.running.for" = "running for %@";
 "duration.minutes" = "%d min";
 "duration.hours.minutes" = "%dh %dm";
+/* %@ is a duration such as "12 min" — a session waiting on you, timed from when it went quiet. */
+"duration.waiting" = "waiting %@";
+/* %@ is a duration such as "12 min" — how long ago a finished or stopped session last did anything. */
+"duration.ago" = "%@ ago";
 
 /* One-word state of a session, shown in the list and in the menu-bar menu. */
 "session.status.idle" = "open";

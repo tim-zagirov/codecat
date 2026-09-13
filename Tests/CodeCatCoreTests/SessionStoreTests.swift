@@ -168,6 +168,21 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(store.anyWorking)
     }
 
+    /// The list must lead with the sessions that need attention, not with whichever
+    /// happened to start first. A crashed or waiting session sitting halfway down the
+    /// list because it started later is exactly the review finding this fixes: sort by
+    /// urgency (`waitingForYou > crashed > working > done > idle`), then `startedAt`.
+    func testOrderedSortsByUrgencyThenStart() {
+        let store = SessionStore()
+        startWorking(store, id: "w", cwd: "/w", at: t0)                 // working
+        store.apply(hook: hook("SessionStart", id: "i", cwd: "/i"), now: t0) // idle
+        store.apply(hook: hook("SessionStart", id: "q", cwd: "/q"), now: t0.addingTimeInterval(5))
+        store.apply(hook: hook("Notification", id: "q", message: "question"), now: t0.addingTimeInterval(6)) // waiting
+        let ids = store.ordered.map(\.id)
+        XCTAssertEqual(ids.first, "q", "waiting first")
+        XCTAssertEqual(ids.last, "i", "idle last")
+    }
+
     func testActivityForUnknownSessionCreatesSession() {
         let store = SessionStore()
         let act = TranscriptActivity(sessionId: "s9", projectPath: "/p9",

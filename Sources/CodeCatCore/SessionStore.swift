@@ -13,8 +13,26 @@ public final class SessionStore: ObservableObject {
         self.routeCache = routeCache
     }
 
+    /// The list the panel and island render, leading with the sessions that need the
+    /// user's attention. Sorted by urgency first — `waitingForYou > crashed > working
+    /// > done > idle` — then by `startedAt` ascending within a status, so same-status
+    /// rows keep their familiar start-time order. Before this, the list sorted by
+    /// `startedAt` alone and a crashed or waiting session sat wherever it happened to
+    /// begin, buried under fresher working rows.
     public var ordered: [Session] {
-        sessions.values.sorted { $0.startedAt < $1.startedAt }
+        func rank(_ s: SessionStatus) -> Int {
+            switch s {
+            case .waitingForYou: return 0
+            case .crashed: return 1
+            case .working: return 2
+            case .done: return 3
+            case .idle: return 4
+            }
+        }
+        return sessions.values.sorted {
+            rank($0.status) != rank($1.status) ? rank($0.status) < rank($1.status)
+                                               : $0.startedAt < $1.startedAt
+        }
     }
 
     /// What the cat shows. `.idle` sessions do not enter into this at all: an open
