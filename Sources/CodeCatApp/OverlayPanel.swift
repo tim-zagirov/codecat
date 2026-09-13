@@ -274,10 +274,13 @@ private struct CatClickContent: View {
             .contentShape(Rectangle())
             // A small lift under the cursor is the cat's way of saying it can be
             // pressed; the panel opens on a click and nothing else on screen hints at
-            // that. The canvas has margin on every side (`MascotLayout.margin`), so
-            // the lift never clips. Under Reduce Motion the cat stays still: there is
-            // no cursor change to fall back on (see `CatHostingView`).
-            .scaleEffect(hover.isHovered && !reduceMotion ? 1.04 : 1)
+            // that. It lifts by 2pt rather than scaling: scaling resamples the pixel
+            // art off its integer grid and turns the kitten to mush, where a whole-pixel
+            // vertical nudge keeps every pixel square. The canvas has margin on every
+            // side (`MascotLayout.margin`), so the lift never clips. Under Reduce Motion
+            // the cat stays put: there is no cursor change to fall back on (see
+            // `CatHostingView`).
+            .offset(y: hover.isHovered && !reduceMotion ? -2 : 0)
             .animation(.spring(response: 0.25, dampingFraction: 0.6), value: hover.isHovered)
     }
 }

@@ -70,7 +70,12 @@ struct MascotBadge: View {
                     .overlay(Circle().strokeBorder(Color.white.opacity(0.9), lineWidth: 1.5))
             }
         }
-        .offset(x: 34, y: -34)
+        // Placement is the composing view's job now: `SpriteMascotView` and `CatView`
+        // pin this badge to the canvas's top-trailing corner (`.frame(maxWidth:
+        // .infinity, maxHeight: .infinity, alignment: .topTrailing)` + `.padding(6)`),
+        // so it sits in the corner regardless of pose height instead of the old fixed
+        // `.offset(x: 34, y: -34)` from the canvas centre, which landed on the head of
+        // the taller poses.
     }
 
     /// The R1 colour vocabulary — the same literals the session row dots and the

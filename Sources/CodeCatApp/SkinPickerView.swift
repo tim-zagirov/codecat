@@ -3,11 +3,11 @@ import CodeCatCore
 
 /// The skin picker: a grid of live previews plus the credits disclosure.
 ///
-/// Eight previews at 36pt would not fit the 290pt panel in one row, and horizontal
+/// Nine previews would not fit the 290pt panel in one row, and horizontal
 /// scrolling inside a popover that closes on any click outside it is a way to miss,
-/// not a way to choose — hence a 4x2 grid that fits whole. Fits with room to spare:
-/// 4 columns x 34pt + 3 gaps x 8pt = 160pt, against 290 - 2x14 = 262pt of usable
-/// width inside the panel's own padding.
+/// not a way to choose — hence a 3x3 grid that fits whole with no orphan tile. Fits
+/// with room to spare: 3 columns x 56pt + 2 gaps x 8pt = 184pt, against 290 - 2x14 =
+/// 262pt of usable width inside the panel's own padding.
 @MainActor
 struct SkinPickerView: View {
     @ObservedObject var appState: AppState
@@ -25,7 +25,7 @@ struct SkinPickerView: View {
     private var cell: CGSize { style.cellSize }
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.fixed(cell.width), spacing: style.cellSpacing), count: 4)
+        Array(repeating: GridItem(.fixed(cell.width), spacing: style.cellSpacing), count: 3)
     }
 
     var body: some View {
@@ -147,21 +147,31 @@ struct SkinPickerView: View {
     }
 
     private var creditList: some View {
-            VStack(alignment: .leading, spacing: 6) {
+            // S13: the credits inherit the surface's own greys (`style.secondary` for
+            // the heading, `style.tertiary` for the supporting lines) rather than the
+            // system `.secondary`, which reads as near-black on the island's black
+            // slab. Indented 16pt under the disclosure row and 10pt between credits.
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(creditRows) { credit in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(credit.heading).font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(style.secondary)
                         if let note = credit.note {
                             // Third-party text — a pet's own description — must
                             // not be able to grow the panel without bound.
-                            Text(note).font(.system(size: 10)).foregroundStyle(.secondary)
+                            Text(note).font(.system(size: 10)).foregroundStyle(style.tertiary)
                                 .lineLimit(3)
                         }
-                        Text(credit.terms).font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text(credit.terms).font(.system(size: 10)).foregroundStyle(style.tertiary)
                         if credit.isFolder {
-                            Text(L10n.f("skins.imported.from", "From %@", credit.source))
-                                .font(.system(size: 10)).foregroundStyle(.secondary)
+                            // C5: an imported pet shows just the folder's own name; the
+                            // full `~/.codex/pets/...` path lives in the tooltip so the
+                            // line stays short but the provenance is still one hover away.
+                            Text(L10n.f("skins.imported.from", "From %@",
+                                        (credit.source as NSString).lastPathComponent))
+                                .font(.system(size: 10)).foregroundStyle(style.tertiary)
                                 .lineLimit(1).truncationMode(.middle)
+                                .help(credit.source)
                         } else if let url = URL(string: credit.source) {
                             // `URL(string:)` is not force-unwrapped: every `sourceURL` in
                             // `MascotSkins` is a valid literal today, but this view has no
@@ -174,7 +184,7 @@ struct SkinPickerView: View {
                     }
                 }
             }
-            .padding(.leading, 4)
+            .padding(.leading, 16)
     }
 
     /// One entry per built-in pack (not per skin — six LuizMelo cats share one

@@ -44,7 +44,13 @@ struct SpriteMascotView: View {
                 }
             }
             if showsBadge {
+                // Pinned to the canvas's top-trailing corner, not offset from its
+                // centre: the head sits low-left in the taller poses, so a corner
+                // badge clears it whatever the pose height. The 6pt padding keeps it
+                // off the very edge.
                 MascotBadge(indicator: indicator)
+                    .padding(6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
         .frame(width: canvasSize?.width ?? MascotLayout.canvasSize,

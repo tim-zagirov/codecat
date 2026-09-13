@@ -58,7 +58,12 @@ struct CatView: View {
             } else {
                 sittingCat
             }
+            // Pinned to the canvas's top-trailing corner (see `MascotBadge`): a corner
+            // badge clears the cat's head whatever the pose, rather than the old fixed
+            // offset from the centre that could land on it.
             MascotBadge(indicator: indicator)
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         }
         .frame(width: MascotLayout.canvasSize, height: MascotLayout.canvasSize)
     }
