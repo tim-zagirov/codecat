@@ -34,8 +34,24 @@ struct MascotView: View {
     /// Called when a sprite skin could not be loaded, so the app can report it.
     var onLoadFailure: (MascotSkin) -> Void = { _ in }
 
+    /// Explains the badge count to a hovering mouse, reusing the same strings the
+    /// menu-bar icon's own tooltip already shows for `AggregateStatus` — no new
+    /// catalog keys, just a second place those five map to. The island's short
+    /// menu is a non-key SwiftUI view, so AppKit may not surface `.help(...)` there;
+    /// the floating cat and the full menu both do.
+    private var mascotHelp: String {
+        switch status {
+        case .working(let n): return L10n.f("menubar.working", "working: %d", n)
+        case .waiting(let n): return L10n.f("menubar.waiting", "waiting: %d", n)
+        case .sleeping: return L10n.t("menubar.asleep", "asleep")
+        case .done: return L10n.t("menubar.done", "done")
+        case .problem: return L10n.t("menubar.problem", "problem")
+        }
+    }
+
     var body: some View {
         content
+            .help(mascotHelp)
             // Deliberately NOT `.onAppear` on the fallback branch below: a skin that
             // fails to load renders `CatView` in the same `else` branch of `content`
             // regardless of which skin it was. A `ViewBuilder` if/else gives each
