@@ -16,3 +16,4 @@ Sources/CodeCatApp/Skins/elthen/
 # A working document the author generated but never committed; it describes the
 # pre-0.3.0 state (Russian UI, 151 commits) and would publish as stale.
 PRODUCT_CONTEXT.md
+.worktrees/
