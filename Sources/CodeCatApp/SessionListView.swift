@@ -108,7 +108,12 @@ struct SessionListView: View {
         let status = Text("\(session.status.title) · \(session.activityDescription)")
             .font(.system(size: 11))
             .foregroundStyle(style.secondary)
-        if style.rowLayout == .twoLine {
+        // The duration lives in the second line's right column on the island always,
+        // and on the panel for every status except `.working` — a working session's
+        // duration is drawn by the "running for" third line below, so putting it here
+        // too would print it twice. Every other status has no third line now (see
+        // `sessionRow`), so this is where its duration has to appear.
+        if style.rowLayout == .twoLine || session.status != .working {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 status
                 Spacer(minLength: 8)
@@ -143,7 +148,12 @@ struct SessionListView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(style.primary)
                 secondLine(session)
-                if style.rowLayout == .threeLine {
+                // "running for %@" is a claim about a session that is running — only
+                // ever drawn for `.working`. A waiting, done, crashed or idle session
+                // is not running, and saying so ("running for 0 min" over a session
+                // that stopped) was the review finding this removes: those rows carry
+                // their honest duration in the second line's right column instead.
+                if style.rowLayout == .threeLine && session.status == .working {
                     Text(L10n.f("panel.running.for", "running for %@", duration(session)))
                         .font(.system(size: 10))
                         .foregroundStyle(style.tertiary)
@@ -222,8 +232,32 @@ struct SessionListView: View {
         }
     }
 
+    /// The duration each row shows, phrased to match what the session is doing. The
+    /// old version always computed `lastActivity - startedAt`, which freezes the
+    /// instant a session stops being active: a waiting session read "0 min" and a
+    /// stopped one "running for 0 min", both nonsense. Now the clock reflects status.
+    /// "now" is read from `Date()` at render; the app ticks `objectWillChange` every
+    /// 15 s, so the value keeps counting up on its own.
+    ///
+    /// - working / idle: how long since it started (`now - startedAt`) — a plain span.
+    /// - waiting: how long it has been waiting on you (`now - lastActivity`) → "waiting …".
+    /// - done / crashed: how long ago it last did anything (`now - lastActivity`) → "… ago".
     private func duration(_ session: Session) -> String {
-        let seconds = Int(session.lastActivity.timeIntervalSince(session.startedAt))
+        let now = Date()
+        switch session.status {
+        case .working, .idle:
+            return span(from: session.startedAt, to: now)
+        case .waitingForYou:
+            return L10n.f("duration.waiting", "waiting %@", span(from: session.lastActivity, to: now))
+        case .done, .crashed:
+            return L10n.f("duration.ago", "%@ ago", span(from: session.lastActivity, to: now))
+        }
+    }
+
+    /// A bare elapsed span, floored at zero so a slight clock skew never prints a
+    /// negative minute count.
+    private func span(from start: Date, to now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(start)))
         let m = seconds / 60
         return m < 60
             ? L10n.f("duration.minutes", "%d min", m)
