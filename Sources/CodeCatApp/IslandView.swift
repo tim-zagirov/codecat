@@ -116,7 +116,7 @@ struct IslandView: View {
     private var cat: some View {
         MascotView(skin: appState.skin,
                    status: appState.store.aggregate,
-                   sessionCount: appState.store.badgeCount,
+                   indicator: appState.store.indicator,
                    drawingSize: spriteSize,
                    canvasSize: CGSize(width: spriteSize.width, height: height),
                    showsBadge: false,
@@ -133,40 +133,67 @@ struct IslandView: View {
     /// the capsule would jump every time the count changed.
     @ViewBuilder
     private var counter: some View {
-        let count = appState.store.badgeCount
-        if count > 0 {
-            HStack(spacing: 4) {
-                statusDot
+        // The one source both surfaces read (see `SessionStore.indicator`), so the
+        // island counter and the floating badge can never disagree about a state.
+        let indicator = appState.store.indicator
+        if indicator.tone == .sleeping {
+            // Nothing to count — but the island stays put, or there would be nothing to
+            // hover. A dot without the capsule: an empty shape earns nothing.
+            Circle()
+                .fill(color(for: .sleeping))
+                .frame(width: 6, height: 6)
+        } else if indicator.tone == .waiting {
+            // Waiting is the one state that pulses — the same device the badge uses —
+            // because it is the one asking for the user's input. Nothing else pulses.
+            capsule(for: indicator)
+                .phaseAnimator([false, true]) { content, pulse in
+                    content.scaleEffect(pulse ? 1.08 : 1.0)
+                } animation: { _ in .easeInOut(duration: 1.0) }
+        } else {
+            // Problem/done are now visible too: the capsule shows for every non-sleeping
+            // tone, so a crashed session is no longer an invisible grey dot.
+            capsule(for: indicator)
+        }
+    }
+
+    /// The counter capsule: the state dot, the count when there is one, and — when a
+    /// session has crashed alongside live work — a second red dot trailing it, so a
+    /// dead session never blanks the number for the ones still running.
+    private func capsule(for indicator: MascotIndicator) -> some View {
+        HStack(spacing: 4) {
+            statusDot(tone: indicator.tone)
+            if indicator.count > 0 {
                 // The digit is always white: the dot carries the state. A red digit next
                 // to a red dot is two signals for one thing.
-                Text("\(count)")
+                Text("\(indicator.count)")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .monospacedDigit()
             }
-            .padding(.horizontal, 8)
-            .frame(height: 20)
-            .background(Capsule().fill(Color.white.opacity(0.10)))
-        } else {
-            // Nothing to count — but the island stays put, or there would be nothing to
-            // hover. A dot without the capsule: an empty shape earns nothing.
-            Circle()
-                .fill(Color.white.opacity(0.35))
-                .frame(width: 6, height: 6)
+            if indicator.crashedMarker {
+                Circle()
+                    .fill(color(for: .problem))
+                    .frame(width: 5, height: 5)
+            }
         }
+        .padding(.horizontal, 8)
+        .frame(height: 20)
+        .background(Capsule().fill(Color.white.opacity(0.10)))
     }
 
     /// The dot's colour repeats the status colours in the session list exactly: a dot
     /// on the island and a dot in a menu row have to mean the same thing, or the colour
     /// system falls apart into two.
-    private var statusDot: some View {
+    private func statusDot(tone: MascotTone) -> some View {
         Circle()
-            .fill(color(for: appState.store.aggregate))
+            .fill(color(for: tone))
             .frame(width: 6, height: 6)
     }
 
-    private func color(for status: AggregateStatus) -> Color {
-        switch status {
+    /// The R1 colour vocabulary — the same literals the session row dots and the
+    /// floating badge use, so all three surfaces are byte-identical.
+    private func color(for tone: MascotTone) -> Color {
+        switch tone {
         case .working: return .green
         case .waiting: return .orange
         case .done: return .blue

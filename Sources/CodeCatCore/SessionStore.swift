@@ -68,6 +68,30 @@ public final class SessionStore: ObservableObject {
         }
     }
 
+    /// The single source both the island counter and the floating badge render from,
+    /// so the two surfaces can never disagree about a state again. `aggregate`/
+    /// `badgeCount` are left exactly as they are — they drive power policy and the cat
+    /// pose, which have their own priorities — while THIS answers only "what mark does
+    /// the user see". A crash never hides live work: it adds a marker to the count
+    /// rather than replacing it (the old `aggregate` priority made one dead session
+    /// blank the number for five working ones).
+    public var indicator: MascotIndicator {
+        let all = sessions.values
+        let waiting = all.filter { if case .waitingForYou = $0.status { return true }; return false }.count
+        let working = all.filter { $0.status == .working }.count
+        let crashed = all.filter { $0.status == .crashed }.count
+        let active = waiting + working
+        if active > 0 {
+            return MascotIndicator(tone: waiting > 0 ? .waiting : .working,
+                                   count: active, crashedMarker: crashed > 0)
+        }
+        if crashed > 0 { return MascotIndicator(tone: .problem, count: crashed, crashedMarker: false) }
+        if all.contains(where: { $0.status == .done }) {
+            return MascotIndicator(tone: .done, count: 0, crashedMarker: false)
+        }
+        return MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false)
+    }
+
     /// Whether there are any tracked sessions at all, regardless of what they are doing.
     ///
     /// It answers exactly the question "are there sessions", and that is the whole

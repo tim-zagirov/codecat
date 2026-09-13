@@ -19,8 +19,12 @@ import CodeCatCore
 @MainActor
 struct MascotView: View {
     let skin: MascotSkin
+    /// Drives the sprite/hand-drawn pose (`SpriteMascotView` keys its animation on it,
+    /// `CatView` its posture). Kept distinct from `indicator`, which drives only the
+    /// badge — the pose has its own display priorities (waiting outranks working).
     let status: AggregateStatus
-    let sessionCount: Int
+    /// The single source the badge renders from — see `SessionStore.indicator`.
+    let indicator: MascotIndicator
     /// Sizes for the island. Unset means the floating mascot's canvas and scale.
     var drawingSize: CGSize?
     var canvasSize: CGSize?
@@ -52,7 +56,7 @@ struct MascotView: View {
     @ViewBuilder
     private var content: some View {
         if let loaded = SpriteSheetStore.shared.load(skin) {
-            SpriteMascotView(loaded: loaded, status: status, sessionCount: sessionCount,
+            SpriteMascotView(loaded: loaded, status: status, indicator: indicator,
                              showsBadge: showsBadge,
                              drawingSize: drawingSize, canvasSize: canvasSize,
                              since: since)
@@ -65,12 +69,14 @@ struct MascotView: View {
     /// `MascotBadge` unconditionally — so the badge is suppressed here, in the branch
     /// where `MascotView` already knows about `showsBadge`, rather than by changing
     /// `CatView`'s contract (the floating cat's badge has to stay). `MascotBadge`
-    /// draws itself only when `sessionCount > 0` (see its body), so a zero count
-    /// reliably switches it off — the same technique `SkinPickerView` already uses for
-    /// its 34pt previews.
+    /// draws nothing for the `.sleeping` tone (see its body), so passing a sleeping
+    /// indicator reliably switches it off — the same technique `SkinPickerView` uses
+    /// for its 34pt previews.
     @ViewBuilder
     private var fallback: some View {
-        let cat = CatView(status: status, sessionCount: showsBadge ? sessionCount : 0)
+        let badge = showsBadge ? indicator
+            : MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false)
+        let cat = CatView(status: status, indicator: badge)
         if let canvasSize {
             // `CatView` draws itself on a square `MascotLayout.canvasSize` canvas
             // (128pt) — without shrinking, it would look like a cropped fragment in a
