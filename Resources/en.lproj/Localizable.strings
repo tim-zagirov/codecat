@@ -16,8 +16,6 @@
 "menubar.done" = "done";
 "menubar.problem" = "problem";
 
-/* Menu item that switches how the mascot is shown. %@ is "Cat" or "Island". */
-"menu.view" = "View: %@";
 "menu.hooks.install" = "Set up Claude Code…";
 "menu.hooks.remove" = "Remove Claude Code hooks…";
 "menu.login.item" = "Open at login";
@@ -35,7 +33,7 @@
 "setting.keep.awake" = "Keep the Mac awake while agents work";
 "setting.lid.mode" = "Keep agents running with the lid closed";
 "setting.sounds" = "Play a sound when an agent needs you";
-"setting.show.cat" = "Show the cat";
+"setting.show.cat" = "Show the cat on screen";
 "setting.hide.when.idle" = "Hide the cat when nothing is running";
 "settings.no.notch" = "Island needs a display with a notch. This Mac doesn't have one, so the cat stays floating.";
 "settings.lid.password.hint" = "Turning this on the first time asks for an administrator password. One-time setup.";
@@ -122,6 +120,13 @@
 /* %@ is the skin's name. */
 "skin.load.failed.title" = "Couldn't load the %@ skin";
 "skin.load.failed.body" = "Its files couldn't be read. Switched to another skin.";
+
+/* MARK: - Island menu */
+
+/* Header of the collapsible skins disclosure in the island menu. */
+"island.section.skins" = "Skins";
+/* Hint at the foot of the short (hover) island menu that a click reveals more. */
+"island.more" = "Click for skins and settings";
 
 /* MARK: - Hooks */
 
