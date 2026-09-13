@@ -91,4 +91,32 @@ public enum DemoFeed {
     public static func phase(atStep step: Int) -> Phase {
         Phase.allCases[((step % Phase.allCases.count) + Phase.allCases.count) % Phase.allCases.count]
     }
+
+    /// What `--demo-phase=` can hold: a phase of the loop, or the one state the loop
+    /// deliberately never reaches.
+    public enum Pin: Sendable {
+        case phase(Phase)
+        /// A session died. Not a phase of the loop — see `DemoFeedTests` — but the
+        /// fifth pose the mascot has, and a screenshot of it has to be possible.
+        case problem
+    }
+
+    /// Puts the store into `.problem` the way it really arises: the `working` phase,
+    /// then the store's own staleness rule finding one session silent with no live
+    /// process. One session stops, one keeps working, one stays idle — a picture of
+    /// the state, not of three dead rows.
+    public static func applyProblem(to store: SessionStore, now: Date) {
+        for event in events(for: .working) { store.apply(hook: event, now: now) }
+        let later = now.addingTimeInterval(121)
+        store.apply(hook: HookEvent(hookEventName: "UserPromptSubmit",
+                                    sessionId: sessionIDs[0], cwd: projects[0],
+                                    message: nil, source: nil), now: later)
+        // 121 s of silence for the second session, against a 120 s threshold and no
+        // `claude` process anywhere: the rule in `SessionStore.reconcile`.
+        store.reconcile(claudeProcessCount: 0, now: later, isAgentAlive: { _ in false })
+        store.apply(activity: TranscriptActivity(
+            sessionId: sessionIDs[0], projectPath: projects[0],
+            description: L10n.f("activity.editing.file", "editing %@", "IslandLayout.swift"),
+            timestamp: later.addingTimeInterval(1), isSubagent: false, endsTurn: false))
+    }
 }

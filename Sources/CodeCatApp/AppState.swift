@@ -304,12 +304,12 @@ final class AppState: ObservableObject {
     ///
     /// - Parameter interval: seconds per phase. Four is what the capture script
     ///   uses; the "done" animation is a transition and needs a beat to play.
-    /// - Parameter pinnedPhase: hold one phase instead of looping. A screenshot of
+    /// - Parameter pin: hold one state instead of looping. A screenshot of
     ///   "waiting for you" taken against a four-second loop is a race; this makes it
-    ///   a fact.
-    func startDemo(interval: TimeInterval = 4, pinnedPhase: DemoFeed.Phase? = nil) {
+    ///   a fact. `.problem` is reachable only this way — see `DemoFeed.Pin`.
+    func startDemo(interval: TimeInterval = 4, pin: DemoFeed.Pin? = nil) {
         log.write("demo mode — no socket, no watcher, no power assertion"
-            + (pinnedPhase.map { ", pinned to \($0)" } ?? ""))
+            + (pin.map { ", pinned to \($0)" } ?? ""))
         powerManager.isEnabled = false
         lidController.isEnabled = false
         var step = 0
@@ -319,9 +319,13 @@ final class AppState: ObservableObject {
             for activity in DemoFeed.activities(for: phase, now: now) { store.apply(activity: activity) }
             refresh()
         }
-        if let pinnedPhase {
-            apply(pinnedPhase)
-        } else {
+        switch pin {
+        case .phase(let phase):
+            apply(phase)
+        case .problem:
+            DemoFeed.applyProblem(to: store, now: Date())
+            refresh()
+        case nil:
             func advance() {
                 apply(DemoFeed.phase(atStep: step))
                 step += 1

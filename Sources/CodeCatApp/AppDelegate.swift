@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and for the landing-page recording (scripts/capture-screenshots.sh). It
         // replaces `start()` rather than adding to it — see `startDemo`.
         if CommandLine.arguments.contains("--demo") {
-            appState.startDemo(pinnedPhase: Self.pinnedDemoPhase())
+            appState.startDemo(pin: Self.demoPin())
             // `--demo-open-menu` is what lets the capture script photograph the
             // session list and the skin grid: with the app hidden from every
             // screen-control tool, there is no other way to open them.
@@ -76,18 +76,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.shutdown()
     }
 
-    /// `--demo-phase=idle|working|waiting|done`, for a capture that must not race
-    /// the four-second loop. An unrecognised name means "loop", not "crash": this
-    /// flag exists for a script, and a typo in it should cost a retake, not a
+    /// `--demo-phase=idle|working|waiting|done|problem`, for a capture that must not
+    /// race the four-second loop. An unrecognised name means "loop", not "crash":
+    /// this flag exists for a script, and a typo in it should cost a retake, not a
     /// launch failure.
-    private static func pinnedDemoPhase() -> DemoFeed.Phase? {
+    private static func demoPin() -> DemoFeed.Pin? {
         guard let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--demo-phase=") })
         else { return nil }
         switch argument.dropFirst("--demo-phase=".count) {
-        case "idle": return .idle
-        case "working": return .working
-        case "waiting": return .waiting
-        case "done": return .done
+        case "idle": return .phase(.idle)
+        case "working": return .phase(.working)
+        case "waiting": return .phase(.waiting)
+        case "done": return .phase(.done)
+        case "problem": return .problem
         default: return nil
         }
     }
