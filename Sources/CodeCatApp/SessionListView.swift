@@ -91,9 +91,34 @@ struct SessionListView: View {
 
         VStack(alignment: .leading, spacing: style.blockSpacing) {
             if appState.store.ordered.isEmpty {
-                Text(L10n.t("panel.no.sessions", "No active sessions"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(style.secondary)
+                if !appState.hooksInstalled {
+                    // M6: an empty list with no hooks is not "nothing running" — it is
+                    // "not set up yet". Say so, and lead with the one action that fixes
+                    // it, rather than a bare line the user can only read past.
+                    VStack(spacing: 6) {
+                        Text(L10n.t("panel.setup.title", "No sessions yet"))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(style.primary)
+                        Text(L10n.t("panel.setup.body",
+                            "CodeCat needs one setup step before it can see your "
+                            + "Claude Code sessions."))
+                            .font(.system(size: 11))
+                            .foregroundStyle(style.secondary)
+                            .multilineTextAlignment(.center)
+                        Button(L10n.t("settings.hooks.install", "Set up Claude Code…")) {
+                            appState.installHooksIfNeeded()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .padding(.top, 2)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                } else {
+                    Text(L10n.t("panel.no.sessions", "No active sessions"))
+                        .font(.system(size: 12))
+                        .foregroundStyle(style.secondary)
+                }
             } else {
                 ForEach(appState.store.ordered) { session in
                     sessionRow(session, nameShared: (nameCounts[session.projectName] ?? 0) >= 2,
