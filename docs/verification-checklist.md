@@ -97,7 +97,7 @@ Run this on a fresh build before tagging a release.
     read it. A lone `[hook]` with no matching `[app]` means the event was lost
     between the two processes.
 30. "Remove Claude Code hooks…" → asks for confirmation; after you agree the menu
-    item becomes "Install Claude Code hooks…", no `codecat` remains in
+    item becomes "Set up Claude Code…", no `codecat` remains in
     `~/.claude/settings.json`, and every other key (`enabledPlugins`,
     `statusLine`, `tui`, …) is untouched. Install again — all five events return.
 31. "Hide the cat when nothing is running" exists in the menu-bar menu too, not

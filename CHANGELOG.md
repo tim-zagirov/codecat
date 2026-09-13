@@ -27,13 +27,46 @@ number carries breaking changes.
 
 - **Hover states on everything you can press.** Skin tiles in the floating
   panel now highlight under the cursor (they used to look like pictures),
-  the "About the assets" row highlights and turns its chevron, both show the
-  pointing hand, and the floating cat lifts by a few percent under the cursor
+  the "Artists and licences" row highlights and turns its chevron, both show the
+  pointing hand, and the floating cat lifts slightly under the cursor
   (not under Reduce Motion). The cat shows no pointing hand: its window can
   never become key, and macOS ignores the cursor such a window sets. One
   `hoverHighlight` modifier draws the same highlight on the panel and the island.
 
+- **The empty panel leads with a call to action.** With no sessions the panel now
+  opens on **Set up Claude Code…** rather than blank space — the one step that
+  makes CodeCat learn about sessions early is the first thing you see.
+- **Installing the hooks asks first.** The action explains what it will write to
+  `~/.claude/settings.json`, waits for a yes, and confirms once the merge is done,
+  instead of editing the file silently.
+- **Closed-lid mode explains itself before the password.** The prompt now says it
+  installs a narrow sudoers rule for two exact `pmset` lines and a launch daemon
+  that runs as root, so the administrator password is asked for in context.
+- **Escape closes the full island menu**, alongside the click and the dwell-out
+  that already dismissed it.
+- **The mascot has a tooltip** naming its current state, so the pose has words.
+
+### Changed
+- **One indicator drives the island counter and the floating badge.** Both read
+  from the same aggregate, so a crashed session shows on each and their colours
+  agree — working green, waiting orange, problem red, done blue. Sessions sort by
+  urgency, so the one that needs you is first.
+- **Durations read honestly.** "waiting 3 min", "5 min ago", "just now" — never
+  "running for 0 min". Each session row shows one status, a glyph for where it
+  runs, and a single jump hint instead of competing cues.
+- **The island menu tucks skins and settings behind disclosures** and says "Click
+  for skins and settings", so the short menu stays short. The skin grid is a 3×3
+  of larger tiles, the panel title states the aggregate state, and the setting
+  labels say what they do. Long menus scroll rather than run off the screen.
+- **The island opens on a deliberate hover** rather than any crossing of the
+  notch, and its wings no longer sit over the menu bar while it is closed. The
+  menu-bar menu drops its dead session rows and groups the view modes into a
+  submenu.
+
 ### Fixed
+- **Choosing "Island" on a Mac without a notch no longer strands the mascot** —
+  it falls back to the floating cat instead of drawing an island with nowhere to
+  live.
 - **The island menu answers hover.** Session rows, skin tiles and the credits row
   highlighted only in the floating panel; on the island nothing reacted to the
   cursor. SwiftUI's hover is silent in a window that is not key, and the island's
