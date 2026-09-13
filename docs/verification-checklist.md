@@ -63,6 +63,9 @@ Run this on a fresh build before tagging a release.
     number when an agent is waiting.
 21. Hovering opens the short menu; moving the mouse from the island onto the menu
     does not close it; moving away closes it after roughly a third of a second.
+    Rows, skin tiles and the credits row highlight under the cursor in the short
+    menu even though the window is not key (no pointing hand there — macOS ignores
+    a non-key window's cursor).
 22. Clicking opens the full menu; its toggles, skin grid and hooks button all
     work; clicking outside closes it; clicking the island again closes it.
 23. Turn on "Hide the cat when nothing is running" with zero sessions → the
