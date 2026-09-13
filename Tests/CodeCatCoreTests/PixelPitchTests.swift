@@ -50,11 +50,12 @@ final class PixelPitchTests: XCTestCase {
         XCTAssertEqual(PixelPitch.detect(rows: cell(pattern: [[1, 2], [2, 1]], pitch: 32)), 16)
     }
 
-    /// Transparent padding that is not a multiple of the pitch must not pass: the
-    /// reduced sheet would then not divide into cells.
-    func testPitchMustDivideTheCellSize() {
+    /// Padding that is not a multiple of the drawn pixel breaks the runs through
+    /// it: an odd strip next to a pitch-4 cell drags the GCD to 1, and the sheet
+    /// falls back to smooth scaling rather than being reduced by a wrong pitch.
+    func testOddPaddingDefeatsDetection() {
         var rows = cell(pattern: checker, pitch: 4)          // 16×16
-        rows = rows.map { $0 + [0, 0] }                       // 18 wide, runs of 2 at the edge
+        rows = rows.map { $0 + [0, 0, 0] }                    // 19 wide, runs of 3 at the edge
         XCTAssertNil(PixelPitch.detect(rows: rows))
     }
 
