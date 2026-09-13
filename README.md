@@ -60,6 +60,24 @@ Requires macOS 14 or later. Apple silicon and Intel.
   <img src="docs/media/cat-waiting.png" alt="The cat waving because an agent is waiting" width="120">
 </p>
 
+## Pets in the Codex pet format
+
+CodeCat can wear any pet drawn for the Codex pet format — the pixel pets people
+hatch with the `hatch-pet` skill or download from community galleries. A pet is
+a folder with a `pet.json` and an 8-column × 9-row sprite sheet (1536×1872 is the
+canonical size, PNG or WebP). Drop the folder into either of these, and it appears
+in the skin picker the next time you open it:
+
+- `~/.codex/pets/<pet>/` — where Codex keeps them, so pets you already have just show up
+- `~/Library/Application Support/CodeCat/Pets/<pet>/` — CodeCat's own folder; a pet here
+  overrides a same-named one in the Codex folder
+
+CodeCat plays five of the nine rows: `idle` while sleeping, `running` while
+agents work, `waiting` when one needs you, `failed` for a problem, and `jumping`
+then `review` when the work is done. Pets are read where they are and never
+copied or redistributed; each keeps its author's own terms. A folder that is not
+a valid pet is skipped and named once in `codecat.log`.
+
 ## Hooks: what gets written, and how to take it back
 
 **Install Claude Code hooks…** merges one entry per event into
