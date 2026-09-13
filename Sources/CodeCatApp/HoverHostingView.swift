@@ -95,6 +95,11 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     var onEscape: (() -> Void)?
     /// Height of the island strip, measured from the window's top edge.
     var islandStripHeight: CGFloat = 0
+    /// Whether a menu is currently revealed under the strip. Set by the controller
+    /// (in `applyFrame`) on every menu transition. When it is `false` the window is
+    /// the bare strip, and S15 lets clicks on it fall through to the menu bar
+    /// beneath — see `hitTest`.
+    var menuIsOpen: Bool = false
 
     /// Outline of the painted area in SwiftUI coordinates (y grows downward, origin
     /// at the window's top-left). Set by the controller together with the window frame.
@@ -117,10 +122,17 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     var silhouette: CGPath?
 
     private func isInStrip(_ event: NSEvent) -> Bool {
-        let point = convert(event.locationInWindow, from: nil)
-        return isFlipped
-            ? point.y <= islandStripHeight
-            : point.y >= bounds.height - islandStripHeight
+        isInStripRegion(convert(event.locationInWindow, from: nil))
+    }
+
+    /// Whether a point in the view's own coordinates lies within the island strip
+    /// (the top `islandStripHeight`, whichever way the view is flipped). When the
+    /// menu is closed the whole window is the strip, so this is effectively "inside
+    /// the window".
+    private func isInStripRegion(_ pointInSelf: NSPoint) -> Bool {
+        isFlipped
+            ? pointInSelf.y <= islandStripHeight
+            : pointInSelf.y >= bounds.height - islandStripHeight
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -151,6 +163,16 @@ final class IslandHostingView: HoverHostingView<IslandView> {
         let local = superview.map { convert(point, from: $0) } ?? point
         guard bounds.contains(local) else { return super.hitTest(point) }
         guard silhouette.contains(silhouettePoint(local)) else { return nil }
+        // S15: with the menu closed the window is the bare strip, and the strip sits
+        // on top of the menu bar. Pass clicks on it straight through to the menu
+        // titles beneath — the app menu under the left wing, the status icons under
+        // the right — instead of swallowing them into a window the user is not
+        // interacting with. Hover is unaffected: it rides the `.activeAlways`
+        // tracking area, which AppKit evaluates from the cursor's geometry, not from
+        // `hitTest`, so the dwell still opens the menu. Only the redundant
+        // click-to-open is given up while closed; once a menu is open (`menuIsOpen`)
+        // the strip is live again, so clicking it expands or dismisses as before.
+        if !menuIsOpen, isInStripRegion(local) { return nil }
         return super.hitTest(point)
     }
 

@@ -290,6 +290,11 @@ final class IslandController: NSObject, MascotPresenting {
                             geometry: Geometry) {
         let frame = windowFrame(for: geometry, hosting: hosting)
         panel.setFrame(frame, display: true)
+        // S15: the host lets clicks fall through to the menu bar while the strip is
+        // alone. Every menu transition routes through here — setVisible, showMenu,
+        // expandMenu, dropMenu — so this one assignment keeps the flag in step with
+        // `menuLevel` across all of them.
+        hosting.menuIsOpen = menuLevel != nil
         hosting.silhouette = IslandLayout.silhouettePath(
             in: CGRect(x: 0, y: 0, width: frame.width, height: frame.height),
             bottomRadius: IslandLayout.cornerRadius)

@@ -28,11 +28,13 @@ struct MascotBadge: View {
             if indicator.tone != .sleeping {
                 if isWaiting {
                     // Waiting is the state that needs the user's input, so it keeps the
-                    // gentle pulse that draws the eye.
+                    // pulse that draws the eye. C6: a 3 s cycle (not 1 s) makes it a
+                    // calm breath rather than a nag that never lets up — no timer, just
+                    // a slower ease.
                     content
                         .phaseAnimator([false, true]) { content, pulsePhase in
                             content.scaleEffect(pulsePhase ? 1.15 : 1.0)
-                        } animation: { _ in .easeInOut(duration: 1.0) }
+                        } animation: { _ in .easeInOut(duration: 3.0) }
                 } else {
                     content
                 }

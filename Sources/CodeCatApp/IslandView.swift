@@ -148,12 +148,13 @@ struct IslandView: View {
                 .fill(color(for: .sleeping))
                 .frame(width: 6, height: 6)
         } else if indicator.tone == .waiting {
-            // Waiting is the one state that pulses — the same device the badge uses —
-            // because it is the one asking for the user's input. Nothing else pulses.
+            // Waiting is the one state that pulses — the same device the badge uses,
+            // and now the same calm 3 s cycle (C6) — because it is the one asking for
+            // the user's input. Nothing else pulses.
             capsule(for: indicator)
                 .phaseAnimator([false, true]) { content, pulse in
                     content.scaleEffect(pulse ? 1.08 : 1.0)
-                } animation: { _ in .easeInOut(duration: 1.0) }
+                } animation: { _ in .easeInOut(duration: 3.0) }
         } else {
             // Problem/done are now visible too: the capsule shows for every non-sleeping
             // tone, so a crashed session is no longer an invisible grey dot.
