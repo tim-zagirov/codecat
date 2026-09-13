@@ -153,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.remove", "Remove Claude Code hooks…"),
                                     action: #selector(removeHooks), keyEquivalent: ""))
         } else {
-            menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.install", "Install Claude Code hooks…"),
+            menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.install", "Set up Claude Code…"),
                                     action: #selector(installHooks), keyEquivalent: ""))
         }
         let loginItem = NSMenuItem(title: L10n.t("menu.login.item", "Open at login"),

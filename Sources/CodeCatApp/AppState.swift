@@ -400,6 +400,22 @@ final class AppState: ObservableObject {
     }
 
     func installHooksIfNeeded() {
+        // This edits the user's own settings file, so it asks first — the mirror of
+        // `removeHooks`. On Cancel nothing is read, merged or written.
+        let confirm = NSAlert()
+        confirm.messageText = L10n.t("hooks.install.confirm.title",
+            "Let CodeCat watch your Claude Code sessions?")
+        confirm.informativeText = L10n.f("hooks.install.confirm.body",
+            "CodeCat will add itself to %1$@ as a handler for these events: %2$@. "
+            + "Everything else in that file — your permissions, MCP servers and other "
+            + "hooks — is left exactly as it is."
+            + "\n\nYou can undo this any time from the menu-bar cat: Remove Claude Code hooks.",
+            CodeCatPaths.claudeSettings.path,
+            HooksInstaller.events.joined(separator: ", "))
+        confirm.addButton(withTitle: L10n.t("hooks.install.confirm.button", "Set up"))
+        confirm.addButton(withTitle: L10n.t("button.cancel", "Cancel"))
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+
         let existing: Data?
         switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
         case .notFound:
@@ -441,6 +457,14 @@ final class AppState: ObservableObject {
             // document or leaves the old one untouched.
             try updated.write(to: CodeCatPaths.claudeSettings, options: .atomic)
             hooksInstalled = true
+            // Success feedback: the button just vanishing (M7) left the user unsure
+            // whether anything happened. Say plainly what to expect, including the one
+            // surprise — already-open sessions need a restart to be seen.
+            presentHooksAlert(
+                title: L10n.t("hooks.install.done.title", "CodeCat is watching"),
+                message: L10n.t("hooks.install.done.body",
+                    "New Claude Code sessions appear in the list. Sessions that are "
+                    + "already open need to be restarted before CodeCat sees them."))
         } catch {
             let alert = NSAlert()
             alert.messageText = L10n.t("hooks.install.failed.title", "Couldn't install the hooks")

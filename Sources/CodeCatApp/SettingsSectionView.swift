@@ -58,6 +58,18 @@ struct SettingsSectionView: View {
             // The section heading now draws on both surfaces, so the panel gains the
             // "Settings" heading it lacked and the two menus read as one design.
             MenuSectionHeader(title: L10n.t("settings.title", "Settings"))
+            // M6: while hooks are missing CodeCat does nothing, so the one control that
+            // fixes that leads the section and is the prominent one — not an 11 pt
+            // afterthought at the very bottom. `.controlSize(.small)` is applied on the
+            // button itself so the section's `.controlSize(.mini)` (below) doesn't shrink
+            // this borderedProminent button back down.
+            if !appState.hooksInstalled {
+                Button(L10n.t("settings.hooks.install", "Set up Claude Code…")) {
+                    appState.installHooksIfNeeded()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
             SettingToggle(L10n.t("setting.keep.awake", "Keep the Mac awake while agents work"),
                           isOn: $appState.keepAwakeEnabled)
             SettingToggle(L10n.t("setting.lid.mode", "Keep agents running with the lid closed"), isOn: Binding(
@@ -72,12 +84,6 @@ struct SettingsSectionView: View {
                     .foregroundStyle(style.secondary)
             }
             SettingToggle(L10n.t("setting.sounds", "Play a sound when an agent needs you"), isOn: $appState.soundsEnabled)
-            if !appState.hooksInstalled {
-                Button(L10n.t("settings.hooks.install", "Install Claude Code hooks")) {
-                    appState.installHooksIfNeeded()
-                }
-                .font(.system(size: 11))
-            }
         }
         .toggleStyle(.switch)
         .controlSize(.mini)
