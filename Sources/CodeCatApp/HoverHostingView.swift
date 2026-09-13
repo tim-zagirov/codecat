@@ -89,6 +89,10 @@ class HoverHostingView<Content: View>: NSHostingView<Content> {
 /// released somewhere else.
 final class IslandHostingView: HoverHostingView<IslandView> {
     var onClick: (() -> Void)?
+    /// Called when Escape is pressed. Wired to close the full menu. Only the full
+    /// menu makes the panel key, so `keyDown` reaches this view only then — Escape
+    /// can close the full menu and nothing else.
+    var onEscape: (() -> Void)?
     /// Height of the island strip, measured from the window's top edge.
     var islandStripHeight: CGFloat = 0
 
@@ -120,6 +124,16 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// Escape (keyCode 53) closes the full menu; every other key falls through to the
+    /// SwiftUI content so the toggles and buttons keep their own key handling.
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            onEscape?()
+            return
+        }
+        super.keyDown(with: event)
+    }
 
     /// A point in the outline's SwiftUI coordinates: y grows downward from the
     /// window's top edge. `NSHostingView` is flipped, but relying on that silently

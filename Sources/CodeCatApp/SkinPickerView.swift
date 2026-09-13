@@ -11,6 +11,10 @@ import CodeCatCore
 @MainActor
 struct SkinPickerView: View {
     @ObservedObject var appState: AppState
+    /// Whether to draw the "Skin" heading. The panel wants it; the island tucks the
+    /// grid inside its own "Skins" disclosure, whose row is already the heading, so
+    /// it passes `false` to avoid a heading under a heading.
+    var showsHeader = true
 
     /// Previews are small and there are eight of them animating at once, so their
     /// frame rate is capped well below the mascot's own.
@@ -30,7 +34,7 @@ struct SkinPickerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            header
+            if showsHeader { header }
             LazyVGrid(columns: columns, alignment: .leading, spacing: style.cellSpacing) {
                 ForEach(appState.availableSkins) { skin in
                     preview(skin)

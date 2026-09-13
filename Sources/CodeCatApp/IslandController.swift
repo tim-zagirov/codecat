@@ -29,6 +29,12 @@ final class IslandController: NSObject, MascotPresenting {
     /// while the silhouette travels back, or there would be nothing to collapse.
     private var collapsingLevel: IslandMenuLevel?
     private var pendingClose: DispatchWorkItem?
+    /// M11: the short menu opens on a deliberate dwell, not the instant the cursor
+    /// touches the notch. A cursor merely crossing the strip on its way to the menu
+    /// bar or a corner should leave it closed. This work item is the 300 ms dwell;
+    /// it is cancelled when the cursor leaves, when a click opens the menu, and
+    /// whenever the menu is hidden.
+    private var pendingOpen: DispatchWorkItem?
     /// Tearing the menu window down after the closing animation arrives. Kept apart
     /// from `pendingClose` (which decides *whether to close* the short menu when the
     /// cursor leaves): the menu can be reopened in the middle of closing, and then the
@@ -96,6 +102,10 @@ final class IslandController: NSObject, MascotPresenting {
             hosting.onEnter = { [weak self] in self?.pointerEnteredRegion() }
             hosting.onExit = { [weak self] in self?.pointerLeftRegion() }
             hosting.onClick = { [weak self] in self?.islandClicked() }
+            // S18: Escape closes the full menu. Only the full menu is key, so a
+            // key-down event reaches the host only then — Escape can only ever
+            // close the full menu, never the non-key short one.
+            hosting.onEscape = { [weak self] in self?.hideMenu() }
             panel.contentView = hosting
             return hosting
         }()
@@ -117,10 +127,30 @@ final class IslandController: NSObject, MascotPresenting {
     private func pointerEnteredRegion() {
         pendingClose?.cancel()
         pendingClose = nil
-        if menuLevel == nil { showMenu(.short) }
+        guard menuLevel == nil else { return }
+        // M11: never open while a mouse button is down — a drag passing over the
+        // notch (moving a window, selecting text) must not summon the menu.
+        guard NSEvent.pressedMouseButtons == 0 else { return }
+        // Open after a 300 ms dwell rather than immediately, so a cursor that only
+        // crosses the strip leaves it closed. The state is re-checked inside the
+        // block: across the delay a button may have gone down or a click may have
+        // already opened the menu.
+        pendingOpen?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingOpen = nil
+            guard self.menuLevel == nil, NSEvent.pressedMouseButtons == 0 else { return }
+            self.showMenu(.short)
+        }
+        pendingOpen = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     private func pointerLeftRegion() {
+        // A pending open is abandoned the moment the cursor leaves: the dwell was
+        // not completed, so nothing should open.
+        pendingOpen?.cancel()
+        pendingOpen = nil
         // The full menu closes only on a click outside: it holds toggles and the skin
         // picker, and it must not vanish while the user is moving the mouse towards the
         // switch they want.
@@ -144,6 +174,9 @@ final class IslandController: NSObject, MascotPresenting {
     }
 
     private func islandClicked() {
+        // A click decides the menu now — any dwell still counting down is void.
+        pendingOpen?.cancel()
+        pendingOpen = nil
         switch menuLevel {
         case .full: hideMenu()
         case .short: expandMenu()
@@ -191,6 +224,10 @@ final class IslandController: NSObject, MascotPresenting {
     ///   paths where waiting is not possible: the island is leaving the screen
     ///   entirely, the display mode is changing, another menu is opening in its place.
     private func hideMenu(animated: Bool = true) {
+        // A dwell counting down while the menu is being torn down (screen change,
+        // Escape, resign-key) must not fire afterwards and reopen it.
+        pendingOpen?.cancel()
+        pendingOpen = nil
         pendingClose?.cancel()
         pendingClose = nil
         pendingTeardown?.cancel()

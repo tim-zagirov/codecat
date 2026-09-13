@@ -124,6 +124,15 @@ final class AppState: ObservableObject {
     /// open clipped inside a panel whose AppKit content rect didn't grow with it.
     @Published var creditsExpanded = false
 
+    /// Whether the island's "Skins" and "Settings" disclosures are open. Closed by
+    /// default: the island menu opens on a hover and half a screen of skins and
+    /// toggles in response to that reads as clutter (S5). Kept here rather than as
+    /// local `@State` for the same reason as `creditsExpanded`: toggling one changes
+    /// the menu's content height, and publishing through `objectWillChange` is what
+    /// lets the island's reveal spring and silhouette relayout to the new height.
+    @Published var islandSkinsExpanded = false
+    @Published var islandSettingsExpanded = false
+
     var skin: MascotSkin { registry.skin(withID: skinID) }
 
     /// The skins the picker may offer: everything in the registry whose sheets are

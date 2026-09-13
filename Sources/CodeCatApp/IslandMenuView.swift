@@ -43,6 +43,14 @@ struct IslandMenuView: View {
                 if level == .full {
                     MenuSeparator()
                     SettingsSectionView(appState: appState)
+                } else {
+                    // S17: the short menu looks complete on its own, and its window is
+                    // not key so the cursor stays an arrow — nothing says a click does
+                    // more. One quiet line answers both at once.
+                    Text(L10n.t("island.more", "Click for skins and settings"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(MenuStyle.island.tertiary)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
             .padding(.horizontal, 12)

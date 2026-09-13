@@ -116,22 +116,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        for session in appState.store.ordered {
-            let item = NSMenuItem(
-                title: "\(session.projectName): \(session.status.title) — \(session.activityDescription)",
-                action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
-        }
-        if !appState.store.ordered.isEmpty { menu.addItem(.separator()) }
+        // S20: no per-session rows here — the panel and the island both show the live
+        // session list, and a disabled copy in the menu bar only went stale.
 
+        // One "View" item with a submenu of the two modes, each carrying its own
+        // checkmark, instead of two sibling "View: Cat" / "View: Island" rows.
+        let viewItem = NSMenuItem(title: L10n.t("settings.view", "View"),
+                                  action: nil, keyEquivalent: "")
+        let viewMenu = NSMenu()
         for mode in MascotDisplayMode.allCases {
-            let item = NSMenuItem(title: L10n.f("menu.view", "View: %@", mode.title),
+            let item = NSMenuItem(title: mode.title,
                                   action: #selector(selectDisplayMode(_:)), keyEquivalent: "")
             item.state = (appState.displayMode == mode) ? .on : .off
             item.representedObject = mode.rawValue
-            menu.addItem(item)
+            // Submenu items are not reached by the top-level target loop below.
+            item.target = self
+            viewMenu.addItem(item)
         }
+        viewItem.submenu = viewMenu
+        menu.addItem(viewItem)
         menu.addItem(.separator())
 
         menu.addItem(toggle(L10n.t("setting.keep.awake", "Keep the Mac awake while agents work"),
@@ -140,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             appState.lidModeEnabled, #selector(toggleLidMode)))
         menu.addItem(toggle(L10n.t("setting.sounds", "Play a sound when an agent needs you"),
                             appState.soundsEnabled, #selector(toggleSounds)))
-        menu.addItem(toggle(L10n.t("setting.show.cat", "Show the cat"),
+        menu.addItem(toggle(L10n.t("setting.show.cat", "Show the cat on screen"),
                             appState.showMascot, #selector(toggleMascot)))
         // A duplicate of the item in the settings panel, and mandatory here rather than
         // a convenience: turning "hide" on removes both the mascot and the menu living
