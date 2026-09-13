@@ -91,6 +91,7 @@
 
 "skins.title" = "Skin";
 "skins.credits" = "About the assets";
+"skins.imported.from" = "From %@";
 "license.cc0" = "CC0 1.0 — public domain";
 "skin.luizmelo.1" = "Ginger";
 "skin.luizmelo.2" = "Black";
