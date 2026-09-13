@@ -25,28 +25,47 @@ struct IslandMenuView: View {
     @ObservedObject var appState: AppState
     let level: IslandMenuLevel
     let width: CGFloat
+    /// The tallest the menu's content may be before it scrolls: the room below the
+    /// island strip down to the visible frame, less a margin. Handed in by the
+    /// controller, which knows the notched screen's geometry.
+    let maxContentHeight: CGFloat
     var onJump: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SessionListView(appState: appState, onJump: onJump)
-            if level == .full {
-                MenuSeparator()
-                SettingsSectionView(appState: appState)
+        // The silhouette is already clamped to the screen by `IslandLayout.windowFrame`;
+        // without a scroll view the content taller than that clamp is simply clipped, and
+        // the settings block and hooks button fall off the bottom. Cap the content at the
+        // room below the strip and let the overflow scroll. `scrollBounceBehavior` keeps a
+        // short menu from rubber-banding, so most menus feel exactly as before.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                SessionListView(appState: appState, onJump: onJump)
+                if level == .full {
+                    MenuSeparator()
+                    SettingsSectionView(appState: appState)
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+            .frame(width: width, alignment: .leading)
+            .background(GeometryReader { proxy in
+                // The reported height is the content's own, capped: the silhouette must
+                // never grow past `maxContentHeight`, or it would run off the screen while
+                // the inner scroll view sat idle. When the content fits, this is the
+                // content's natural height and the island shrink-wraps to it as before.
+                Color.clear.preference(key: IslandContentHeightKey.self,
+                                       value: min(proxy.size.height, maxContentHeight))
+            })
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .frame(width: width, alignment: .leading)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: width)
+        .frame(maxHeight: maxContentHeight)
         .environment(\.menuStyle, .island)
         // The content is written for the system theme: on a black background it has to
         // consider itself in dark mode, or system elements (the mode picker, the
         // toggles) end up as light slabs on black.
         .environment(\.colorScheme, .dark)
-        .background(GeometryReader { proxy in
-            Color.clear.preference(key: IslandContentHeightKey.self, value: proxy.size.height)
-        })
     }
 }
 

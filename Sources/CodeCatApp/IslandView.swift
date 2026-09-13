@@ -21,6 +21,10 @@ struct IslandView: View {
     /// same spring. Its content stays mounted meanwhile — otherwise there would be
     /// nothing to collapse — and is taken down once the animation has arrived.
     var isCollapsing: Bool = false
+    /// The tallest the menu's content may be before it scrolls — the room below the
+    /// island strip. Passed straight through to `IslandMenuView` and used to cap the
+    /// revealed silhouette so it never runs off the screen's bottom.
+    var maxContentHeight: CGFloat = .greatestFiniteMagnitude
     var onJump: () -> Void = {}
     /// The cursor as the AppKit host sees it; every hover highlight in the menu is
     /// computed from it (see `PointerTracker`).
@@ -56,7 +60,8 @@ struct IslandView: View {
             strip
             if let menuLevel {
                 IslandMenuView(appState: appState, level: menuLevel,
-                               width: bodyWidth, onJump: onJump)
+                               width: bodyWidth, maxContentHeight: maxContentHeight,
+                               onJump: onJump)
             }
         }
         // Room for the fillets at the screen edge: they lie outside the body, so the

@@ -311,8 +311,17 @@ final class IslandController: NSObject, MascotPresenting {
                    height: geometry.island.height,
                    menuLevel: menuLevel ?? (isCollapsing ? collapsingLevel : nil),
                    isCollapsing: isCollapsing,
+                   maxContentHeight: maxContentHeight(for: geometry),
                    onJump: { [weak self] in self?.hideMenu() },
                    pointer: pointer)
+    }
+
+    /// The room a revealed menu has below the island strip before it must scroll: the
+    /// screen's visible height less the strip and a margin. Capping the menu here (and
+    /// the reported content height inside `IslandMenuView`) keeps the silhouette on
+    /// screen so the settings block and hooks button never fall off the bottom.
+    private func maxContentHeight(for geometry: Geometry) -> CGFloat {
+        max(0, geometry.screen.visibleFrame.height - geometry.island.height - 24)
     }
 
     /// The notched display and all the geometry derived from it. `nil` means the
