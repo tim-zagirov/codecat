@@ -62,12 +62,16 @@ struct SpriteMascotView: View {
     @ViewBuilder
     private func frameImage(at elapsed: TimeInterval, in animation: SpriteAnimation) -> some View {
         let size = drawingSize ?? loaded.drawingSize
+        // Pixel art must never be smoothed, and a shrunk photo-like sheet must
+        // never be nearest-sampled: decide from the scale actually applied here,
+        // which for the island differs from the one `LoadedSkin` carries.
+        let effective = loaded.bounds.height > 0 ? size.height / loaded.bounds.height : 1
+        let integral = abs(effective - effective.rounded()) < 0.001
         if let frame = SpriteTimeline.frame(at: elapsed, in: animation),
-           let cgImage = SpriteSheetStore.shared.image(
-            for: frame, of: loaded.skin, cropping: loaded.bounds) {
+           let cgImage = SpriteSheetStore.shared.image(for: frame, of: loaded.skin, cropping: loaded.bounds) {
             Image(decorative: cgImage, scale: 1)
-                .interpolation(.none)
-                .antialiased(false)
+                .interpolation(integral ? .none : .high)
+                .antialiased(!integral)
                 .resizable()
                 .frame(width: size.width, height: size.height)
         }
