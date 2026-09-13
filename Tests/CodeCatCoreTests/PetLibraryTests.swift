@@ -109,6 +109,15 @@ final class PetLibraryTests: XCTestCase {
         XCTAssertTrue(result.skipped.isEmpty)
     }
 
+    /// Swift's `sort` is not stable, so two pets sharing a display name need an
+    /// explicit tiebreak or their order could flip between rescans.
+    func testPetsWithTheSameNameKeepAStableOrder() throws {
+        try pet(in: ownRoot, folder: "twin-b", manifest: #"{"id":"twin-b","displayName":"Twin"}"#)
+        try pet(in: codexRoot, folder: "twin-a", manifest: #"{"id":"twin-a","displayName":"Twin"}"#)
+        let result = discover()
+        XCTAssertEqual(result.skins.map(\.id), ["pet:twin-a", "pet:twin-b"])
+    }
+
     func testDefaultRootsAreOwnFolderThenCodexHome() {
         let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
         let plain = PetLibrary.defaultRoots(environment: [:], home: home)
