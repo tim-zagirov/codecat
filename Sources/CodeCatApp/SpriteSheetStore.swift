@@ -133,6 +133,16 @@ final class SpriteSheetStore {
         }
     }
 
+    /// Pixel size of an image file without decoding its pixels — what `PetLibrary`
+    /// needs to know whether a sheet is an 8×9 grid.
+    nonisolated static func imageSize(at url: URL) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        return (width, height)
+    }
+
     /// Reads, measures and caches a skin. Returns nil if any declared sheet is
     /// missing or unreadable, or if the skin turns out to be fully transparent.
     func load(_ skin: MascotSkin) -> LoadedSkin? {

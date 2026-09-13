@@ -37,6 +37,7 @@ struct SkinPickerView: View {
             }
             credits
         }
+        .onAppear { appState.rescanPets() }
     }
 
     private static var title: String { L10n.t("skins.title", "Skin") }
