@@ -37,6 +37,12 @@ public enum CodeCatPaths {
         home.appendingPathComponent(".claude/projects", isDirectory: true)
     }
 
+    /// CodeCat's own drop folder for pets in the Codex pet format. Searched before
+    /// `~/.codex/pets`, so a pet here overrides a same-named one there.
+    public static var petsRoot: URL {
+        appSupport.appendingPathComponent("Pets", isDirectory: true)
+    }
+
     public static func ensureAppSupportExists() {
         try? FileManager.default.createDirectory(
             at: appSupport, withIntermediateDirectories: true)
