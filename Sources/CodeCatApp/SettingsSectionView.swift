@@ -28,7 +28,17 @@ struct SettingsSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: style.blockSpacing) {
             sectionTitle(L10n.t("settings.view", "View"))
-            Picker(L10n.t("settings.view", "View"), selection: $appState.displayMode) {
+            // On a notchless Mac the guarded binding refuses `.island`: the segment
+            // stays visible but tapping it does nothing, so the cat is never stranded
+            // by removing both the floating mascot and the panel that holds this hint.
+            // On a notched Mac the setter is a plain passthrough and both modes work.
+            Picker(L10n.t("settings.view", "View"), selection: Binding(
+                get: { appState.displayMode },
+                set: { newValue in
+                    if newValue == .island, !Self.hasScreenWithNotch { return }
+                    appState.displayMode = newValue
+                }
+            )) {
                 ForEach(MascotDisplayMode.allCases, id: \.self) { mode in
                     Text(mode.title).tag(mode)
                 }
@@ -36,9 +46,12 @@ struct SettingsSectionView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
 
-            if appState.displayMode == .island, !Self.hasScreenWithNotch {
+            // Shown up front whenever there is no notch — not only after a (now
+            // blocked) switch — so the user learns why "Island" does nothing before
+            // reaching for it.
+            if !Self.hasScreenWithNotch {
                 Text(L10n.t("settings.no.notch",
-                            "This display has no notch, so the island won't appear."))
+                            "Island needs a display with a notch. This Mac doesn't have one, so the cat stays floating."))
                     .font(.system(size: 11))
                     .foregroundStyle(style.secondary)
             }
