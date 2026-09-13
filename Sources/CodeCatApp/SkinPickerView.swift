@@ -171,7 +171,7 @@ struct SkinPickerView: View {
         case .cc0: return L10n.t("license.cc0", "CC0 1.0 — public domain")
         // The full attribution string (e.g. "Maze.Bit.Boutique (mxmaze), CC BY
         // 4.0") is deliberately not printed here: the author name it repeats is
-        // already the heading directly above this line (`pack.author`), so
+        // already the heading directly above this line (`credit.heading`), so
         // showing it again would print "Maze.Bit.Boutique (mxmaze)" twice for the
         // same pack. Together the two lines still name both the author and "CC BY
         // 4.0", which is what the licence actually requires.
