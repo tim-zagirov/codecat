@@ -96,6 +96,30 @@ public enum AggregateStatusKey: String, CaseIterable, Sendable {
     }
 }
 
+/// Where a skin's sheets live.
+public enum SkinLocation: Equatable, Sendable {
+    /// A directory under the app bundle's `Skins/`, by relative path. Every
+    /// built-in skin.
+    case bundled(String)
+    /// A directory anywhere on disk — a pet imported from a folder the user owns.
+    case external(URL)
+
+    /// The relative path for a bundled skin, nil for an external one.
+    public var bundledPath: String? {
+        if case .bundled(let path) = self { return path }
+        return nil
+    }
+
+    /// Tells two skins' sheets apart in a cache: a bundled "duck" and an
+    /// external ".../duck" must never share an entry.
+    public var cacheKey: String {
+        switch self {
+        case .bundled(let path): return "bundled:\(path)"
+        case .external(let url): return "external:\(url.standardizedFileURL.path)"
+        }
+    }
+}
+
 public struct MascotSkin: Equatable, Sendable, Identifiable {
     /// Persisted in `UserDefaults` — never rename one of these.
     public let id: String
@@ -105,10 +129,12 @@ public struct MascotSkin: Equatable, Sendable, Identifiable {
     public let license: SkinLicense
     /// The itch.io page the sprites came from.
     public let sourceURL: String
-    /// Directory holding the sheets inside the app's resources.
-    public let directory: String
-    /// 50 for LuizMelo, 32 for Elthen, 16 for mxmaze.
-    public let frameSize: Int
+    /// Where the sheets are.
+    public let location: SkinLocation
+    /// One frame's size in sheet pixels. 50×50 for LuizMelo, 32×32 for Elthen,
+    /// 16×16 for mxmaze; 192×208 for a pet in the Codex format.
+    public let frameWidth: Int
+    public let frameHeight: Int
     /// Whether this skin's sheets are committed to the repository and therefore
     /// present in every build.
     ///
@@ -119,21 +145,37 @@ public struct MascotSkin: Equatable, Sendable, Identifiable {
     /// which is why this is a declared fact about the skin and not something the
     /// UI infers from a failed load.
     public let bundled: Bool
+    /// Free text shown under the skin in the credits — a pet's own description.
+    public let note: String?
     public let animations: [AggregateStatusKey: SpriteAnimation]
 
     public init(id: String, name: String, author: String, license: SkinLicense,
-                sourceURL: String, directory: String, frameSize: Int,
-                bundled: Bool = true,
+                sourceURL: String, location: SkinLocation,
+                frameWidth: Int, frameHeight: Int,
+                bundled: Bool = true, note: String? = nil,
                 animations: [AggregateStatusKey: SpriteAnimation]) {
         self.id = id
         self.name = name
         self.author = author
         self.license = license
         self.sourceURL = sourceURL
-        self.directory = directory
-        self.frameSize = frameSize
+        self.location = location
+        self.frameWidth = frameWidth
+        self.frameHeight = frameHeight
         self.bundled = bundled
+        self.note = note
         self.animations = animations
+    }
+
+    /// The built-ins' spelling: square frames in a directory under `Skins/`.
+    public init(id: String, name: String, author: String, license: SkinLicense,
+                sourceURL: String, directory: String, frameSize: Int,
+                bundled: Bool = true,
+                animations: [AggregateStatusKey: SpriteAnimation]) {
+        self.init(id: id, name: name, author: author, license: license,
+                  sourceURL: sourceURL, location: .bundled(directory),
+                  frameWidth: frameSize, frameHeight: frameSize,
+                  bundled: bundled, animations: animations)
     }
 
     /// Every sheet file this skin declares, de-duplicated. Used to answer "are this

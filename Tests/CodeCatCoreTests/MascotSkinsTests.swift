@@ -32,6 +32,33 @@ final class MascotSkinsTests: XCTestCase {
         XCTAssertEqual(skin.animation(for: .sleeping)?.frames.count, 1)
         XCTAssertNil(skin.animation(for: .working))
     }
+
+    /// The built-ins keep their square, bundled spelling; it must map onto the new
+    /// general shape without changing a thing.
+    func testSquareConvenienceInitMapsToABundledLocation() {
+        let skin = MascotSkin(id: "t", name: "T", author: "a", license: .cc0,
+                              sourceURL: "https://example.com", directory: "dir",
+                              frameSize: 16, animations: [:])
+        XCTAssertEqual(skin.location, .bundled("dir"))
+        XCTAssertEqual(skin.location.bundledPath, "dir")
+        XCTAssertEqual(skin.frameWidth, 16)
+        XCTAssertEqual(skin.frameHeight, 16)
+        XCTAssertNil(skin.note)
+    }
+
+    func testExternalSkinKeepsItsFolderAndRectangularFrames() {
+        let url = URL(fileURLWithPath: "/tmp/pets/duck", isDirectory: true)
+        let skin = MascotSkin(id: "pet:duck", name: "Duck", author: "Duck", license: .cc0,
+                              sourceURL: url.path, location: .external(url),
+                              frameWidth: 192, frameHeight: 208, bundled: false,
+                              note: "quacks", animations: [:])
+        XCTAssertEqual(skin.location, .external(url))
+        XCTAssertNil(skin.location.bundledPath)
+        XCTAssertEqual(skin.frameWidth, 192)
+        XCTAssertEqual(skin.frameHeight, 208)
+        XCTAssertEqual(skin.note, "quacks")
+        XCTAssertNotEqual(SkinLocation.bundled("duck").cacheKey, skin.location.cacheKey)
+    }
 }
 
 extension MascotSkinsTests {
