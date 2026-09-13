@@ -47,10 +47,18 @@ class HoverHostingView<Content: View>: NSHostingView<Content> {
         hoverArea = area
     }
 
-    /// `NSHostingView` is flipped, so `convert(_:from: nil)` already yields the
-    /// top-left-origin coordinates SwiftUI's `.global` space reports frames in.
+    /// Puts the point into the top-left-origin coordinates SwiftUI's `.global` space
+    /// reports frames in — which for a flipped `NSHostingView` is the converted point
+    /// as is. The flip is not assumed silently, the same care `silhouettePoint` takes.
+    ///
+    /// An unchanged position is not reassigned: every mouse move in a key panel
+    /// reaches here twice (once down the responder chain, once from the tracking
+    /// area), and each assignment invalidates every hover region.
     private func publish(_ event: NSEvent) {
-        pointer.location = convert(event.locationInWindow, from: nil)
+        let inSelf = convert(event.locationInWindow, from: nil)
+        let point = CGPoint(x: inSelf.x,
+                            y: isFlipped ? inSelf.y : bounds.height - inSelf.y)
+        if pointer.location != point { pointer.location = point }
     }
 
     override func mouseEntered(with event: NSEvent) {
