@@ -32,9 +32,9 @@
 
 "settings.title" = "Settings";
 "settings.view" = "View";
-"setting.keep.awake" = "Keep the Mac awake";
-"setting.lid.mode" = "Closed-lid mode";
-"setting.sounds" = "Sounds";
+"setting.keep.awake" = "Keep the Mac awake while agents work";
+"setting.lid.mode" = "Keep agents running with the lid closed";
+"setting.sounds" = "Play a sound when an agent needs you";
 "setting.show.cat" = "Show the cat";
 "setting.hide.when.idle" = "Hide the cat when nothing is running";
 "settings.no.notch" = "This display has no notch, so the island won't appear.";
@@ -49,6 +49,8 @@
 "panel.running.for" = "running for %@";
 "duration.minutes" = "%d min";
 "duration.hours.minutes" = "%dh %dm";
+/* Shown instead of "0 min" for a span under a minute. */
+"duration.just.now" = "just now";
 /* %@ is a duration such as "12 min" — a session waiting on you, timed from when it went quiet. */
 "duration.waiting" = "waiting %@";
 /* %@ is a duration such as "12 min" — how long ago a finished or stopped session last did anything. */
@@ -59,7 +61,7 @@
 "session.status.working" = "working";
 "session.status.waiting" = "waiting for you";
 "session.status.done" = "done";
-"session.status.crashed" = "stopped";
+"session.status.crashed" = "ended";
 
 /* MARK: - What an agent is doing right now */
 
@@ -79,7 +81,7 @@
 "activity.tool" = "using %@";
 "activity.session.opened" = "open, waiting for a task";
 "activity.session.started" = "started on the task";
-"activity.session.stopped" = "the session stopped";
+"activity.session.stopped" = "ended without finishing";
 "activity.waiting" = "waiting for you";
 "activity.waiting.maybe" = "looks like it is waiting for you";
 /* %@ is another activity line: the session's work is being done by a subagent. */
@@ -89,12 +91,12 @@
 
 "away.waiting" = "an agent is waiting for you";
 "away.done" = "an agent finished its work";
-"away.crashed" = "a session stopped";
+"away.crashed" = "a session ended";
 
 /* MARK: - Skins */
 
 "skins.title" = "Skin";
-"skins.credits" = "About the assets";
+"skins.credits" = "Artists and licences";
 "skins.imported.from" = "From %@";
 "license.cc0" = "CC0 1.0 — public domain";
 "skin.luizmelo.1" = "Ginger";

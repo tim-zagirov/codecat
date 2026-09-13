@@ -371,6 +371,9 @@ struct SessionListView: View {
     private func span(from start: Date, to now: Date) -> String {
         let seconds = max(0, Int(now.timeIntervalSince(start)))
         let m = seconds / 60
+        if m == 0 {
+            return L10n.t("duration.just.now", "just now")
+        }
         return m < 60
             ? L10n.f("duration.minutes", "%d min", m)
             : L10n.f("duration.hours.minutes", "%dh %dm", m / 60, m % 60)
