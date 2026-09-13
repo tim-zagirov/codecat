@@ -137,6 +137,11 @@ final class IslandHostingView: HoverHostingView<IslandView> {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// Lets the view become first responder so `keyDown` reaches it: the controller
+    /// makes it first responder only while the full menu is key, which is what puts
+    /// Escape (below) in front of the view instead of letting AppKit beep at it.
+    override var acceptsFirstResponder: Bool { true }
+
     /// Escape (keyCode 53) closes the full menu; every other key falls through to the
     /// SwiftUI content so the toggles and buttons keep their own key handling.
     override func keyDown(with event: NSEvent) {

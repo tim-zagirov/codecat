@@ -196,6 +196,10 @@ final class IslandController: NSObject, MascotPresenting {
         // The full menu has to become key, or the toggles, the mode picker and the
         // hooks button inside it never receive clicks.
         panel.makeKeyAndOrderFront(nil)
+        // And the hosting view has to be first responder, or `keyDown` (and so Escape)
+        // never reaches it. Only the full-menu key path does this; the short menu is
+        // never key and never takes key events.
+        panel.makeFirstResponder(hosting)
     }
 
     /// See `MascotPresenting.openMenuForCapture()`.
@@ -215,6 +219,9 @@ final class IslandController: NSObject, MascotPresenting {
         applyFrame(panel: panel, hosting: hosting, geometry: geometry)
         if level == .full {
             panel.makeKeyAndOrderFront(nil)
+            // First responder, so Escape reaches `IslandHostingView.keyDown`. Only the
+            // full menu does this; the short menu stays non-key below.
+            panel.makeFirstResponder(hosting)
         } else {
             panel.orderFrontRegardless()
         }
