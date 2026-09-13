@@ -77,6 +77,13 @@ struct MenuStyle {
     /// Between lines of text within a block.
     var lineSpacing: CGFloat
 
+    /// How far a pressable line's container is pulled back horizontally so its text
+    /// column lines up with the headings and tiles, while its hover rectangle keeps
+    /// the 4 pt inset `HoverHighlight` and `sessionRow` add. The island states this as
+    /// a single left margin (S9); the panel keeps its original inset, so it is zero
+    /// there. Only defined where sections carry headings — that is, the island.
+    var rowInsetCompensation: CGFloat { separator != nil ? -4 : 0 }
+
     /// The floating panel. Every value is copied one for one from how it looked
     /// before styles existed: this preset has to be identical to the old appearance,
     /// or splitting the two surfaces apart was pointless.
@@ -84,7 +91,7 @@ struct MenuStyle {
         rowLayout: .threeLine,
         primary: .primary,
         secondary: .secondary,
-        tertiary: Color.primary.opacity(0.4),
+        tertiary: Color.primary.opacity(0.62),
         rowHover: Color.primary.opacity(0.08),
         rowRadius: 6,
         cellFill: Color.primary.opacity(0.05),
@@ -95,11 +102,11 @@ struct MenuStyle {
         cellRadius: 6,
         cellSize: CGSize(width: 34, height: 34),
         cellSpacing: 8,
-        selectionBorder: .accentColor,
+        selectionBorder: .primary,
         selectionBorderWidth: 2,
         separator: nil,
         toggleTint: nil,
-        togglesFillWidth: false,
+        togglesFillWidth: true,
         padding: 14,
         blockSpacing: 10,
         lineSpacing: 2)
@@ -110,18 +117,18 @@ struct MenuStyle {
         rowLayout: .twoLine,
         primary: .white,
         secondary: Color.white.opacity(0.62),
-        tertiary: Color.white.opacity(0.38),
-        rowHover: Color.white.opacity(0.08),
+        tertiary: Color.white.opacity(0.55),
+        rowHover: Color.white.opacity(0.13),
         rowRadius: 6,
         cellFill: Color.white.opacity(0.06),
-        cellHover: Color.white.opacity(0.10),
+        cellHover: Color.white.opacity(0.16),
         cellSelected: Color.white.opacity(0.16),
         cellRadius: 8,
         cellSize: CGSize(width: 60, height: 40),
         cellSpacing: 6,
         selectionBorder: .white,
         selectionBorderWidth: 1,
-        separator: Color.white.opacity(0.12),
+        separator: Color.white.opacity(0.22),
         toggleTint: .white,
         togglesFillWidth: true,
         padding: 12,
@@ -160,19 +167,17 @@ struct MenuSeparator: View {
     }
 }
 
-/// Heading for a meaningful section of the menu. The panel never had these — its
-/// sections were separated by lines alone — so this view draws nothing until the
-/// style asks: `title` appears only where headings are part of the design.
+/// Heading for a meaningful section of the menu. Drawn the same on both surfaces —
+/// a muted 11 pt semibold line — so the panel and the island read as one design
+/// rather than two dialects.
 struct MenuSectionHeader: View {
     let title: String
     @Environment(\.menuStyle) private var style
 
     var body: some View {
-        if style.separator != nil {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(style.tertiary)
-        }
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(style.tertiary)
     }
 }
 

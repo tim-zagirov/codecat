@@ -47,13 +47,8 @@ struct SkinPickerView: View {
 
     private static var title: String { L10n.t("skins.title", "Skin") }
 
-    @ViewBuilder
     private var header: some View {
-        if style.separator == nil {
-            Text(Self.title).font(.system(size: 12, weight: .medium))
-        } else {
-            MenuSectionHeader(title: Self.title)
-        }
+        MenuSectionHeader(title: Self.title)
     }
 
     private func preview(_ skin: MascotSkin) -> some View {
@@ -145,6 +140,10 @@ struct SkinPickerView: View {
             }
         }
         .font(.system(size: 11))
+        // S9: the disclosure row's `.hoverHighlight()` insets its text 4 pt; on the
+        // island this pulls the whole credits block back by the same 4 so its text
+        // column lines up with the heading and tiles while the hover keeps its inset.
+        .padding(.horizontal, style.rowInsetCompensation)
     }
 
     private var creditList: some View {
