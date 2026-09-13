@@ -31,9 +31,19 @@ public struct PetManifest: Equatable, Sendable {
             return value
         }
         let id = string("id") ?? folderName
+        // A `spritesheetPath` that reaches outside the pet's own folder — absolute,
+        // or carrying a `..` component — is treated exactly like a missing one:
+        // `pet.json` is data from a folder the user (or some other tool) dropped
+        // in place, not something CodeCat should let point anywhere else on disk.
+        let sheet = string("spritesheetPath").flatMap { isSafeRelativeSheetPath($0) ? $0 : nil }
         return PetManifest(id: id,
                            displayName: string("displayName") ?? id,
                            description: string("description"),
-                           spritesheetPath: string("spritesheetPath") ?? defaultSheetName)
+                           spritesheetPath: sheet ?? defaultSheetName)
+    }
+
+    private static func isSafeRelativeSheetPath(_ path: String) -> Bool {
+        guard !path.hasPrefix("/") else { return false }
+        return !path.split(separator: "/").contains("..")
     }
 }

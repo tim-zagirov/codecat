@@ -50,4 +50,23 @@ final class PetManifestTests: XCTestCase {
         XCTAssertNil(parse("{not json"))
         XCTAssertNil(parse(""))
     }
+
+    /// `pet.json` is data from a folder the user (or some other tool) dropped in
+    /// place, not something CodeCat should let point outside that folder.
+    func testAbsoluteSheetPathFallsBackToTheDefault() {
+        XCTAssertEqual(parse(#"{"id":"dewey","spritesheetPath":"/etc/hosts"}"#)?.spritesheetPath,
+                       PetManifest.defaultSheetName)
+    }
+
+    func testParentTraversalFallsBackToTheDefault() {
+        XCTAssertEqual(parse(#"{"id":"dewey","spritesheetPath":"../../escaped.png"}"#)?.spritesheetPath,
+                       PetManifest.defaultSheetName)
+        XCTAssertEqual(parse(#"{"id":"dewey","spritesheetPath":"a/../../b.png"}"#)?.spritesheetPath,
+                       PetManifest.defaultSheetName)
+    }
+
+    func testASubfolderSheetPathIsKept() {
+        XCTAssertEqual(parse(#"{"id":"dewey","spritesheetPath":"art/sheet.png"}"#)?.spritesheetPath,
+                       "art/sheet.png")
+    }
 }

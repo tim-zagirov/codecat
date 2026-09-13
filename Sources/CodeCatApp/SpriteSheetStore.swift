@@ -24,18 +24,25 @@ struct LoadedSkin {
 
     /// The drawing size under a different normalisation — for the island, where the
     /// menu bar is only 32 pt. `scale` was computed at load time for the floating
-    /// mascot's canvas, so the factor here is recomputed from the same measured bounds.
+    /// mascot's canvas, so the scale here is recomputed from the same measured bounds.
     func drawingSize(targetHeight: Int, maxWidth: Int) -> CGSize {
-        let factor = SpriteScale.scale(boundsWidth: Int(bounds.width),
-                                       boundsHeight: Int(bounds.height),
-                                       targetHeight: targetHeight,
-                                       maxWidth: maxWidth)
-        return CGSize(width: bounds.width * factor, height: bounds.height * factor)
+        let scale = SpriteScale.scale(boundsWidth: Int(bounds.width),
+                                      boundsHeight: Int(bounds.height),
+                                      targetHeight: targetHeight,
+                                      maxWidth: maxWidth)
+        return CGSize(width: bounds.width * scale, height: bounds.height * scale)
     }
 }
 
-/// Loads sprite sheets out of the app bundle and keeps them in memory. Everything
-/// together is under 120 KB, so nothing is ever evicted.
+/// Loads sprite sheets and keeps them in memory.
+///
+/// Built-in sheets ship in the app bundle, are tiny (everything together is
+/// under 120 KB), and stay cached forever. Imported pets are a different shape
+/// entirely: a canonical pet sheet is 1536×1872, and there can be any number of
+/// them on disk. Their entries are dropped on every rescan by `forgetImported()`
+/// rather than kept forever, so the picker session's memory use stays bounded
+/// by "however many pets you looked at since the panel last opened", not by
+/// "however many pets you have ever hatched".
 ///
 /// Every failure path returns nil rather than throwing: the caller's answer is
 /// always the same — fall back to the drawn cat and say so once.
@@ -181,6 +188,24 @@ final class SpriteSheetStore {
         return result
     }
 
+    /// Drops every cached entry that belongs to an imported pet, from all four
+    /// caches.
+    ///
+    /// Pets are the user's own files, not something CodeCat ships and controls:
+    /// they get re-hatched under the same folder, or edited in place, while the
+    /// app is running. A rescan has to be able to see a sheet that changed, and a
+    /// sheet that failed to load once — because it was read mid-write — has to
+    /// get another chance rather than staying in `failed` forever. Called
+    /// unconditionally from `AppState.rescanPets()`, before that scan's registry
+    /// comparison, so both cases are covered on every rescan rather than only
+    /// when the registry itself changed.
+    func forgetImported() {
+        sheets = sheets.filter { !$0.key.hasPrefix("external:") }
+        loaded = loaded.filter { !$0.key.hasPrefix(PetSkinBuilder.idPrefix) }
+        failed = failed.filter { !$0.hasPrefix(PetSkinBuilder.idPrefix) }
+        assetsPresent = assetsPresent.filter { !$0.key.hasPrefix(PetSkinBuilder.idPrefix) }
+    }
+
     /// The cropped, unscaled image for one frame. Cropping uses the skin-wide
     /// `bounds`, so the cat keeps its place across states while motion *within* an
     /// animation is preserved in full.
@@ -244,18 +269,42 @@ final class SpriteSheetStore {
         return context.makeImage()
     }
 
-    /// The RGBA pixels of `rect`, one packed `UInt32` each, row-major, top-down.
-    private static func pixels(of image: CGImage, in rect: CGRect) -> [[UInt32]]? {
+    /// Draws `rect` into a fresh 8-bit premultiplied RGBA buffer — the one
+    /// recipe `pixels(of:in:)` and `opaqueBounds(of:in:)` both need, pulled out
+    /// so it exists in exactly one place instead of two that could quietly drift
+    /// apart (a different `bitmapInfo`, colour space, or row order between them).
+    ///
+    /// The context is created and drawn into from *inside*
+    /// `withUnsafeMutableBytes`'s closure, not by handing `CGContext` a pointer
+    /// obtained with `&bytes` the way both call sites used to: `&array` as a
+    /// call argument is only guaranteed valid for the duration of that one call,
+    /// but `CGContext(data:...)` keeps the pointer and writes through it later,
+    /// when `context.draw` runs — after the initializer that took `&bytes` has
+    /// already returned. That happened to work, but the language does not
+    /// promise it. Doing the create-and-draw inside the closure keeps the
+    /// pointer's use within the span Swift actually guarantees it for.
+    private static func rgbaBytes(of image: CGImage,
+                                  in rect: CGRect) -> (bytes: [UInt8], width: Int, height: Int)? {
         guard let tile = image.cropping(to: rect) else { return nil }
         let width = tile.width, height = tile.height
         guard width > 0, height > 0 else { return nil }
         var bytes = [UInt8](repeating: 0, count: width * height * 4)
-        guard let context = CGContext(data: &bytes, width: width, height: height,
-                                      bitsPerComponent: 8, bytesPerRow: width * 4,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
-        else { return nil }
-        context.draw(tile, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let drew: Bool = bytes.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
+                                          bitsPerComponent: 8, bytesPerRow: width * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return false }
+            context.draw(tile, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drew else { return nil }
+        return (bytes, width, height)
+    }
+
+    /// The RGBA pixels of `rect`, one packed `UInt32` each, row-major, top-down.
+    private static func pixels(of image: CGImage, in rect: CGRect) -> [[UInt32]]? {
+        guard let (bytes, width, height) = rgbaBytes(of: image, in: rect) else { return nil }
         return (0..<height).map { y in
             (0..<width).map { x in
                 let i = (y * width + x) * 4
@@ -287,16 +336,7 @@ final class SpriteSheetStore {
     /// PNG's own bytes, so the alpha layout is fixed and does not depend on how the
     /// file happens to be encoded.
     private func opaqueBounds(of sheet: CGImage, in rect: CGRect) -> CGRect? {
-        guard let tile = sheet.cropping(to: rect) else { return nil }
-        let width = tile.width, height = tile.height
-        guard width > 0, height > 0 else { return nil }
-        var pixels = [UInt8](repeating: 0, count: width * height * 4)
-        guard let context = CGContext(
-                data: &pixels, width: width, height: height,
-                bitsPerComponent: 8, bytesPerRow: width * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        context.draw(tile, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let (pixels, width, height) = Self.rgbaBytes(of: sheet, in: rect) else { return nil }
 
         var minX = width, minY = height, maxX = -1, maxY = -1
         for y in 0..<height {

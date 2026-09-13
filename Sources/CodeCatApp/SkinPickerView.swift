@@ -37,7 +37,11 @@ struct SkinPickerView: View {
             }
             credits
         }
-        .onAppear { appState.rescanPets() }
+        // `rescanPets` publishes `registry`; publishing synchronously from
+        // inside `onAppear`'s own view-update pass is exactly what SwiftUI's
+        // "Publishing changes from within view updates" warning is about, so the
+        // call is deferred to the next run-loop turn instead.
+        .onAppear { DispatchQueue.main.async { appState.rescanPets() } }
     }
 
     private static var title: String { L10n.t("skins.title", "Skin") }
@@ -121,7 +125,10 @@ struct SkinPickerView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(credit.heading).font(.system(size: 11, weight: .medium))
                         if let note = credit.note {
+                            // Third-party text — a pet's own description — must
+                            // not be able to grow the panel without bound.
                             Text(note).font(.system(size: 10)).foregroundStyle(.secondary)
+                                .lineLimit(3)
                         }
                         Text(credit.terms).font(.system(size: 10)).foregroundStyle(.secondary)
                         if credit.isFolder {

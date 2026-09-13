@@ -90,7 +90,13 @@ public enum PetLibrary {
                 skins.append(skin)
             }
         }
-        skins.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        // Tiebreak on `id`: Swift's `sort` is not stable, so two pets sharing a
+        // display name could otherwise flip order between rescans depending on
+        // where the standard library happened to leave them mid-sort.
+        skins.sort {
+            let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }
         return Result(skins: skins, skipped: skipped)
     }
 }

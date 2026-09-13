@@ -3,7 +3,7 @@ import Foundation
 /// One frame: which sprite sheet it lives in, and where in that sheet.
 ///
 /// The sheet's column count is deliberately *not* declared anywhere. It is derived
-/// at load time from the image's real width (`width / frameSize`), and the frame's
+/// at load time from the image's real width (`width / frameWidth`), and the frame's
 /// position from `index`. Declaring it would be a fourth place where the data could
 /// drift away from the file, and LuizMelo's horizontal strips are all different
 /// lengths, so each would have to be described separately.

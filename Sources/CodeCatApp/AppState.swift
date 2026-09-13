@@ -729,9 +729,32 @@ final class AppState: ObservableObject {
     /// Re-reads the pet folders. Cheap, so it runs whenever the picker appears; the
     /// registry is only republished when something actually changed, so an
     /// unchanged rescan does not redraw the panel.
+    /// `@MainActor`: only caller is `SkinPickerView`'s `onAppear`, and this now
+    /// touches `SpriteSheetStore.shared` directly (see `forgetImported()` below),
+    /// which is itself `@MainActor`.
+    @MainActor
     func rescanPets() {
+        // Unconditional, before the registry comparison below: a pet's sheet can
+        // be re-hatched or edited in place without its id or manifest changing at
+        // all, in which case `fresh == registry` and the early return below would
+        // otherwise skip this entirely — leaving a stale sheet cached, or a sheet
+        // that failed to load once (read mid-write) stuck in `failed` forever.
+        SpriteSheetStore.shared.forgetImported()
         let fresh = Self.scanPets(reporting: &reportedPetProblems, log: log)
-        if fresh != registry { registry = fresh }
+        if fresh != registry {
+            registry = fresh
+            // A pet the picker had selected can vanish from this very scan (folder
+            // deleted, or edited into something `PetLibrary` now rejects). Without
+            // this, `skinID` would keep pointing at an id the fresh registry no
+            // longer has — `skin` already falls back to the default via
+            // `registry.skin(withID:)`, but the picker's selection border compares
+            // `skin.id == skinID` directly, so it would show no tile selected at
+            // all while the mascot quietly rendered the default. See the `init`
+            // comment: `skinID` and `skin.id` must never disagree.
+            if registry.skin(withID: skinID).id != skinID {
+                skinID = MascotSkins.default.id
+            }
+        }
     }
 
     private static func scanPets(reporting reported: inout Set<URL>, log: DiagnosticLog) -> SkinRegistry {
