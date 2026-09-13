@@ -134,11 +134,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
 
-        menu.addItem(toggle(L10n.t("setting.keep.awake", "Keep the Mac awake"),
+        menu.addItem(toggle(L10n.t("setting.keep.awake", "Keep the Mac awake while agents work"),
                             appState.keepAwakeEnabled, #selector(toggleKeepAwake)))
-        menu.addItem(toggle(L10n.t("setting.lid.mode", "Closed-lid mode"),
+        menu.addItem(toggle(L10n.t("setting.lid.mode", "Keep agents running with the lid closed"),
                             appState.lidModeEnabled, #selector(toggleLidMode)))
-        menu.addItem(toggle(L10n.t("setting.sounds", "Sounds"),
+        menu.addItem(toggle(L10n.t("setting.sounds", "Play a sound when an agent needs you"),
                             appState.soundsEnabled, #selector(toggleSounds)))
         menu.addItem(toggle(L10n.t("setting.show.cat", "Show the cat"),
                             appState.showMascot, #selector(toggleMascot)))

@@ -277,7 +277,7 @@ public final class SessionStore: ObservableObject {
                 guard !isAgentAlive(agentPID) else { continue }
                 if s.status == .working {
                     s.status = .crashed
-                    s.activityDescription = L10n.t("activity.session.stopped", "the session stopped")
+                    s.activityDescription = L10n.t("activity.session.stopped", "ended without finishing")
                     s.finishedAt = now
                     sessions[id] = s
                 } else {
@@ -292,7 +292,7 @@ public final class SessionStore: ObservableObject {
             }()
             if active && now.timeIntervalSince(s.lastActivity) >= threshold {
                 s.status = .crashed
-                s.activityDescription = L10n.t("activity.session.stopped", "the session stopped")
+                s.activityDescription = L10n.t("activity.session.stopped", "ended without finishing")
                 s.finishedAt = now
                 sessions[id] = s
             }
