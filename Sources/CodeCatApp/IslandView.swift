@@ -22,6 +22,9 @@ struct IslandView: View {
     /// nothing to collapse — and is taken down once the animation has arrived.
     var isCollapsing: Bool = false
     var onJump: () -> Void = {}
+    /// The cursor as the AppKit host sees it; every hover highlight in the menu is
+    /// computed from it (see `PointerTracker`).
+    let pointer: PointerTracker
 
     /// Height of the menu's content as the layout actually measured it, and a flag
     /// that the reveal has happened. The pair is needed together: while the height is
@@ -92,6 +95,7 @@ struct IslandView: View {
             revealed = false
             menuHeight = 0
         }
+        .environmentObject(pointer)
     }
 
     /// The island strip: the cat in the left wing, the counter in the right, and
