@@ -581,6 +581,23 @@ final class AppState: ObservableObject {
                     "Run it yourself: sudo bash scripts/install-lid-mode.sh"))
             return
         }
+        // Nothing has changed yet: `lidModeEnabled` is still false at this point (the guards
+        // above only ran because the toggle asked to go on), so bailing out here — before any
+        // install work — leaves the toggle visibly off with no state to revert. Spell out what
+        // the admin prompt is about to install before we ever show it.
+        let confirm = NSAlert()
+        confirm.messageText = L10n.t("lid.install.confirm.title", "Set up closed-lid mode?")
+        confirm.informativeText = L10n.t("lid.install.confirm.body",
+            "macOS sleeps when you shut the lid, which kills whatever your agents are doing. "
+            + "To prevent that, CodeCat needs to run one command as root, and asks for your "
+            + "administrator password once to install two things:\n\n"
+            + "• a sudoers rule at /etc/sudoers.d/codecat, allowing only 'pmset -a disablesleep 0' "
+            + "and 'pmset -a disablesleep 1' for your user\n"
+            + "• a background service that clears the flag if CodeCat ever stops while it is set\n\n"
+            + "Both are removed by scripts/uninstall-lid-mode.sh.")
+        confirm.addButton(withTitle: L10n.t("lid.install.confirm.button", "Show me the password prompt"))
+        confirm.addButton(withTitle: L10n.t("button.cancel", "Cancel"))
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
         lidHelperInstallInFlight = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let (status, output) = Self.runLidInstallScript(at: scriptURL)
@@ -614,10 +631,10 @@ final class AppState: ObservableObject {
             }
         case .cancelled:
             presentLidAlert(
-                title: L10n.t("lid.setup.needed.title", "One-time setup needed"),
+                title: L10n.t("lid.setup.needed.title", "Nothing was installed"),
                 message: L10n.t("lid.setup.needed.body",
-                    "Closed-lid mode needs an administrator password once. You can turn it on "
-                    + "later — try again when you're ready to enter it."))
+                    "Closed-lid mode is still off. Turn it on whenever you're ready to enter "
+                    + "the password."))
         case .failed(let detail):
             presentLidAlert(
                 title: L10n.t("lid.install.failed.title", "Setup didn't finish"),

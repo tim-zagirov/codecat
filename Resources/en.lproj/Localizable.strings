@@ -149,8 +149,11 @@
 "lid.script.missing.body" = "Run it yourself: sudo bash scripts/install-lid-mode.sh";
 "lid.enable.failed.title" = "Couldn't turn on closed-lid mode";
 "lid.enable.failed.body" = "The installer finished but the rule still isn't there. Try again, or install it yourself: sudo bash scripts/install-lid-mode.sh";
-"lid.setup.needed.title" = "One-time setup needed";
-"lid.setup.needed.body" = "Closed-lid mode needs an administrator password once. You can turn it on later — try again when you're ready to enter it.";
+"lid.install.confirm.title" = "Set up closed-lid mode?";
+"lid.install.confirm.body" = "macOS sleeps when you shut the lid, which kills whatever your agents are doing. To prevent that, CodeCat needs to run one command as root, and asks for your administrator password once to install two things:\n\n• a sudoers rule at /etc/sudoers.d/codecat, allowing only 'pmset -a disablesleep 0' and 'pmset -a disablesleep 1' for your user\n• a background service that clears the flag if CodeCat ever stops while it is set\n\nBoth are removed by scripts/uninstall-lid-mode.sh.";
+"lid.install.confirm.button" = "Show me the password prompt";
+"lid.setup.needed.title" = "Nothing was installed";
+"lid.setup.needed.body" = "Closed-lid mode is still off. Turn it on whenever you're ready to enter the password.";
 "lid.install.failed.title" = "Setup didn't finish";
 /* %@ is the installer's own error text. */
 "lid.install.failed.body" = "The installer exited with an error (%@). Try installing it yourself: sudo bash scripts/install-lid-mode.sh";
