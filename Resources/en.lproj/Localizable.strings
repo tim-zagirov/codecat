@@ -45,6 +45,13 @@
 
 "panel.no.sessions" = "No active sessions";
 "panel.away.title" = "While you were away";
+/* The floating panel's title: the aggregate state, mirroring the mascot badge.
+   %d is the session count for the working / waiting states. */
+"panel.title.working" = "%d working";
+"panel.title.waiting" = "%d waiting for you";
+"panel.title.problem" = "a session ended";
+"panel.title.done" = "all done";
+"panel.title.sleeping" = "nothing running";
 /* %@ is a duration such as "12 min". */
 "panel.running.for" = "running for %@";
 "duration.minutes" = "%d min";

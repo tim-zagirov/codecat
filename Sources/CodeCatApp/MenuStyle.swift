@@ -100,7 +100,7 @@ struct MenuStyle {
         cellHover: Color.primary.opacity(0.12),
         cellSelected: Color.primary.opacity(0.05),
         cellRadius: 6,
-        cellSize: CGSize(width: 34, height: 34),
+        cellSize: CGSize(width: 56, height: 40),
         cellSpacing: 8,
         selectionBorder: .primary,
         selectionBorderWidth: 2,
