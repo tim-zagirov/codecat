@@ -21,8 +21,9 @@ number carries breaking changes.
   `~/Library/Application Support/CodeCat/Pets` shows up in the skin picker and
   drives the cat through all five states (`idle`, `running`, `waiting`, `failed`,
   `jumping` then `review`). Upscaled pixel art is brought back to its native
-  pitch so it renders as crisply as the built-in packs; anything else is
-  shrunk smoothly. Broken folders are skipped and named once in the log.
+  pitch and, when the native drawing fits the cat's canvas, renders as crisply
+  as the built-in packs; anything larger is shrunk smoothly. Broken folders are
+  skipped and named once in the log.
 
 ### Fixed
 - **The cat no longer vanishes in Mission Control.** Both the floating cat and

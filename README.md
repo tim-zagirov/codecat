@@ -68,9 +68,10 @@ a folder with a `pet.json` and an 8-column × 9-row sprite sheet (1536×1872 is 
 canonical size, PNG or WebP). Drop the folder into either of these, and it appears
 in the skin picker the next time you open it:
 
-- `~/.codex/pets/<pet>/` — where Codex keeps them, so pets you already have just show up
-- `~/Library/Application Support/CodeCat/Pets/<pet>/` — CodeCat's own folder; a pet here
-  overrides a same-named one in the Codex folder
+- `~/.codex/pets/<pet>/` — where Codex keeps them (`$CODEX_HOME/pets` when that
+  variable is set), so pets you already have just show up
+- `~/Library/Application Support/CodeCat/Pets/<pet>/` — CodeCat's own folder; a
+  pet here overrides a same-named one in the Codex folder
 
 CodeCat plays five of the nine rows: `idle` while sleeping, `running` while
 agents work, `waiting` when one needs you, `failed` for a problem, and `jumping`
