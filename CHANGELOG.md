@@ -29,8 +29,9 @@ number carries breaking changes.
   panel now highlight under the cursor (they used to look like pictures),
   the "About the assets" row highlights and turns its chevron, both show the
   pointing hand, and the floating cat lifts by a few percent under the cursor
-  (a still cursor change only under Reduce Motion). One `hoverHighlight`
-  modifier draws the same highlight on the panel and the island.
+  (not under Reduce Motion). The cat shows no pointing hand: its window can
+  never become key, and macOS ignores the cursor such a window sets. One
+  `hoverHighlight` modifier draws the same highlight on the panel and the island.
 
 ### Fixed
 - **The cat no longer vanishes in Mission Control.** Both the floating cat and
