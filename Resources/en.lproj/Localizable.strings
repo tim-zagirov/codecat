@@ -102,6 +102,7 @@
 "skin.elthen" = "Silver";
 "skin.elthen.terms" = "Free to use in projects; the assets themselves may not be resold or redistributed.";
 "skin.mxmaze" = "Plush";
+"skin.imported.terms" = "Imported pet — its author's own terms apply.";
 /* %@ is the skin's name. */
 "skin.load.failed.title" = "Couldn't load the %@ skin";
 "skin.load.failed.body" = "Its files couldn't be read. Switched to another skin.";
