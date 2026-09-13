@@ -207,10 +207,10 @@ public enum JumpMessages {
         switch reason {
         case .noHostRecorded:
             return L10n.t("jump.hint.no.host",
-                          "can't jump — this session started before CodeCat did")
+                          "can't open its terminal — the session started before CodeCat did")
         case .hostGone:
             return L10n.t("jump.hint.host.gone",
-                          "can't jump — this session's app is closed")
+                          "can't open its terminal — that app has been closed")
         }
     }
 }
