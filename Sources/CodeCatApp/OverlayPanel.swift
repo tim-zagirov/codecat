@@ -66,8 +66,14 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
         let origin = Self.validated(Self.savedOrigin()) ?? Self.defaultOrigin()
         let panel = OverlayPanel(contentRect: NSRect(origin: origin, size: Self.catSize), allowsKey: false)
         panel.delegate = self
+        // Without this the window server never tells an inactive app's window that
+        // the cursor entered it, and `CatHostingView`'s tracking area stays silent
+        // (the island's panel sets the same flag for the same reason).
+        panel.acceptsMouseMovedEvents = true
 
-        let hosting = CatHostingView(rootView: CatClickContent(appState: appState))
+        let hover = CatHoverState()
+        let hosting = CatHostingView(rootView: CatClickContent(appState: appState, hover: hover))
+        hosting.hover = hover
         hosting.onTap = { [weak self] in self?.toggleDetails() }
         panel.contentView = hosting
         catPanel = panel
@@ -253,6 +259,8 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
 /// so they can be told apart (see its doc comment).
 private struct CatClickContent: View {
     @ObservedObject var appState: AppState
+    @ObservedObject var hover: CatHoverState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         MascotView(skin: appState.skin,
@@ -261,7 +269,22 @@ private struct CatClickContent: View {
                    since: appState.statusSince,
                    onLoadFailure: { [appState] skin in appState.reportSkinLoadFailure(skin) })
             .contentShape(Rectangle())
+            // A small lift under the cursor is the cat's way of saying it can be
+            // pressed; the panel opens on a click and nothing else on screen hints at
+            // that. The canvas has margin on every side (`MascotLayout.margin`), so
+            // the lift never clips. Under Reduce Motion the cursor alone says it.
+            .scaleEffect(hover.isHovered && !reduceMotion ? 1.04 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: hover.isHovered)
     }
+}
+
+/// Whether the cursor is over the cat. Owned by the hosting view, which learns it from
+/// an `NSTrackingArea`, and observed by the SwiftUI content, which draws the lift.
+/// SwiftUI's own `.onHover` is not used here for the reason given on
+/// `HoverHostingView`: the cat's window is never key and the app is never active, and
+/// only an `.activeAlways` tracking area reports hover in that situation.
+private final class CatHoverState: ObservableObject {
+    @Published var isHovered = false
 }
 
 /// Hosts `CatClickContent` and implements click-vs-drag itself instead of combining
@@ -278,6 +301,47 @@ private struct CatClickContent: View {
 /// behaviors reliably in the same view.
 private final class CatHostingView: NSHostingView<CatClickContent> {
     var onTap: (() -> Void)?
+    var hover: CatHoverState?
+    /// Only this view's own area is replaced on update: `NSHostingView` registers
+    /// tracking areas of its own for SwiftUI, and those are not ours to remove.
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    /// The whole canvas counts, not just the drawn cat: a click anywhere on it
+    /// already opens the panel (`mouseUp` below), so the hand must not disagree.
+    override func mouseEntered(with event: NSEvent) {
+        hover?.isHovered = true
+        NSCursor.pointingHand.set()
+    }
+
+    /// AppKit asks the view under the cursor for its cursor on every move (and
+    /// falls back to the arrow otherwise), so setting the hand once on entry is
+    /// not enough — the very next mouse-moved event would put the arrow back.
+    /// `.cursorUpdate` in the tracking options makes this the place AppKit asks.
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+    }
+
+    /// Belt and braces with `cursorUpdate`: the session list learnt that AppKit
+    /// puts the arrow back on mouse-moved events, so the hand is re-asserted on
+    /// each of them here too (`.mouseMoved` is in the tracking options for this).
+    override func mouseMoved(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hover?.isHovered = false
+        NSCursor.arrow.set()
+    }
 
     private var dragStartScreenPoint: NSPoint = .zero
     private var dragStartWindowOrigin: NSPoint = .zero
@@ -316,3 +380,4 @@ private final class CatHostingView: NSHostingView<CatClickContent> {
         didDrag = false
     }
 }
+

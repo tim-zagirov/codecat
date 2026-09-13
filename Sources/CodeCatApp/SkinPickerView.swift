@@ -82,6 +82,7 @@ struct SkinPickerView: View {
                 else if hoveredSkin == skin.id { hoveredSkin = nil }
             }
             .onTapGesture { appState.skinID = skin.id }
+            .pointingHandOnHover()
             .help(skin.name)
             .accessibilityLabel(skin.name)
     }
@@ -117,9 +118,34 @@ struct SkinPickerView: View {
         let isFolder: Bool
     }
 
+    /// The credits row is drawn by hand rather than as a `DisclosureGroup`: the
+    /// system control gives no hover feedback and no cursor, so the one line in the
+    /// picker that hides content behind a click looked like a caption. The chevron
+    /// turns and the row highlights like every other pressable line.
     private var credits: some View {
-        DisclosureGroup(L10n.t("skins.credits", "About the assets"),
-                        isExpanded: $appState.creditsExpanded) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(style.tertiary)
+                    .rotationEffect(.degrees(appState.creditsExpanded ? 90 : 0))
+                    .animation(.easeOut(duration: 0.15), value: appState.creditsExpanded)
+                Text(L10n.t("skins.credits", "About the assets"))
+                    .foregroundStyle(style.primary)
+                Spacer(minLength: 0)
+            }
+            .hoverHighlight()
+            .onTapGesture { appState.creditsExpanded.toggle() }
+            .accessibilityAddTraits(.isButton)
+
+            if appState.creditsExpanded {
+                creditList
+            }
+        }
+        .font(.system(size: 11))
+    }
+
+    private var creditList: some View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(creditRows) { credit in
                     VStack(alignment: .leading, spacing: 1) {
@@ -147,9 +173,7 @@ struct SkinPickerView: View {
                     }
                 }
             }
-            .padding(.top, 4)
-        }
-        .font(.system(size: 11))
+            .padding(.leading, 4)
     }
 
     /// One entry per built-in pack (not per skin — six LuizMelo cats share one
