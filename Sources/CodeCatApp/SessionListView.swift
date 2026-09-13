@@ -43,7 +43,30 @@ struct SessionListView: View {
     /// `PointerTracker`).
     @State private var hovered: String?
 
+    /// Hover tracking for the *non-interactive* rows, kept separate from `hovered` on
+    /// purpose. `hovered` drives the pointing-hand cursor (see its doc comment), which
+    /// must never appear over a row that can't be clicked; an unavailable row still
+    /// wants to reveal its "can't open its terminal…" hint on hover (S4), so that
+    /// hover lands here and touches nothing else.
+    @State private var hoveredHint: String?
+
     @Environment(\.menuStyle) private var style
+
+    /// The single reason to show under the whole list, or nil. It is non-nil only when
+    /// every row is unavailable (`.unavailable`) and every one carries the *same*
+    /// reason — the case where repeating the hint on each row is pure noise. A routable
+    /// row anywhere, or two different reasons, yields nil and the per-row hint returns.
+    /// Pure over the routes so it can be unit-tested on fixed values.
+    static func sharedUnavailableReason(_ routes: [JumpRoute]) -> UnavailableReason? {
+        guard !routes.isEmpty else { return nil }
+        var shared: UnavailableReason?
+        for route in routes {
+            guard case .unavailable(let reason) = route else { return nil }
+            if let shared, shared != reason { return nil }
+            shared = reason
+        }
+        return shared
+    }
 
     private static var awayTitle: String { L10n.t("panel.away.title", "While you were away") }
 
@@ -59,6 +82,18 @@ struct SessionListView: View {
     }
 
     var body: some View {
+        // Computed once per body evaluation and shared by every row:
+        //  - `nameCounts` tells a row whether its project name is ambiguous (S22).
+        //  - `sharedUnavailable` is the single reason that applies when EVERY row is
+        //    unavailable for the SAME reason; in that case the per-row hint is
+        //    suppressed and one line is drawn under the whole list (S4). When it is
+        //    nil (routable rows present, or reasons differ) each unavailable row
+        //    carries its own hint, shown only on hover.
+        let nameCounts = Dictionary(
+            appState.store.ordered.map { ($0.projectName, 1) }, uniquingKeysWith: +)
+        let sharedUnavailable = Self.sharedUnavailableReason(
+            appState.store.ordered.map { appState.route(for: $0) })
+
         VStack(alignment: .leading, spacing: style.blockSpacing) {
             if appState.store.ordered.isEmpty {
                 Text(L10n.t("panel.no.sessions", "No active sessions"))
@@ -66,7 +101,15 @@ struct SessionListView: View {
                     .foregroundStyle(style.secondary)
             } else {
                 ForEach(appState.store.ordered) { session in
-                    sessionRow(session)
+                    sessionRow(session, nameShared: (nameCounts[session.projectName] ?? 0) >= 2,
+                               suppressRowHint: sharedUnavailable != nil)
+                }
+                // S4: when the whole list is unavailable for one reason, that reason
+                // is stated once here instead of on every row.
+                if let reason = sharedUnavailable {
+                    Text(JumpMessages.rowHint(for: reason))
+                        .font(.system(size: 11))
+                        .foregroundStyle(style.tertiary)
                 }
             }
 
@@ -103,9 +146,34 @@ struct SessionListView: View {
     /// The second line. In the two-line layout the duration moves here too and is
     /// pushed right: every session's duration lines up in a column at the right edge —
     /// that column is the grid holding the list together.
+    /// The default activity strings — the ones a session carries when its activity is
+    /// nothing more than a restatement of its status. Drawing "waiting for you ·
+    /// waiting for you" (status title · activity) was the M4 finding: when the activity
+    /// says only what the coloured dot and status already say, the prefix is dropped.
+    private static var defaultActivityStrings: Set<String> {
+        [
+            L10n.t("activity.session.opened", "open, waiting for a task"),
+            L10n.t("activity.waiting", "waiting for you"),
+            L10n.t("activity.done", "finished the task"),
+            L10n.t("activity.session.stopped", "the session stopped"),
+            L10n.t("activity.session.started", "started on the task"),
+        ]
+    }
+
+    /// M4: `title · activity`, collapsed to `activity` alone when the activity is one
+    /// of the default strings or simply repeats the status title. A real activity like
+    /// "editing IslandLayout.swift" keeps its "working · " prefix.
+    private func secondLineText(_ session: Session) -> String {
+        let activity = session.activityDescription
+        if Self.defaultActivityStrings.contains(activity) || activity == session.status.title {
+            return activity
+        }
+        return "\(session.status.title) · \(activity)"
+    }
+
     @ViewBuilder
     private func secondLine(_ session: Session) -> some View {
-        let status = Text("\(session.status.title) · \(session.activityDescription)")
+        let status = Text(secondLineText(session))
             .font(.system(size: 11))
             .foregroundStyle(style.secondary)
         // The duration lives in the second line's right column on the island always,
@@ -127,8 +195,20 @@ struct SessionListView: View {
         }
     }
 
+    /// The SF Symbol naming where a click on this row would land, or nil when the row
+    /// is not routable. Trailing the name line (S3), it reads as a quiet destination
+    /// hint next to the project name.
+    private func routeGlyph(_ route: JumpRoute) -> String? {
+        switch route {
+        case .terminalTab: return "terminal"
+        case .desktopSession: return "bubble.left"
+        case .application: return "app"
+        case .unavailable: return nil
+        }
+    }
+
     @ViewBuilder
-    private func sessionRow(_ session: Session) -> some View {
+    private func sessionRow(_ session: Session, nameShared: Bool, suppressRowHint: Bool) -> some View {
         let route = appState.route(for: session)
         let unavailableReason: UnavailableReason? = {
             if case .unavailable(let reason) = route { return reason }
@@ -139,12 +219,20 @@ struct SessionListView: View {
         // `session.id` here only when `hasRoute` was true at the time it was set.
         let hasRoute = unavailableReason == nil
 
+        // S22: when the same project name appears on more than one visible row, the
+        // tty distinguishes this one ("codecat · ttys004"). With no tty to add, the
+        // bare name stays — a duplicate that at least isn't a lie.
+        let displayName: String = {
+            guard nameShared, let tty = session.tty, !tty.isEmpty else { return session.projectName }
+            return "\(session.projectName) · \(tty)"
+        }()
+
         let content = HStack(alignment: .top, spacing: 8) {
             Circle().fill(color(for: session.status))
                 .frame(width: dotSize, height: dotSize)
                 .padding(.top, dotTopInset)
             VStack(alignment: .leading, spacing: style.lineSpacing) {
-                Text(session.projectName)
+                Text(displayName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(style.primary)
                 secondLine(session)
@@ -158,13 +246,25 @@ struct SessionListView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(style.tertiary)
                 }
-                if let reason = unavailableReason {
+                // S4: with the list-level hint suppressed (reasons differ, or some
+                // rows are routable) the per-row hint stays, but only while the pointer
+                // is over this row — otherwise every unavailable row shouts the same
+                // caption at once. Hover here comes from `hoveredHint`, set by the
+                // non-interactive branch below.
+                if let reason = unavailableReason, !suppressRowHint, hoveredHint == session.id {
                     Text(JumpMessages.rowHint(for: reason))
                         .font(.system(size: 10))
                         .foregroundStyle(style.tertiary)
                 }
             }
             Spacer(minLength: 0)
+            // S3: the destination glyph sits at the trailing edge of the name line
+            // (the HStack is top-aligned, so it rides level with the project name).
+            if hasRoute, let glyph = routeGlyph(route) {
+                Image(systemName: glyph)
+                    .font(.system(size: 12))
+                    .foregroundStyle(style.tertiary)
+            }
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 4)
@@ -178,6 +278,7 @@ struct SessionListView: View {
             // cursor (driven by the `onChange` on `body`) doesn't stay pinned to a
             // row that no longer exists.
             if hovered == session.id { hovered = nil }
+            if hoveredHint == session.id { hoveredHint = nil }
         }
 
         // Only a row with an actual route gets the tap target and hover/cursor
@@ -216,7 +317,18 @@ struct SessionListView: View {
                     onJump()
                 }
         } else {
+            // Not clickable — no tap target and, crucially, no pointing-hand cursor.
+            // It still tracks hover, into `hoveredHint`, purely so its "can't open its
+            // terminal…" caption can appear only while the pointer is over it (S4).
             content
+                .onHoverRegion { phase in
+                    switch phase {
+                    case .active:
+                        if hoveredHint != session.id { hoveredHint = session.id }
+                    case .ended:
+                        if hoveredHint == session.id { hoveredHint = nil }
+                    }
+                }
         }
     }
 

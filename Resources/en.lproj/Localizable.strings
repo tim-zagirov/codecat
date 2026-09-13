@@ -167,5 +167,5 @@
 /* %d is the AppleScript error number. */
 "jump.applescript.code" = "code %d";
 /* Caption under a session row that cannot be clicked. */
-"jump.hint.no.host" = "can't jump — this session started before CodeCat did";
-"jump.hint.host.gone" = "can't jump — this session's app is closed";
+"jump.hint.no.host" = "can't open its terminal — the session started before CodeCat did";
+"jump.hint.host.gone" = "can't open its terminal — that app has been closed";
