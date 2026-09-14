@@ -380,25 +380,31 @@ struct SessionListView: View {
     /// - working / idle: how long since it started (`now - startedAt`) — a plain span.
     /// - waiting: how long it has been waiting on you (`now - lastActivity`) → "waiting …".
     /// - done / crashed: how long ago it last did anything (`now - lastActivity`) → "… ago".
+    ///
+    /// Under a minute every status reads a bare "just now": "just now ago" and
+    /// "waiting just now" are not English, and the first of them shipped once.
     private func duration(_ session: Session) -> String {
         let now = Date()
+        let justNow = L10n.t("duration.just.now", "just now")
         switch session.status {
         case .working, .idle:
-            return span(from: session.startedAt, to: now)
+            return span(from: session.startedAt, to: now) ?? justNow
         case .waitingForYou:
-            return L10n.f("duration.waiting", "waiting %@", span(from: session.lastActivity, to: now))
+            guard let elapsed = span(from: session.lastActivity, to: now) else { return justNow }
+            return L10n.f("duration.waiting", "waiting %@", elapsed)
         case .done, .crashed:
-            return L10n.f("duration.ago", "%@ ago", span(from: session.lastActivity, to: now))
+            guard let elapsed = span(from: session.lastActivity, to: now) else { return justNow }
+            return L10n.f("duration.ago", "%@ ago", elapsed)
         }
     }
 
-    /// A bare elapsed span, floored at zero so a slight clock skew never prints a
-    /// negative minute count.
-    private func span(from start: Date, to now: Date) -> String {
+    /// A bare elapsed span in whole minutes, floored at zero so a slight clock skew
+    /// never prints a negative minute count; nil under a minute.
+    private func span(from start: Date, to now: Date) -> String? {
         let seconds = max(0, Int(now.timeIntervalSince(start)))
         let m = seconds / 60
         if m == 0 {
-            return L10n.t("duration.just.now", "just now")
+            return nil
         }
         return m < 60
             ? L10n.f("duration.minutes", "%d min", m)
