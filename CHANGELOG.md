@@ -8,7 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 CodeCat uses [semantic versioning](https://semver.org/) — pre-1.0, so the minor
 number carries breaking changes.
 
-## [Unreleased]
+## [0.4.0] — 2026-09-14
+
+Pets from the Codex ecosystem, a straight jump into a desktop-app chat, and a
+UX pass over both menus after a three-persona review.
 
 ### Added
 - **Click a desktop-app session, land in that chat.** The desktop Claude app
@@ -24,7 +27,6 @@ number carries breaking changes.
   pitch and, when the native drawing fits the cat's canvas, renders as crisply
   as the built-in packs; anything larger is shrunk smoothly. Broken folders are
   skipped and named once in the log.
-
 - **Hover states on everything you can press.** Skin tiles in the floating
   panel now highlight under the cursor (they used to look like pictures),
   the "Artists and licences" row highlights and turns its chevron, both show the
@@ -32,7 +34,6 @@ number carries breaking changes.
   (not under Reduce Motion). The cat shows no pointing hand: its window can
   never become key, and macOS ignores the cursor such a window sets. One
   `hoverHighlight` modifier draws the same highlight on the panel and the island.
-
 - **The empty panel leads with a call to action.** With no sessions the panel now
   opens on **Set up Claude Code…** rather than blank space — the one step that
   makes CodeCat learn about sessions early is the first thing you see.
@@ -203,6 +204,7 @@ The MVP. Everything the product promises, working end to end.
 - Safe merging of CodeCat's hooks into `~/.claude/settings.json`, preserving
   every other key and other people's hook entries.
 
+[0.4.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.4.0
 [0.3.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.3.0
 [0.2.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.2.0
 
