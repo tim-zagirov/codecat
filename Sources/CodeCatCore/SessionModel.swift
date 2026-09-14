@@ -33,7 +33,7 @@ public enum SessionStatus: Equatable, Sendable {
         case .working: return L10n.t("session.status.working", "working")
         case .waitingForYou: return L10n.t("session.status.waiting", "waiting for you")
         case .done: return L10n.t("session.status.done", "done")
-        case .crashed: return L10n.t("session.status.crashed", "stopped")
+        case .crashed: return L10n.t("session.status.crashed", "ended")
         }
     }
 }
@@ -93,6 +93,23 @@ public enum AggregateStatus: Equatable, Sendable {
     case waiting(Int)
     case done
     case problem
+}
+
+/// The colour a state is shown in, named by meaning rather than by hue so the two
+/// surfaces (the island counter and the floating badge) map it to the same SwiftUI
+/// `Color` and can never drift into two colour systems. Views map it to
+/// green/orange/blue/red/grey.
+public enum MascotTone: Equatable, Sendable { case working, waiting, done, problem, sleeping }
+
+/// The single mark the user sees, produced once by `SessionStore.indicator` and
+/// rendered by both the island counter and the floating badge — see that property.
+public struct MascotIndicator: Equatable, Sendable {
+    public let tone: MascotTone   // colour of the count / dot
+    public let count: Int         // number to show; 0 means "dot only, no number"
+    public let crashedMarker: Bool// a red marker in ADDITION to an active count
+    public init(tone: MascotTone, count: Int, crashedMarker: Bool) {
+        self.tone = tone; self.count = count; self.crashedMarker = crashedMarker
+    }
 }
 
 public struct HookEvent: Codable, Equatable, Sendable {

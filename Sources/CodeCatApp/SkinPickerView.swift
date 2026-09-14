@@ -3,14 +3,18 @@ import CodeCatCore
 
 /// The skin picker: a grid of live previews plus the credits disclosure.
 ///
-/// Eight previews at 36pt would not fit the 290pt panel in one row, and horizontal
+/// Nine previews would not fit the 290pt panel in one row, and horizontal
 /// scrolling inside a popover that closes on any click outside it is a way to miss,
-/// not a way to choose — hence a 4x2 grid that fits whole. Fits with room to spare:
-/// 4 columns x 34pt + 3 gaps x 8pt = 160pt, against 290 - 2x14 = 262pt of usable
-/// width inside the panel's own padding.
+/// not a way to choose — hence a 3x3 grid that fits whole with no orphan tile. Fits
+/// with room to spare: 3 columns x 56pt + 2 gaps x 8pt = 184pt, against 290 - 2x14 =
+/// 262pt of usable width inside the panel's own padding.
 @MainActor
 struct SkinPickerView: View {
     @ObservedObject var appState: AppState
+    /// Whether to draw the "Skin" heading. The panel wants it; the island tucks the
+    /// grid inside its own "Skins" disclosure, whose row is already the heading, so
+    /// it passes `false` to avoid a heading under a heading.
+    var showsHeader = true
 
     /// Previews are small and there are eight of them animating at once, so their
     /// frame rate is capped well below the mascot's own.
@@ -18,18 +22,19 @@ struct SkinPickerView: View {
 
     @Environment(\.menuStyle) private var style
     /// The skin under the cursor. A cell that does not answer hover reads as a
-    /// picture rather than as something you can press.
+    /// picture rather than as something you can press. Read through `onHoverRegion`,
+    /// so the tile answers on the island too, where SwiftUI's own hover is silent.
     @State private var hoveredSkin: String?
 
     private var cell: CGSize { style.cellSize }
 
     private var columns: [GridItem] {
-        Array(repeating: GridItem(.fixed(cell.width), spacing: style.cellSpacing), count: 4)
+        Array(repeating: GridItem(.fixed(cell.width), spacing: style.cellSpacing), count: 3)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            header
+            if showsHeader { header }
             LazyVGrid(columns: columns, alignment: .leading, spacing: style.cellSpacing) {
                 ForEach(appState.availableSkins) { skin in
                     preview(skin)
@@ -46,24 +51,18 @@ struct SkinPickerView: View {
 
     private static var title: String { L10n.t("skins.title", "Skin") }
 
-    @ViewBuilder
     private var header: some View {
-        if style.separator == nil {
-            Text(Self.title).font(.system(size: 12, weight: .medium))
-        } else {
-            MenuSectionHeader(title: Self.title)
-        }
+        MenuSectionHeader(title: Self.title)
     }
 
     private func preview(_ skin: MascotSkin) -> some View {
         let isSelected = skin.id == appState.skinID
         // Every preview plays the "waiting" animation: that is the state the
-        // mascot exists for. `sessionCount: 0` is what suppresses the badge for
-        // the fallback `CatView` (its `MascotBadge` only draws when the count is
-        // positive), reachable here only for a skin that failed to load; the sprite
-        // path additionally passes `showsBadge: false` since the badge there is a
-        // separate view, not gated on the count. At 34pt the badge would cover the
-        // cat either way.
+        // mascot exists for. A `.sleeping`-tone indicator is what suppresses the badge
+        // for the fallback `CatView` (its `MascotBadge` draws nothing for that tone),
+        // reachable here only for a skin that failed to load; the sprite path
+        // additionally passes `showsBadge: false` since the badge there is a separate
+        // view, not gated on the tone. At 34pt the badge would cover the cat either way.
         let isHovered = hoveredSkin == skin.id
         // Scaled by the cell's smaller side: on the island the cell is wider than it is
         // tall, and dividing by the width would crop the cat top and bottom.
@@ -77,8 +76,8 @@ struct SkinPickerView: View {
                     .strokeBorder(isSelected ? style.selectionBorder : Color.clear,
                                   lineWidth: style.selectionBorderWidth))
             .contentShape(Rectangle())
-            .onHover { inside in
-                if inside { hoveredSkin = skin.id }
+            .onHoverRegion { phase in
+                if case .active = phase { hoveredSkin = skin.id }
                 else if hoveredSkin == skin.id { hoveredSkin = nil }
             }
             .onTapGesture { appState.skinID = skin.id }
@@ -98,10 +97,12 @@ struct SkinPickerView: View {
         // emergency render, kept here so a broken skin still shows something in its
         // tile instead of an empty square.
         if let loaded = SpriteSheetStore.shared.load(skin) {
-            SpriteMascotView(loaded: loaded, status: .waiting(1), sessionCount: 0,
+            SpriteMascotView(loaded: loaded, status: .waiting(1),
+                             indicator: MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false),
                              maxFPS: previewFPS, showsBadge: false)
         } else {
-            CatView(status: .waiting(1), sessionCount: 0)
+            CatView(status: .waiting(1),
+                    indicator: MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false))
         }
     }
 
@@ -130,7 +131,7 @@ struct SkinPickerView: View {
                     .foregroundStyle(style.tertiary)
                     .rotationEffect(.degrees(appState.creditsExpanded ? 90 : 0))
                     .animation(.easeOut(duration: 0.15), value: appState.creditsExpanded)
-                Text(L10n.t("skins.credits", "About the assets"))
+                Text(L10n.t("skins.credits", "Artists and licences"))
                     .foregroundStyle(style.primary)
                 Spacer(minLength: 0)
             }
@@ -143,24 +144,38 @@ struct SkinPickerView: View {
             }
         }
         .font(.system(size: 11))
+        // S9: the disclosure row's `.hoverHighlight()` insets its text 4 pt; on the
+        // island this pulls the whole credits block back by the same 4 so its text
+        // column lines up with the heading and tiles while the hover keeps its inset.
+        .padding(.horizontal, style.rowInsetCompensation)
     }
 
     private var creditList: some View {
-            VStack(alignment: .leading, spacing: 6) {
+            // S13: the credits inherit the surface's own greys (`style.secondary` for
+            // the heading, `style.tertiary` for the supporting lines) rather than the
+            // system `.secondary`, which reads as near-black on the island's black
+            // slab. Indented 16pt under the disclosure row and 10pt between credits.
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(creditRows) { credit in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(credit.heading).font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(style.secondary)
                         if let note = credit.note {
                             // Third-party text — a pet's own description — must
                             // not be able to grow the panel without bound.
-                            Text(note).font(.system(size: 10)).foregroundStyle(.secondary)
+                            Text(note).font(.system(size: 10)).foregroundStyle(style.tertiary)
                                 .lineLimit(3)
                         }
-                        Text(credit.terms).font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text(credit.terms).font(.system(size: 10)).foregroundStyle(style.tertiary)
                         if credit.isFolder {
-                            Text(L10n.f("skins.imported.from", "From %@", credit.source))
-                                .font(.system(size: 10)).foregroundStyle(.secondary)
+                            // C5: an imported pet shows just the folder's own name; the
+                            // full `~/.codex/pets/...` path lives in the tooltip so the
+                            // line stays short but the provenance is still one hover away.
+                            Text(L10n.f("skins.imported.from", "From %@",
+                                        (credit.source as NSString).lastPathComponent))
+                                .font(.system(size: 10)).foregroundStyle(style.tertiary)
                                 .lineLimit(1).truncationMode(.middle)
+                                .help(credit.source)
                         } else if let url = URL(string: credit.source) {
                             // `URL(string:)` is not force-unwrapped: every `sourceURL` in
                             // `MascotSkins` is a valid literal today, but this view has no
@@ -173,7 +188,7 @@ struct SkinPickerView: View {
                     }
                 }
             }
-            .padding(.leading, 4)
+            .padding(.leading, 16)
     }
 
     /// One entry per built-in pack (not per skin — six LuizMelo cats share one

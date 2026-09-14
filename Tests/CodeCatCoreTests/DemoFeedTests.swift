@@ -86,4 +86,21 @@ final class DemoFeedTests: XCTestCase {
         XCTAssertEqual(DemoFeed.phase(atStep: 6), .waiting)
         XCTAssertEqual(DemoFeed.phase(atStep: -1), .done)
     }
+
+    /// `.problem` is kept out of the loop, but the mascot has a pose for it and a
+    /// screenshot of that pose has to be possible. The pin reaches it through the
+    /// store's own staleness rule — one silent session with no live process — so
+    /// the picture shows the state the way it really arises: one session stopped,
+    /// one still working, one idle.
+    func testTheProblemPinReachesTheProblemState() {
+        let store = SessionStore()
+        DemoFeed.applyProblem(to: store, now: Date())
+        XCTAssertEqual(AggregateStatusKey(store.aggregate), .problem)
+        let byID = Dictionary(uniqueKeysWithValues: store.ordered.map { ($0.id, $0) })
+        XCTAssertEqual(byID[DemoFeed.sessionIDs[0]]?.status, .working)
+        XCTAssertEqual(byID[DemoFeed.sessionIDs[1]]?.status, .crashed)
+        XCTAssertEqual(byID[DemoFeed.sessionIDs[2]]?.status, .idle)
+        XCTAssertEqual(byID[DemoFeed.sessionIDs[0]]?.activityDescription,
+                       L10n.f("activity.editing.file", "editing %@", "IslandLayout.swift"))
+    }
 }

@@ -13,8 +13,26 @@ public final class SessionStore: ObservableObject {
         self.routeCache = routeCache
     }
 
+    /// The list the panel and island render, leading with the sessions that need the
+    /// user's attention. Sorted by urgency first — `waitingForYou > crashed > working
+    /// > done > idle` — then by `startedAt` ascending within a status, so same-status
+    /// rows keep their familiar start-time order. Before this, the list sorted by
+    /// `startedAt` alone and a crashed or waiting session sat wherever it happened to
+    /// begin, buried under fresher working rows.
     public var ordered: [Session] {
-        sessions.values.sorted { $0.startedAt < $1.startedAt }
+        func rank(_ s: SessionStatus) -> Int {
+            switch s {
+            case .waitingForYou: return 0
+            case .crashed: return 1
+            case .working: return 2
+            case .done: return 3
+            case .idle: return 4
+            }
+        }
+        return sessions.values.sorted {
+            rank($0.status) != rank($1.status) ? rank($0.status) < rank($1.status)
+                                               : $0.startedAt < $1.startedAt
+        }
     }
 
     /// What the cat shows. `.idle` sessions do not enter into this at all: an open
@@ -66,6 +84,30 @@ public final class SessionStore: ObservableObject {
         case .working(let n): return n
         case .problem, .done, .sleeping: return 0
         }
+    }
+
+    /// The single source both the island counter and the floating badge render from,
+    /// so the two surfaces can never disagree about a state again. `aggregate`/
+    /// `badgeCount` are left exactly as they are — they drive power policy and the cat
+    /// pose, which have their own priorities — while THIS answers only "what mark does
+    /// the user see". A crash never hides live work: it adds a marker to the count
+    /// rather than replacing it (the old `aggregate` priority made one dead session
+    /// blank the number for five working ones).
+    public var indicator: MascotIndicator {
+        let all = sessions.values
+        let waiting = all.filter { if case .waitingForYou = $0.status { return true }; return false }.count
+        let working = all.filter { $0.status == .working }.count
+        let crashed = all.filter { $0.status == .crashed }.count
+        let active = waiting + working
+        if active > 0 {
+            return MascotIndicator(tone: waiting > 0 ? .waiting : .working,
+                                   count: active, crashedMarker: crashed > 0)
+        }
+        if crashed > 0 { return MascotIndicator(tone: .problem, count: crashed, crashedMarker: false) }
+        if all.contains(where: { $0.status == .done }) {
+            return MascotIndicator(tone: .done, count: 0, crashedMarker: false)
+        }
+        return MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false)
     }
 
     /// Whether there are any tracked sessions at all, regardless of what they are doing.
@@ -235,7 +277,7 @@ public final class SessionStore: ObservableObject {
                 guard !isAgentAlive(agentPID) else { continue }
                 if s.status == .working {
                     s.status = .crashed
-                    s.activityDescription = L10n.t("activity.session.stopped", "the session stopped")
+                    s.activityDescription = L10n.t("activity.session.stopped", "ended without finishing")
                     s.finishedAt = now
                     sessions[id] = s
                 } else {
@@ -250,7 +292,7 @@ public final class SessionStore: ObservableObject {
             }()
             if active && now.timeIntervalSince(s.lastActivity) >= threshold {
                 s.status = .crashed
-                s.activityDescription = L10n.t("activity.session.stopped", "the session stopped")
+                s.activityDescription = L10n.t("activity.session.stopped", "ended without finishing")
                 s.finishedAt = now
                 sessions[id] = s
             }
