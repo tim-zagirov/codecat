@@ -5,8 +5,9 @@ final class SessionStoreTests: XCTestCase {
     let t0 = Date(timeIntervalSince1970: 1_756_400_000)
 
     func hook(_ name: String, id: String = "s1", cwd: String? = "/proj",
-              message: String? = nil) -> HookEvent {
-        HookEvent(hookEventName: name, sessionId: id, cwd: cwd, message: message)
+              message: String? = nil, agentPID: pid_t? = nil) -> HookEvent {
+        HookEvent(hookEventName: name, sessionId: id, cwd: cwd, message: message,
+                  agentPID: agentPID)
     }
 
     /// A session where the agent is genuinely working: a line in the transcript, not
@@ -165,6 +166,21 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.aggregate, .working(1))
         XCTAssertEqual(store.badgeCount, 1)
         XCTAssertTrue(store.anyWorking)
+    }
+
+    /// The list must lead with the sessions that need attention, not with whichever
+    /// happened to start first. A crashed or waiting session sitting halfway down the
+    /// list because it started later is exactly the review finding this fixes: sort by
+    /// urgency (`waitingForYou > crashed > working > done > idle`), then `startedAt`.
+    func testOrderedSortsByUrgencyThenStart() {
+        let store = SessionStore()
+        startWorking(store, id: "w", cwd: "/w", at: t0)                 // working
+        store.apply(hook: hook("SessionStart", id: "i", cwd: "/i"), now: t0) // idle
+        store.apply(hook: hook("SessionStart", id: "q", cwd: "/q"), now: t0.addingTimeInterval(5))
+        store.apply(hook: hook("Notification", id: "q", message: "question"), now: t0.addingTimeInterval(6)) // waiting
+        let ids = store.ordered.map(\.id)
+        XCTAssertEqual(ids.first, "q", "waiting first")
+        XCTAssertEqual(ids.last, "i", "idle last")
     }
 
     func testActivityForUnknownSessionCreatesSession() {
@@ -1161,5 +1177,56 @@ extension SessionStoreTests {
         XCTAssertEqual(store.sessions["s1"]?.startedAt, t0)
         XCTAssertEqual(cache.route(for: "s1")?.startedAt, t0,
                        "the reset must reach the cache even when the event carries no route fields")
+    }
+}
+
+// MARK: - One indicator drives both the island counter and the floating badge
+
+extension SessionStoreTests {
+
+    func testIndicatorActiveWorkShowsGreenCount() {
+        let store = SessionStore()
+        startWorking(store, id: "w1", cwd: "/w1", at: t0)
+        startWorking(store, id: "w2", cwd: "/w2", at: t0)
+        XCTAssertEqual(store.indicator, MascotIndicator(tone: .working, count: 2, crashedMarker: false))
+    }
+
+    func testIndicatorWaitingIsOrangeAndCountsWorkPlusWaiting() {
+        let store = SessionStore()
+        startWorking(store, id: "w1", cwd: "/w1", at: t0)
+        store.apply(hook: hook("SessionStart", id: "n", cwd: "/n"), now: t0)
+        store.apply(hook: hook("Notification", id: "n", message: "permission needed"),
+                    now: t0.addingTimeInterval(10))
+        // one working + one waiting -> orange, count 2
+        XCTAssertEqual(store.indicator, MascotIndicator(tone: .waiting, count: 2, crashedMarker: false))
+    }
+
+    func testIndicatorCrashDoesNotBlankTheWorkingCount() {
+        let store = SessionStore()
+        // w1 has a live agent pid -> survives reconcile; c1 has none and goes stale -> crashed.
+        store.apply(hook: hook("UserPromptSubmit", id: "w1", cwd: "/w1", agentPID: 999999), now: t0)
+        startWorking(store, id: "c1", cwd: "/c1", at: t0)
+        store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300),
+                        isAgentAlive: { $0 == 999999 })
+        XCTAssertEqual(store.indicator, MascotIndicator(tone: .working, count: 1, crashedMarker: true))
+    }
+
+    func testIndicatorProblemAloneIsRedWithTheCrashedCount() {
+        let store = SessionStore()
+        startWorking(store, id: "c1", cwd: "/c1", at: t0)
+        store.reconcile(claudeProcessCount: 0, now: t0.addingTimeInterval(300))
+        XCTAssertEqual(store.indicator, MascotIndicator(tone: .problem, count: 1, crashedMarker: false))
+    }
+
+    func testIndicatorDoneIsBlueDotNoNumber() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart", id: "d1", cwd: "/d1"), now: t0)
+        store.apply(hook: hook("Stop", id: "d1"), now: t0.addingTimeInterval(10))
+        XCTAssertEqual(store.indicator, MascotIndicator(tone: .done, count: 0, crashedMarker: false))
+    }
+
+    func testIndicatorSleepingIsGreyDotNoNumber() {
+        let store = SessionStore()
+        XCTAssertEqual(store.indicator, MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false))
     }
 }

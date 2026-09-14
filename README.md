@@ -29,7 +29,7 @@ notarised, so it opens on a double-click — no right-click-and-Open dance.
 
 Then, from the cat's menu:
 
-1. **Install Claude Code hooks…** — without them CodeCat still works, but it
+1. **Set up Claude Code…** — without them CodeCat still works, but it
    learns about session changes late (from transcripts rather than events).
 2. Optionally **Closed-lid mode** — asks for an administrator password once.
 
@@ -81,7 +81,7 @@ a valid pet is skipped and named once in `codecat.log`.
 
 ## Hooks: what gets written, and how to take it back
 
-**Install Claude Code hooks…** merges one entry per event into
+**Set up Claude Code…** merges one entry per event into
 `~/.claude/settings.json`:
 
 ```jsonc

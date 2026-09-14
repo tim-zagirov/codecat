@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and for the landing-page recording (scripts/capture-screenshots.sh). It
         // replaces `start()` rather than adding to it — see `startDemo`.
         if CommandLine.arguments.contains("--demo") {
-            appState.startDemo(pinnedPhase: Self.pinnedDemoPhase())
+            appState.startDemo(pin: Self.demoPin())
             // `--demo-open-menu` is what lets the capture script photograph the
             // session list and the skin grid: with the app hidden from every
             // screen-control tool, there is no other way to open them.
@@ -76,18 +76,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.shutdown()
     }
 
-    /// `--demo-phase=idle|working|waiting|done`, for a capture that must not race
-    /// the four-second loop. An unrecognised name means "loop", not "crash": this
-    /// flag exists for a script, and a typo in it should cost a retake, not a
+    /// `--demo-phase=idle|working|waiting|done|problem`, for a capture that must not
+    /// race the four-second loop. An unrecognised name means "loop", not "crash":
+    /// this flag exists for a script, and a typo in it should cost a retake, not a
     /// launch failure.
-    private static func pinnedDemoPhase() -> DemoFeed.Phase? {
+    private static func demoPin() -> DemoFeed.Pin? {
         guard let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--demo-phase=") })
         else { return nil }
         switch argument.dropFirst("--demo-phase=".count) {
-        case "idle": return .idle
-        case "working": return .working
-        case "waiting": return .waiting
-        case "done": return .done
+        case "idle": return .phase(.idle)
+        case "working": return .phase(.working)
+        case "waiting": return .phase(.waiting)
+        case "done": return .phase(.done)
+        case "problem": return .problem
         default: return nil
         }
     }
@@ -115,31 +116,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        for session in appState.store.ordered {
-            let item = NSMenuItem(
-                title: "\(session.projectName): \(session.status.title) — \(session.activityDescription)",
-                action: nil, keyEquivalent: "")
-            item.isEnabled = false
-            menu.addItem(item)
-        }
-        if !appState.store.ordered.isEmpty { menu.addItem(.separator()) }
+        // S20: no per-session rows here — the panel and the island both show the live
+        // session list, and a disabled copy in the menu bar only went stale.
 
+        // One "View" item with a submenu of the two modes, each carrying its own
+        // checkmark, instead of two sibling "View: Cat" / "View: Island" rows.
+        let viewItem = NSMenuItem(title: L10n.t("settings.view", "View"),
+                                  action: nil, keyEquivalent: "")
+        let viewMenu = NSMenu()
         for mode in MascotDisplayMode.allCases {
-            let item = NSMenuItem(title: L10n.f("menu.view", "View: %@", mode.title),
+            let item = NSMenuItem(title: mode.title,
                                   action: #selector(selectDisplayMode(_:)), keyEquivalent: "")
             item.state = (appState.displayMode == mode) ? .on : .off
             item.representedObject = mode.rawValue
-            menu.addItem(item)
+            // Submenu items are not reached by the top-level target loop below.
+            item.target = self
+            viewMenu.addItem(item)
         }
+        viewItem.submenu = viewMenu
+        menu.addItem(viewItem)
         menu.addItem(.separator())
 
-        menu.addItem(toggle(L10n.t("setting.keep.awake", "Keep the Mac awake"),
+        menu.addItem(toggle(L10n.t("setting.keep.awake", "Keep the Mac awake while agents work"),
                             appState.keepAwakeEnabled, #selector(toggleKeepAwake)))
-        menu.addItem(toggle(L10n.t("setting.lid.mode", "Closed-lid mode"),
+        menu.addItem(toggle(L10n.t("setting.lid.mode", "Keep agents running with the lid closed"),
                             appState.lidModeEnabled, #selector(toggleLidMode)))
-        menu.addItem(toggle(L10n.t("setting.sounds", "Sounds"),
+        menu.addItem(toggle(L10n.t("setting.sounds", "Play a sound when an agent needs you"),
                             appState.soundsEnabled, #selector(toggleSounds)))
-        menu.addItem(toggle(L10n.t("setting.show.cat", "Show the cat"),
+        menu.addItem(toggle(L10n.t("setting.show.cat", "Show the cat on screen"),
                             appState.showMascot, #selector(toggleMascot)))
         // A duplicate of the item in the settings panel, and mandatory here rather than
         // a convenience: turning "hide" on removes both the mascot and the menu living
@@ -152,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.remove", "Remove Claude Code hooks…"),
                                     action: #selector(removeHooks), keyEquivalent: ""))
         } else {
-            menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.install", "Install Claude Code hooks…"),
+            menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.install", "Set up Claude Code…"),
                                     action: #selector(installHooks), keyEquivalent: ""))
         }
         let loginItem = NSMenuItem(title: L10n.t("menu.login.item", "Open at login"),

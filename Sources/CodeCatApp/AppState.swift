@@ -124,6 +124,15 @@ final class AppState: ObservableObject {
     /// open clipped inside a panel whose AppKit content rect didn't grow with it.
     @Published var creditsExpanded = false
 
+    /// Whether the island's "Skins" and "Settings" disclosures are open. Closed by
+    /// default: the island menu opens on a hover and half a screen of skins and
+    /// toggles in response to that reads as clutter (S5). Kept here rather than as
+    /// local `@State` for the same reason as `creditsExpanded`: toggling one changes
+    /// the menu's content height, and publishing through `objectWillChange` is what
+    /// lets the island's reveal spring and silhouette relayout to the new height.
+    @Published var islandSkinsExpanded = false
+    @Published var islandSettingsExpanded = false
+
     var skin: MascotSkin { registry.skin(withID: skinID) }
 
     /// The skins the picker may offer: everything in the registry whose sheets are
@@ -304,12 +313,12 @@ final class AppState: ObservableObject {
     ///
     /// - Parameter interval: seconds per phase. Four is what the capture script
     ///   uses; the "done" animation is a transition and needs a beat to play.
-    /// - Parameter pinnedPhase: hold one phase instead of looping. A screenshot of
+    /// - Parameter pin: hold one state instead of looping. A screenshot of
     ///   "waiting for you" taken against a four-second loop is a race; this makes it
-    ///   a fact.
-    func startDemo(interval: TimeInterval = 4, pinnedPhase: DemoFeed.Phase? = nil) {
+    ///   a fact. `.problem` is reachable only this way — see `DemoFeed.Pin`.
+    func startDemo(interval: TimeInterval = 4, pin: DemoFeed.Pin? = nil) {
         log.write("demo mode — no socket, no watcher, no power assertion"
-            + (pinnedPhase.map { ", pinned to \($0)" } ?? ""))
+            + (pin.map { ", pinned to \($0)" } ?? ""))
         powerManager.isEnabled = false
         lidController.isEnabled = false
         var step = 0
@@ -319,9 +328,13 @@ final class AppState: ObservableObject {
             for activity in DemoFeed.activities(for: phase, now: now) { store.apply(activity: activity) }
             refresh()
         }
-        if let pinnedPhase {
-            apply(pinnedPhase)
-        } else {
+        switch pin {
+        case .phase(let phase):
+            apply(phase)
+        case .problem:
+            DemoFeed.applyProblem(to: store, now: Date())
+            refresh()
+        case nil:
             func advance() {
                 apply(DemoFeed.phase(atStep: step))
                 step += 1
@@ -364,7 +377,7 @@ final class AppState: ObservableObject {
             awayLog.record(L10n.t("away.done", "an agent finished its work"), at: Date())
             if soundsEnabled { NSSound(named: "Glass")?.play() }
         case .problem:
-            awayLog.record(L10n.t("away.crashed", "a session stopped"), at: Date())
+            awayLog.record(L10n.t("away.crashed", "a session ended"), at: Date())
         default:
             break
         }
@@ -396,6 +409,22 @@ final class AppState: ObservableObject {
     }
 
     func installHooksIfNeeded() {
+        // This edits the user's own settings file, so it asks first — the mirror of
+        // `removeHooks`. On Cancel nothing is read, merged or written.
+        let confirm = NSAlert()
+        confirm.messageText = L10n.t("hooks.install.confirm.title",
+            "Let CodeCat watch your Claude Code sessions?")
+        confirm.informativeText = L10n.f("hooks.install.confirm.body",
+            "CodeCat will add itself to %1$@ as a handler for these events: %2$@. "
+            + "Everything else in that file — your permissions, MCP servers and other "
+            + "hooks — is left exactly as it is."
+            + "\n\nYou can undo this any time from the menu-bar cat: Remove Claude Code hooks.",
+            CodeCatPaths.claudeSettings.path,
+            HooksInstaller.events.joined(separator: ", "))
+        confirm.addButton(withTitle: L10n.t("hooks.install.confirm.button", "Set up"))
+        confirm.addButton(withTitle: L10n.t("button.cancel", "Cancel"))
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+
         let existing: Data?
         switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
         case .notFound:
@@ -437,6 +466,14 @@ final class AppState: ObservableObject {
             // document or leaves the old one untouched.
             try updated.write(to: CodeCatPaths.claudeSettings, options: .atomic)
             hooksInstalled = true
+            // Success feedback: the button just vanishing (M7) left the user unsure
+            // whether anything happened. Say plainly what to expect, including the one
+            // surprise — already-open sessions need a restart to be seen.
+            presentHooksAlert(
+                title: L10n.t("hooks.install.done.title", "CodeCat is watching"),
+                message: L10n.t("hooks.install.done.body",
+                    "New Claude Code sessions appear in the list. Sessions that are "
+                    + "already open need to be restarted before CodeCat sees them."))
         } catch {
             let alert = NSAlert()
             alert.messageText = L10n.t("hooks.install.failed.title", "Couldn't install the hooks")
@@ -553,6 +590,23 @@ final class AppState: ObservableObject {
                     "Run it yourself: sudo bash scripts/install-lid-mode.sh"))
             return
         }
+        // Nothing has changed yet: `lidModeEnabled` is still false at this point (the guards
+        // above only ran because the toggle asked to go on), so bailing out here — before any
+        // install work — leaves the toggle visibly off with no state to revert. Spell out what
+        // the admin prompt is about to install before we ever show it.
+        let confirm = NSAlert()
+        confirm.messageText = L10n.t("lid.install.confirm.title", "Set up closed-lid mode?")
+        confirm.informativeText = L10n.t("lid.install.confirm.body",
+            "macOS sleeps when you shut the lid, which kills whatever your agents are doing. "
+            + "To prevent that, CodeCat needs to run one command as root, and asks for your "
+            + "administrator password once to install two things:\n\n"
+            + "• a sudoers rule at /etc/sudoers.d/codecat, allowing only 'pmset -a disablesleep 0' "
+            + "and 'pmset -a disablesleep 1' for your user\n"
+            + "• a background service that clears the flag if CodeCat ever stops while it is set\n\n"
+            + "Both are removed by scripts/uninstall-lid-mode.sh.")
+        confirm.addButton(withTitle: L10n.t("lid.install.confirm.button", "Show me the password prompt"))
+        confirm.addButton(withTitle: L10n.t("button.cancel", "Cancel"))
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
         lidHelperInstallInFlight = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let (status, output) = Self.runLidInstallScript(at: scriptURL)
@@ -586,10 +640,10 @@ final class AppState: ObservableObject {
             }
         case .cancelled:
             presentLidAlert(
-                title: L10n.t("lid.setup.needed.title", "One-time setup needed"),
+                title: L10n.t("lid.setup.needed.title", "Nothing was installed"),
                 message: L10n.t("lid.setup.needed.body",
-                    "Closed-lid mode needs an administrator password once. You can turn it on "
-                    + "later — try again when you're ready to enter it."))
+                    "Closed-lid mode is still off. Turn it on whenever you're ready to enter "
+                    + "the password."))
         case .failed(let detail):
             presentLidAlert(
                 title: L10n.t("lid.install.failed.title", "Setup didn't finish"),
