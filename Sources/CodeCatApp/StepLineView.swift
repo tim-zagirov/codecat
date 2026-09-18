@@ -47,7 +47,10 @@ struct StepLineView: View {
                 }
             }
             .frame(height: 2)
-            .animation(reduceMotion ? nil : Motion.reposition, value: done)
+            // Keyed on both: `total` changes too (a step list mid-update can grow or
+            // shrink the denominator without `done` moving), and the bar should still
+            // animate to its new width rather than jump.
+            .animation(reduceMotion ? nil : Motion.reposition, value: [done, total])
         }
     }
 }

@@ -45,7 +45,10 @@ public enum TranscriptParser {
         // the errand a subordinate was sent on, under the parent's session id.
         let isSidechain = obj["isSidechain"] as? Bool == true
         let stepsUpdates = (isSubagent || isSidechain) ? [] : stepsUpdates(obj)
-        let finalText = endsTurn ? assistantText(obj) : nil
+        // A subagent's or sidechain's own "end_turn" ends the ERRAND it was sent on,
+        // not the session's turn — `finalText` becomes the row's handoff summary, and
+        // a sidechain's text is not that.
+        let finalText = (endsTurn && !isSidechain) ? assistantText(obj) : nil
         return TranscriptActivity(sessionId: sessionId, projectPath: cwd,
                                   description: description, timestamp: ts,
                                   isSubagent: isSubagent, endsTurn: endsTurn,
