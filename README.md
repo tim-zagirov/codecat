@@ -49,6 +49,11 @@ Requires macOS 14 or later. Apple silicon and Intel.
   expands into a menu on hover.
 - **Jumps to a session.** Click a row and you land in the exact terminal tab
   that session is running in.
+- **Says where each session is.** The row shows the agent's current step and
+  progress from its own task list; the island shows one dot per session.
+- **Hands over the result.** When a turn ends, the row shows the agent's last
+  line and chips for the links in it — the dev server, the PR, the file. Click
+  opens, drag carries it into a browser window.
 - **Keeps the Mac awake** while agents work, and lets it sleep again once they
   stop.
 - **Closed-lid mode.** Shut the laptop and walk away; the agents keep going.

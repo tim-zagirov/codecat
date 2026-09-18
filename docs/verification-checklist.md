@@ -125,3 +125,22 @@ Run this on a fresh build before tagging a release.
     session: the jump must work. This is the only real check of the Apple-events
     entitlement; ad-hoc builds have no hardened runtime, so the failure it guards
     against cannot be reproduced there.
+
+## Island live state (0.5.0)
+
+Demo: `dist/CodeCat.app/Contents/MacOS/CodeCat --demo`, island mode.
+
+- [ ] Working phase, strip: green glow behind the cat; a cluster of two green dots.
+- [ ] Waiting phase, strip: the orange dot pulses on a 3 s cycle; glow orange.
+- [ ] Done phase, strip: glow blue; one blue dot among the others.
+- [ ] Idle phase: no glow, one grey dot.
+- [ ] Five live sessions: the capsule with a count returns.
+- [ ] Working phase, menu: "codecat" row shows "Чиню курсор пагинации  2/5" and a bar two-fifths full.
+- [ ] Done phase, menu: "orbit-api" row shows the summary and chips localhost:4321, PR #12, Figma.
+- [ ] Chip click opens the browser; the menu stays open.
+- [ ] Chip drag onto a Safari window navigates there; a folder chip (live session) dragged to the Desktop copies.
+- [ ] Waiting phase, menu: orange wash at the top; none in the working phase; red with `--demo-phase=problem`.
+- [ ] Frame captures (`screencapture` every 50 ms, 8 frames) of: the glow bloom on a tone change, a dot appearing, the step title changing, the chips arriving. Compare frames 1, 5 and 8 with the spec's start/mid/end values.
+- [ ] System Settings → Accessibility → Reduce Motion on: no scale, no stagger; the waiting dot is a ring.
+- [ ] Panel mode: the step line replaces the status line; the handoff block under the done row.
+- [ ] Switch off "Show what each session is doing": rows are name, status, duration.
