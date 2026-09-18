@@ -351,15 +351,23 @@ struct SessionListView: View {
                     if let task = task(session), style.rowLayout == .threeLine {
                         taskLine(task, lines: 1)
                     }
+                    // A working session with no task text still has a step: a fresh
+                    // restart primes the transcript tail with `TodoWrite` lines but
+                    // not the prompt that would have produced a task. `stepLine`
+                    // already gates on `.working`, so waiting/crashed rows are
+                    // unaffected by emitting it here too.
+                    if let step {
+                        step
+                    }
+                }
+                if let handoff = handoffBlock(session) {
+                    handoff.padding(.top, 2)
                 }
                 // S4: with the list-level hint suppressed (reasons differ, or some
                 // rows are routable) the per-row hint stays, but only while the pointer
                 // is over this row — otherwise every unavailable row shouts the same
                 // caption at once. Hover here comes from `hoveredHint`, set by the
                 // non-interactive branch below.
-                if let handoff = handoffBlock(session) {
-                    handoff.padding(.top, 2)
-                }
                 if let reason = unavailableReason, !suppressRowHint, hoveredHint == session.id {
                     Text(JumpMessages.rowHint(for: reason))
                         .font(.system(size: 10))
