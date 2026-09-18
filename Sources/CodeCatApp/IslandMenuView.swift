@@ -43,8 +43,14 @@ struct IslandMenuView: View {
     /// A faint wash of the aggregate tone at the top of the menu when it is asking
     /// for attention — waiting or problem. Not for working or done: a permanent
     /// green head would teach the eye to ignore the orange one.
+    ///
+    /// Reads `aggregate.tone`, not `indicator.tone`: the capsule's indicator counts
+    /// working sessions and layers a crash marker on top without turning `.problem`
+    /// itself, so a session crashing while others keep working never showed the red
+    /// wash here even though the cat's own pose (also keyed to `aggregate.tone`)
+    /// had already gone alarmed.
     private var headTint: some View {
-        let tone = appState.store.indicator.tone
+        let tone = appState.store.aggregate.tone
         let shown = tone == .waiting || tone == .problem
         return LinearGradient(colors: [ToneColor.color(for: attentionTone).opacity(0.16), .clear],
                               startPoint: .top, endPoint: .bottom)
@@ -52,7 +58,7 @@ struct IslandMenuView: View {
             .opacity(shown ? 1 : 0)
             .animation(Motion.headTint, value: shown)
             .allowsHitTesting(false)
-            .onAppear { updateAttentionTone(appState.store.indicator.tone) }
+            .onAppear { updateAttentionTone(appState.store.aggregate.tone) }
             .onChange(of: tone) { _, newTone in updateAttentionTone(newTone) }
     }
 

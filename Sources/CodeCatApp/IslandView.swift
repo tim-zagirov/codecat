@@ -47,14 +47,17 @@ struct IslandView: View {
     /// controller's `hosting.rootView = …` reassignment exactly as `menuHeight` and
     /// `revealed` already do, so driving the pause from it is safe.
     @State private var bloomSettled = false
-    /// The glow's own bloom origin and colour — not `appState.statusSince`, which
-    /// resets on every `AggregateStatusKey` change (it follows `aggregate`, the
-    /// whole-fleet rollup) while the glow paints `indicator.tone`. Two working
-    /// sessions plus one crashing flips `aggregate` to `.problem`, resetting
-    /// `statusSince`, while `indicator` stays `.working`: keyed to `statusSince` the
-    /// green glow would snap to zero and rebloom for a tone that never changed.
-    /// `glowTone` is set from `indicator.tone` only when that tone actually changes,
-    /// so the pair tracks the glow's own transitions instead.
+    /// The glow's own bloom origin and colour, read from `aggregate.tone` — the
+    /// cat's own tone (see `AggregateStatus.tone`) — not `indicator.tone`: the
+    /// capsule's indicator counts working sessions and marks a crash on top
+    /// without itself turning `.problem`, so with two sessions working and one
+    /// crashed the indicator stayed `.working` while the cat's pose read
+    /// `.problem` — a green glow behind an alarmed cat. Not `appState.statusSince`
+    /// either, even though it now resets on the very same `AggregateStatusKey`
+    /// change: that value is shared with the sprite's own animation timing (see
+    /// its use as `MascotView`'s `since`), and the glow's bloom stays on its own
+    /// local `@State` so a future change to one timing never silently retunes the
+    /// other.
     @State private var glowSince = Date()
     @State private var glowTone: MascotTone = .sleeping
 
@@ -161,7 +164,7 @@ struct IslandView: View {
     /// flip the instant the bloom is over, not whenever the view next happens to be
     /// re-evaluated — see the doc comment on `bloomSettled`.
     private var glow: some View {
-        let tone = appState.store.indicator.tone
+        let tone = appState.store.aggregate.tone
         return TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: bloomSettled)) { context in
             let progress = reduceMotion ? 1.0
                 : Motion.easeOut(context.date.timeIntervalSince(glowSince) / Motion.bloomDuration)
@@ -183,8 +186,7 @@ struct IslandView: View {
             glowSince = Date()
             bloomSettled = false
         }
-        // The indicator's own tone changed — not the aggregate's — so this is the one
-        // place the glow's bloom restarts.
+        // The aggregate's own tone changed — the one place the glow's bloom restarts.
         .onChange(of: tone) { _, newTone in
             glowTone = newTone
             glowSince = Date()
