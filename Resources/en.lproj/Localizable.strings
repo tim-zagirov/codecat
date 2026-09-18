@@ -194,3 +194,11 @@
 /* Caption under a session row that cannot be clicked. */
 "jump.hint.no.host" = "can't open its terminal — the session started before CodeCat did";
 "jump.hint.host.gone" = "can't open its terminal — that app has been closed";
+
+/* MARK: - Session row: steps and handoff */
+
+/* %@ is the pull request number. */
+"handoff.title.pr" = "PR #%@";
+"handoff.title.github" = "GitHub";
+"handoff.title.figma" = "Figma";
+"handoff.title.artifact" = "Artifact";
