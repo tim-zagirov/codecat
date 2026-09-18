@@ -215,6 +215,20 @@ public struct MascotIndicator: Equatable, Sendable {
     }
 }
 
+/// One session's own dot in the island's cluster, carrying its session id rather
+/// than just its colour. `SessionStore.dots` used to hand back bare `[MascotTone]`,
+/// which the island keyed by array offset — but `ordered` ranks by status, so a
+/// session whose tone changed moved to a different offset and a *different* dot
+/// crossfaded and re-animated in its place. Identity by `id` lets the island animate
+/// the session's own dot: it slides to its new slot and recolours in place.
+public struct SessionDot: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let tone: MascotTone
+    public init(id: String, tone: MascotTone) {
+        self.id = id; self.tone = tone
+    }
+}
+
 public struct HookEvent: Codable, Equatable, Sendable {
     public let hookEventName: String
     public let sessionId: String

@@ -37,6 +37,16 @@ struct IslandView: View {
     /// run from zero to zero.
     @State private var menuHeight: CGFloat = 0
     @State private var revealed = false
+    /// Whether the tone glow's bloom has finished, so its `TimelineView` can stop
+    /// ticking. Deliberately `@State`, not a value computed at render time: SwiftUI
+    /// only notices a new `paused` argument when the view's body runs again, and
+    /// `IslandView.body` only runs on `appState.objectWillChange` — session activity,
+    /// or otherwise every 15 s from the maintenance timer. A `let` computed inline
+    /// would sit `paused: false` at 60 fps for however long it took the next
+    /// incidental re-render to notice the bloom was over. `@State` survives the
+    /// controller's `hosting.rootView = …` reassignment exactly as `menuHeight` and
+    /// `revealed` already do, so driving the pause from it is safe.
+    @State private var bloomSettled = false
 
     /// A spring with no overshoot. Overshoot in the menu bar reads not as liveliness
     /// but as rattle: the shape sits flush against the screen's edge, and any overrun
@@ -134,16 +144,16 @@ struct IslandView: View {
     /// A soft radial wash behind the cat in the aggregate tone — the state readable
     /// from across the room, before the eye finds the dots. Sleeping draws nothing.
     ///
-    /// The bloom on a new tone is computed from `statusSince`, not from view state:
-    /// the controller reassigns the island's root view on every state change, and a
-    /// `@State` would replay the bloom on each of those. `TimelineView` runs only
-    /// while the bloom is under way (`paused` afterwards), so the strip costs nothing
-    /// at rest.
+    /// The bloom's progress is computed from `statusSince`, not from view state: the
+    /// controller reassigns the island's root view on every state change, and a
+    /// `@State` progress value would replay the bloom on each of those. But *whether
+    /// the timer keeps ticking* has to be `@State` (`bloomSettled`): the pause has to
+    /// flip the instant the bloom is over, not whenever the view next happens to be
+    /// re-evaluated — see the doc comment on `bloomSettled`.
     private var glow: some View {
         let tone = appState.store.indicator.tone
         let since = appState.statusSince
-        let settled = Date().timeIntervalSince(since) > Motion.bloomDuration + 0.05
-        return TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: settled)) { context in
+        return TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: bloomSettled)) { context in
             let progress = reduceMotion ? 1.0
                 : Motion.easeOut(context.date.timeIntervalSince(since) / Motion.bloomDuration)
             Circle()
@@ -155,6 +165,21 @@ struct IslandView: View {
                 .animation(Motion.toneCrossfade, value: tone)
         }
         .allowsHitTesting(false)
+        // The tone just changed: unpause synchronously, before the task below has a
+        // chance to run, so the strip never sits paused for even one frame it should
+        // be animating.
+        .onChange(of: since) { _, _ in bloomSettled = false }
+        // Cancelled and restarted whenever `since` changes. Sleeps for the rest of the
+        // bloom and then pauses the timer; on first appearance, when the tone has
+        // already been settled for a while, the remaining time is zero or negative and
+        // this sets `bloomSettled` on the next run loop turn without ever sleeping.
+        .task(id: since) {
+            let remaining = Motion.bloomDuration + 0.05 - Date().timeIntervalSince(since)
+            if remaining > 0 {
+                try? await Task.sleep(for: .seconds(remaining))
+            }
+            bloomSettled = true
+        }
     }
 
     /// The counter in a capsule rather than a bare digit.
@@ -188,7 +213,7 @@ struct IslandView: View {
                 capsule(for: indicator)
                     .phaseAnimator([false, true]) { content, pulse in
                         content.scaleEffect(pulse ? 1.08 : 1.0)
-                    } animation: { _ in .easeInOut(duration: 3.0) }
+                    } animation: { _ in Motion.pulse }
             } else {
                 // Problem/done are now visible too: the capsule shows for every non-sleeping
                 // tone, so a crashed session is no longer an invisible grey dot.
@@ -197,27 +222,46 @@ struct IslandView: View {
         }
     }
 
-    /// One dot per session, up to four: one centred, two in a row, three or four in
-    /// a 2×2 grid. Each dot is its session's own tone, so "two working and one
-    /// waiting" is legible without opening the menu — the capsule's one tone and
-    /// one count could not say it. Five or more fall back to the capsule: a cluster
-    /// of nine dots is a rash, not a reading.
-    private func cluster(_ dots: [MascotTone]) -> some View {
-        let rows: [[(Int, MascotTone)]] = stride(from: 0, to: dots.count, by: 2).map { start in
-            Array(dots.enumerated().dropFirst(start).prefix(dots.count <= 2 ? dots.count : 2))
-        }
-        return VStack(spacing: 4) {
-            ForEach(rows, id: \.first!.0) { row in
-                HStack(spacing: 4) {
-                    ForEach(row, id: \.0) { _, tone in dot(tone) }
-                }
+    /// One dot per session, up to four: one centred, two side by side, three or four
+    /// in a 2×2 grid (§`xOffset`/`yOffset`). Each dot is its session's own tone, so
+    /// "two working and one waiting" is legible without opening the menu — the
+    /// capsule's one tone and one count could not say it. Five or more fall back to
+    /// the capsule: a cluster of nine dots is a rash, not a reading.
+    ///
+    /// A single `ZStack` positioned by offset, not rows of an `HStack`/`VStack`: the
+    /// `ForEach` is keyed by `SessionDot.id`, so when a session's tone changes it is
+    /// the *same* dot that recolours and slides to its new slot, rather than a row
+    /// layout reshuffling and crossfading whichever dot lands at the old offset.
+    private func cluster(_ dots: [SessionDot]) -> some View {
+        ZStack {
+            ForEach(dots) { sessionDot in
+                let index = dots.firstIndex(where: { $0.id == sessionDot.id }) ?? 0
+                dotView(sessionDot.tone)
+                    .offset(x: xOffset(index, dots.count), y: yOffset(index, dots.count))
             }
         }
+        .frame(width: 16, height: 16)
         .animation(reduceMotion ? nil : Motion.reposition, value: dots)
-        .help(clusterHelp(dots))
+        .help(clusterHelp(dots.map(\.tone)))
     }
 
-    private func dot(_ tone: MascotTone) -> some View {
+    /// The horizontal slot for dot `index` of `count`: centred for one, else the
+    /// same left/right split (±5 pt, a 10 pt pitch for 6 pt dots and a 4 pt gap)
+    /// whether the row holds two dots or is the top/bottom of a 2×2 grid.
+    private func xOffset(_ index: Int, _ count: Int) -> CGFloat {
+        guard count >= 2 else { return 0 }
+        return index % 2 == 0 ? -5 : 5
+    }
+
+    /// The vertical slot for dot `index` of `count`: one or two dots sit on a single
+    /// centred row; three or four split into a top row (indices 0, 1) and a bottom
+    /// row (indices 2, 3).
+    private func yOffset(_ index: Int, _ count: Int) -> CGFloat {
+        guard count >= 3 else { return 0 }
+        return index < 2 ? -5 : 5
+    }
+
+    private func dotView(_ tone: MascotTone) -> some View {
         let base = Circle()
             .fill(ToneColor.color(for: tone))
             .frame(width: 6, height: 6)
