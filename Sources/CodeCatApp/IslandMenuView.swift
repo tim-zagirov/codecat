@@ -31,18 +31,34 @@ struct IslandMenuView: View {
     let maxContentHeight: CGFloat
     var onJump: () -> Void = {}
 
+    /// The tone the wash is painted with. Held separately from the live tone so the
+    /// colour never changes while the wash is fading: opacity and colour both
+    /// animating on the live tone would crossfade orange → green as a waiting
+    /// session starts working, and §6 says a green head must never appear.
+    /// Updated only when the new tone is itself one that should be shown
+    /// (`.waiting` or `.problem`) — a working/done tone fades the existing colour
+    /// out instead of jumping to its own.
+    @State private var attentionTone: MascotTone = .waiting
+
     /// A faint wash of the aggregate tone at the top of the menu when it is asking
     /// for attention — waiting or problem. Not for working or done: a permanent
     /// green head would teach the eye to ignore the orange one.
     private var headTint: some View {
         let tone = appState.store.indicator.tone
         let shown = tone == .waiting || tone == .problem
-        return LinearGradient(colors: [ToneColor.color(for: tone).opacity(0.16), .clear],
+        return LinearGradient(colors: [ToneColor.color(for: attentionTone).opacity(0.16), .clear],
                               startPoint: .top, endPoint: .bottom)
             .frame(height: 64)
             .opacity(shown ? 1 : 0)
-            .animation(Motion.headTint, value: tone)
+            .animation(Motion.headTint, value: shown)
             .allowsHitTesting(false)
+            .onAppear { updateAttentionTone(appState.store.indicator.tone) }
+            .onChange(of: tone) { _, newTone in updateAttentionTone(newTone) }
+    }
+
+    private func updateAttentionTone(_ tone: MascotTone) {
+        guard tone == .waiting || tone == .problem else { return }
+        attentionTone = tone
     }
 
     var body: some View {
