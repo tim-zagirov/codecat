@@ -124,12 +124,17 @@ public final class SessionStore: ObservableObject {
         return MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false)
     }
 
-    /// One tone per session that counts — the same population as `indicator`, in
-    /// the order `ordered` shows them. The island draws these as a cluster of dots
-    /// when there are four or fewer, so "two working and one waiting" is visible
-    /// without opening the menu.
-    public var dots: [MascotTone] {
-        ordered.compactMap { $0.status == .idle ? nil : $0.status.tone }
+    /// One dot per session that counts — the same population as `indicator`, in the
+    /// order `ordered` shows them. The island draws these as a cluster of dots when
+    /// there are four or fewer, so "two working and one waiting" is visible without
+    /// opening the menu.
+    ///
+    /// Each dot carries its session's `id`, not just its tone: `ordered` ranks by
+    /// status, so a session whose tone changes moves to a different offset in this
+    /// array. The island keys its `ForEach` off `id` so that session's own dot slides
+    /// and recolours instead of a different dot crossfading in its place.
+    public var dots: [SessionDot] {
+        ordered.compactMap { $0.status == .idle ? nil : SessionDot(id: $0.id, tone: $0.status.tone) }
     }
 
     /// Whether there are any tracked sessions at all, regardless of what they are doing.

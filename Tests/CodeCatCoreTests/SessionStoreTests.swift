@@ -1459,7 +1459,8 @@ extension SessionStoreTests {
         store.apply(activity: TranscriptActivity(sessionId: "d", projectPath: "/proj",
                                                  description: "finished the task",
                                                  timestamp: t0 + 4, endsTurn: true))
-        XCTAssertEqual(store.dots, [.waiting, .working, .done])
+        XCTAssertEqual(store.dots.map(\.tone), [.waiting, .working, .done])
+        XCTAssertEqual(store.dots.map(\.id), ["q", "w", "d"])
     }
 }
 
