@@ -41,10 +41,16 @@ public enum TranscriptParser {
         // of how Claude Code arranges files today, while `agentId` is a fact about the
         // entry that will survive any future change to that arrangement.
         let isSubagent = !((obj["agentId"] as? String ?? "").isEmpty)
+        // Neither a subagent's list nor a sidechain's is the session's plan: each is
+        // the errand a subordinate was sent on, under the parent's session id.
+        let isSidechain = obj["isSidechain"] as? Bool == true
+        let stepsUpdates = (isSubagent || isSidechain) ? [] : stepsUpdates(obj)
+        let finalText = endsTurn ? assistantText(obj) : nil
         return TranscriptActivity(sessionId: sessionId, projectPath: cwd,
                                   description: description, timestamp: ts,
                                   isSubagent: isSubagent, endsTurn: endsTurn,
-                                  taskText: taskText(obj, type: type))
+                                  taskText: taskText(obj, type: type),
+                                  stepsUpdates: stepsUpdates, finalText: finalText)
     }
 
     /// What the user asked for, when this entry is the asking. Only a typed prompt
@@ -99,5 +105,100 @@ public enum TranscriptParser {
         default:
             return L10n.f("activity.tool", "using %@", name)
         }
+    }
+
+    /// The message's content blocks, or none.
+    private static func blocks(_ obj: [String: Any]) -> [[String: Any]] {
+        ((obj["message"] as? [String: Any])?["content"] as? [[String: Any]]) ?? []
+    }
+
+    /// The text of the assistant's message — every `text` block, in order, one per
+    /// line. Tool blocks are skipped: they are not what the user reads.
+    private static func assistantText(_ obj: [String: Any]) -> String? {
+        let parts = blocks(obj).compactMap { block -> String? in
+            guard block["type"] as? String == "text" else { return nil }
+            return block["text"] as? String
+        }
+        let text = parts.joined(separator: "\n")
+        return text.isEmpty ? nil : text
+    }
+
+    /// Changes to the task list on this line. Three tools write it, read off live
+    /// transcripts:
+    ///  * `TodoWrite` — the whole list every time, in `input.todos`.
+    ///  * `TaskUpdate` — one task's status, in `input.taskId` / `input.status`.
+    ///  * `TaskCreate` — the request carries no id; the id is in the RESULT, a `user`
+    ///    entry whose `tool_result` says "Task #3 created successfully: <subject>".
+    ///    Reading the result needs no correlation with the request, and a create
+    ///    whose result never came created nothing.
+    private static func stepsUpdates(_ obj: [String: Any]) -> [StepsUpdate] {
+        var updates: [StepsUpdate] = []
+        for block in blocks(obj) {
+            switch block["type"] as? String {
+            case "tool_use":
+                let input = block["input"] as? [String: Any] ?? [:]
+                switch block["name"] as? String {
+                case "TodoWrite":
+                    let todos = input["todos"] as? [[String: Any]] ?? []
+                    let steps = todos.enumerated().compactMap { index, todo -> TaskStep? in
+                        guard let raw = todo["content"] as? String,
+                              let title = TaskText.sanitized(raw),
+                              let status = stepStatus(todo["status"] as? String) else { return nil }
+                        let active = (todo["activeForm"] as? String).flatMap(TaskText.sanitized)
+                        return TaskStep(id: String(index), title: title, activeForm: active, status: status)
+                    }
+                    updates.append(.replaceAll(steps))
+                case "TaskUpdate":
+                    // The id is a string in every payload seen; a number is accepted
+                    // in case a future build sends one.
+                    let id = (input["taskId"] as? String) ?? (input["taskId"] as? Int).map(String.init)
+                    guard let id else { break }
+                    let raw = input["status"] as? String
+                    if raw == "deleted" {
+                        updates.append(.remove(id: id))
+                    } else if let status = stepStatus(raw) {
+                        updates.append(.update(id: id, status: status))
+                    }
+                default:
+                    break
+                }
+            case "tool_result":
+                // The result is a plain string or an array of text blocks — both
+                // shapes occur in the same transcript.
+                let texts: [String]
+                if let text = block["content"] as? String {
+                    texts = [text]
+                } else {
+                    texts = (block["content"] as? [[String: Any]] ?? []).compactMap { $0["text"] as? String }
+                }
+                for text in texts {
+                    if let created = taskCreated(text) { updates.append(created) }
+                }
+            default:
+                break
+            }
+        }
+        return updates
+    }
+
+    private static func stepStatus(_ raw: String?) -> TaskStep.Status? {
+        switch raw {
+        case "pending": return .pending
+        case "in_progress": return .inProgress
+        case "completed": return .completed
+        default: return nil
+        }
+    }
+
+    private static let taskCreatedPattern = try! NSRegularExpression(
+        pattern: #"^Task #(\d+) created successfully: (.+)$"#, options: [.anchorsMatchLines])
+
+    private static func taskCreated(_ text: String) -> StepsUpdate? {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = taskCreatedPattern.firstMatch(in: text, range: range),
+              let idRange = Range(match.range(at: 1), in: text),
+              let titleRange = Range(match.range(at: 2), in: text),
+              let title = TaskText.sanitized(String(text[titleRange])) else { return nil }
+        return .create(id: String(text[idRange]), title: title)
     }
 }
