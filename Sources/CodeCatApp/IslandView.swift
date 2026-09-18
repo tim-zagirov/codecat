@@ -178,6 +178,13 @@ struct IslandView: View {
             if remaining > 0 {
                 try? await Task.sleep(for: .seconds(remaining))
             }
+            // A second tone change within one bloom window cancels this task and starts
+            // a new one for the new `since`; `Task.sleep` then throws and `try?` above
+            // swallows it. Without this guard the cancelled task would fall straight
+            // through to `bloomSettled = true`, racing the new task's own
+            // `.onChange(of: since)` reset and freezing the glow mid-bloom for the tone
+            // that replaced it.
+            guard !Task.isCancelled else { return }
             bloomSettled = true
         }
     }
