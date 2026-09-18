@@ -76,6 +76,17 @@ final class HandoffExtractorTests: XCTestCase {
         XCTAssertEqual(h?.summary, "Deployed to staging.")
     }
 
+    func testMarkdownLinksCollapseToTheirText() {
+        let h = extract("Created [PR #12](https://github.com/tim/codecat/pull/12).")
+        XCTAssertEqual(h?.summary, "Created PR #12.")
+    }
+
+    func testMarkdownLinkOnlyLineIsStillLinkOnly() {
+        let h = extract("[http://localhost:4321](http://localhost:4321)\nDone.")
+        XCTAssertEqual(h?.summary, "Done.")
+        XCTAssertEqual(h?.links.map(\.title), ["localhost:4321"])
+    }
+
     func testSummaryIsCappedLikeTheTaskText() {
         let long = String(repeating: "word ", count: 60)
         XCTAssertLessThanOrEqual(extract(long)?.summary?.count ?? 0, TaskText.maxLength)

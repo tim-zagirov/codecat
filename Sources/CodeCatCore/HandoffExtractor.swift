@@ -121,7 +121,11 @@ public enum HandoffExtractor {
     private static func summary(of text: String, mentions: [String]) -> String? {
         for rawLine in text.components(separatedBy: .newlines) {
             if rawLine.trimmingCharacters(in: .whitespaces).hasPrefix("```") { continue }
-            var line = rawLine
+            // Markdown links collapse to their text before anything else runs: a line
+            // like "Created [PR #12](url)." should read as prose, not leak the raw
+            // `[text](url)` wrapper and URL into a summary that is meant to be plain.
+            let delinked = collapseMarkdownLinks(rawLine)
+            var line = delinked
             for mention in mentions { line = line.replacingOccurrences(of: mention, with: "") }
             let stripped = markdownNoise.stringByReplacingMatches(
                 in: line, range: NSRange(line.startIndex..., in: line), withTemplate: "")
@@ -130,9 +134,19 @@ public enum HandoffExtractor {
             // The line with its links kept, cleaned of markdown — a summary that
             // says "see localhost:4321" is still a summary.
             let clean = markdownNoise.stringByReplacingMatches(
-                in: rawLine, range: NSRange(rawLine.startIndex..., in: rawLine), withTemplate: "")
+                in: delinked, range: NSRange(delinked.startIndex..., in: delinked), withTemplate: "")
             return TaskText.sanitized(clean)
         }
         return nil
+    }
+
+    /// `[text](url)` → `text`. A markdown link whose text is itself the URL (the
+    /// common case for a bare link an editor auto-linked) collapses to that URL, so
+    /// the mention-removal step right after this still recognizes it as link-only.
+    private static let markdownLink = try! NSRegularExpression(pattern: #"\[([^\]]*)\]\([^)]*\)"#)
+
+    private static func collapseMarkdownLinks(_ line: String) -> String {
+        markdownLink.stringByReplacingMatches(
+            in: line, range: NSRange(line.startIndex..., in: line), withTemplate: "$1")
     }
 }
