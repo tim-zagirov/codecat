@@ -52,4 +52,12 @@ final class SessionModelTests: XCTestCase {
         XCTAssertEqual(SessionStatus.crashed.tone, .problem)
         XCTAssertEqual(SessionStatus.idle.tone, .sleeping)
     }
+
+    func testAggregateStatusToneIsWhatTheCatPoseFollows() {
+        XCTAssertEqual(AggregateStatus.sleeping.tone, .sleeping)
+        XCTAssertEqual(AggregateStatus.working(2).tone, .working)
+        XCTAssertEqual(AggregateStatus.waiting(1).tone, .waiting)
+        XCTAssertEqual(AggregateStatus.done.tone, .done)
+        XCTAssertEqual(AggregateStatus.problem.tone, .problem)
+    }
 }

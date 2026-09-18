@@ -196,6 +196,25 @@ public enum AggregateStatus: Equatable, Sendable {
     case waiting(Int)
     case done
     case problem
+
+    /// The cat's own state, read off the whole-fleet rollup rather than any one
+    /// session: the sprite's pose, the glow behind it and the menu's head wash all
+    /// follow this. A session's own dot follows its own `SessionStatus.tone`
+    /// instead, and the capsule follows `SessionStore.indicator` — three surfaces,
+    /// three different questions ("how does the fleet feel", "how does this one
+    /// session feel", "what number/tone goes in the capsule"), so a crash sitting
+    /// alongside two sessions still working ended up green everywhere but the dot
+    /// until this existed: the capsule's `indicator` counts the working sessions
+    /// and only marks the crash on top, so it never itself turns `.problem`.
+    public var tone: MascotTone {
+        switch self {
+        case .sleeping: return .sleeping
+        case .working: return .working
+        case .waiting: return .waiting
+        case .done: return .done
+        case .problem: return .problem
+        }
+    }
 }
 
 /// The colour a state is shown in, named by meaning rather than by hue so the two
