@@ -36,6 +36,82 @@ public enum SessionStatus: Equatable, Sendable {
         case .crashed: return L10n.t("session.status.crashed", "ended")
         }
     }
+
+    /// The colour a session's own dot is drawn in — the same vocabulary the island
+    /// counter and the floating badge use, so a dot on the island and a dot in a row
+    /// can never mean two different things.
+    public var tone: MascotTone {
+        switch self {
+        case .idle: return .sleeping
+        case .working: return .working
+        case .waitingForYou: return .waiting
+        case .done: return .done
+        case .crashed: return .problem
+        }
+    }
+}
+
+/// One item of the agent's own task list, as it wrote it with `TodoWrite` or
+/// `TaskCreate`. The list is the only statement of a plan that exists anywhere in
+/// the transcript; the tool in hand ("editing api.ts") says what the agent is
+/// touching, this says what it is *for*.
+public struct TaskStep: Equatable, Sendable, Identifiable {
+    public enum Status: String, Equatable, Sendable { case pending, inProgress, completed }
+    /// `TodoWrite` lists have no ids, so the index is the id — they are replaced
+    /// whole on every call and only need to be stable within one. `TaskCreate`
+    /// tasks are numbered by Claude Code ("Task #3") and that number is the id.
+    public let id: String
+    public var title: String
+    /// `TodoWrite`'s present-continuous form ("Writing the parser"), the better line
+    /// for a step that is happening right now. `TaskCreate` sends none.
+    public var activeForm: String?
+    public var status: Status
+
+    public init(id: String, title: String, activeForm: String? = nil, status: Status) {
+        self.id = id; self.title = title; self.activeForm = activeForm; self.status = status
+    }
+
+    /// The line the row shows for this step.
+    public var displayTitle: String {
+        if let activeForm, !activeForm.isEmpty { return activeForm }
+        return title
+    }
+}
+
+/// A change to a session's task list, read off one transcript line. See
+/// `TranscriptParser` for where each case comes from.
+public enum StepsUpdate: Equatable, Sendable {
+    case replaceAll([TaskStep])
+    case create(id: String, title: String)
+    case update(id: String, status: TaskStep.Status)
+    case remove(id: String)
+}
+
+/// Something the agent's final message pointed at: a dev server, a pull request, a
+/// file it wrote. The chip under a finished session.
+public struct HandoffLink: Equatable, Sendable, Identifiable {
+    public enum Kind: Equatable, Sendable {
+        case localhost, pullRequest, github, figma, artifact, web, file, folder
+    }
+    /// The target as written, so two mentions of the same link are one chip.
+    public let id: String
+    public let kind: Kind
+    public let title: String
+    public let target: URL
+
+    public init(kind: Kind, title: String, target: URL) {
+        self.id = target.absoluteString; self.kind = kind; self.title = title; self.target = target
+    }
+}
+
+/// What a finished turn hands the user: the first line of the agent's last message
+/// and the links in it. Nil on a session whose last turn said nothing worth a chip.
+public struct Handoff: Equatable, Sendable {
+    public let summary: String?
+    public let links: [HandoffLink]
+    public init(summary: String?, links: [HandoffLink]) {
+        self.summary = summary; self.links = links
+    }
 }
 
 public struct Session: Identifiable, Equatable, Sendable {
@@ -52,6 +128,11 @@ public struct Session: Identifiable, Equatable, Sendable {
     /// same prompt, trimmed by the hook so its datagram fits). A short follow-up does
     /// not overwrite it — see `TaskText.replaces`.
     public var taskText: String? = nil
+    /// The agent's task list — see `TaskStep`. Empty until the agent writes one.
+    public var steps: [TaskStep] = []
+    /// What the last finished turn handed over — see `Handoff`. Nil while working:
+    /// the next turn has begun and the old result is stale.
+    public var handoff: Handoff? = nil
     public var startedAt: Date
     public var lastActivity: Date
     /// When this session most recently entered a terminal state (`.done` or `.crashed`).
@@ -93,6 +174,19 @@ public struct Session: Identifiable, Equatable, Sendable {
 
     public var projectName: String {
         (projectPath as NSString).lastPathComponent
+    }
+
+    /// The step the agent is on: the first in progress, else the first still pending.
+    /// Nil when the list is done or absent — the row then shows nothing rather than
+    /// a finished step pretending to be current.
+    public var currentStep: TaskStep? {
+        steps.first(where: { $0.status == .inProgress }) ?? steps.first(where: { $0.status == .pending })
+    }
+
+    /// Completed over total, nil with no list.
+    public var stepProgress: (done: Int, total: Int)? {
+        guard !steps.isEmpty else { return nil }
+        return (steps.filter { $0.status == .completed }.count, steps.count)
     }
 }
 
@@ -205,9 +299,16 @@ public struct TranscriptActivity: Equatable, Sendable {
     /// `TranscriptParser.taskText`. Nil on every other entry, which is most of them:
     /// only the line where a turn begins sets the task.
     public let taskText: String?
+    /// Changes to the session's task list carried by this line — see `StepsUpdate`.
+    /// Empty for almost every line.
+    public let stepsUpdates: [StepsUpdate]
+    /// The assistant's text on the line that ends the turn — the message the user
+    /// would read in the terminal. Nil on every other line.
+    public let finalText: String?
 
     public init(sessionId: String, projectPath: String, description: String, timestamp: Date,
-                isSubagent: Bool = false, endsTurn: Bool = false, taskText: String? = nil) {
+                isSubagent: Bool = false, endsTurn: Bool = false, taskText: String? = nil,
+                stepsUpdates: [StepsUpdate] = [], finalText: String? = nil) {
         self.sessionId = sessionId
         self.projectPath = projectPath
         self.description = description
@@ -215,5 +316,7 @@ public struct TranscriptActivity: Equatable, Sendable {
         self.isSubagent = isSubagent
         self.endsTurn = endsTurn
         self.taskText = taskText
+        self.stepsUpdates = stepsUpdates
+        self.finalText = finalText
     }
 }
