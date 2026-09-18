@@ -33,7 +33,8 @@
 "setting.keep.awake" = "Keep the Mac awake while agents work";
 "setting.lid.mode" = "Keep agents running with the lid closed";
 "setting.sounds" = "Play a sound when an agent needs you";
-"setting.show.task" = "Show what you asked each session for";
+"setting.show.task" = "Show what each session is doing";
+"setting.show.task.help" = "The task in your words, the agent's current step, and the final message with its links. Off for a demo or a shared screen.";
 "setting.show.cat" = "Show the cat on screen";
 "setting.hide.when.idle" = "Hide the cat when nothing is running";
 "settings.no.notch" = "Island needs a display with a notch. This Mac doesn't have one, so the cat stays floating.";

@@ -165,8 +165,13 @@ struct SettingsSectionView: View {
                 .foregroundStyle(style.secondary)
         }
         SettingToggle(L10n.t("setting.sounds", "Play a sound when an agent needs you"), isOn: $appState.soundsEnabled)
-        SettingToggle(L10n.t("setting.show.task", "Show what you asked each session for"),
+        SettingToggle(L10n.t("setting.show.task", "Show what each session is doing"),
                       isOn: $appState.showsTaskText)
+        Text(L10n.t("setting.show.task.help",
+                    "The task in your words, the agent's current step, and the final message "
+                    + "with its links. Off for a demo or a shared screen."))
+            .font(.system(size: 11))
+            .foregroundStyle(style.secondary)
     }
 
     /// A collapsible section header: a chevron that turns and a muted heading, the
