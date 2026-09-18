@@ -47,6 +47,16 @@ struct IslandView: View {
     /// controller's `hosting.rootView = …` reassignment exactly as `menuHeight` and
     /// `revealed` already do, so driving the pause from it is safe.
     @State private var bloomSettled = false
+    /// The glow's own bloom origin and colour — not `appState.statusSince`, which
+    /// resets on every `AggregateStatusKey` change (it follows `aggregate`, the
+    /// whole-fleet rollup) while the glow paints `indicator.tone`. Two working
+    /// sessions plus one crashing flips `aggregate` to `.problem`, resetting
+    /// `statusSince`, while `indicator` stays `.working`: keyed to `statusSince` the
+    /// green glow would snap to zero and rebloom for a tone that never changed.
+    /// `glowTone` is set from `indicator.tone` only when that tone actually changes,
+    /// so the pair tracks the glow's own transitions instead.
+    @State private var glowSince = Date()
+    @State private var glowTone: MascotTone = .sleeping
 
     /// A spring with no overshoot. Overshoot in the menu bar reads not as liveliness
     /// but as rattle: the shape sits flush against the screen's edge, and any overrun
@@ -144,7 +154,7 @@ struct IslandView: View {
     /// A soft radial wash behind the cat in the aggregate tone — the state readable
     /// from across the room, before the eye finds the dots. Sleeping draws nothing.
     ///
-    /// The bloom's progress is computed from `statusSince`, not from view state: the
+    /// The bloom's progress is computed from `glowSince`, not from view state: the
     /// controller reassigns the island's root view on every state change, and a
     /// `@State` progress value would replay the bloom on each of those. But *whether
     /// the timer keeps ticking* has to be `@State` (`bloomSettled`): the pause has to
@@ -152,38 +162,49 @@ struct IslandView: View {
     /// re-evaluated — see the doc comment on `bloomSettled`.
     private var glow: some View {
         let tone = appState.store.indicator.tone
-        let since = appState.statusSince
         return TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: bloomSettled)) { context in
             let progress = reduceMotion ? 1.0
-                : Motion.easeOut(context.date.timeIntervalSince(since) / Motion.bloomDuration)
+                : Motion.easeOut(context.date.timeIntervalSince(glowSince) / Motion.bloomDuration)
             Circle()
-                .fill(RadialGradient(colors: [ToneColor.color(for: tone).opacity(0.42), .clear],
+                .fill(RadialGradient(colors: [ToneColor.color(for: glowTone).opacity(0.42), .clear],
                                      center: .center, startRadius: 0, endRadius: height))
                 .frame(width: height * 2, height: height * 2)
                 .scaleEffect(0.9 + 0.1 * progress)
-                .opacity(tone == .sleeping ? 0 : progress)
-                .animation(Motion.toneCrossfade, value: tone)
+                .opacity(glowTone == .sleeping ? 0 : progress)
+                .animation(Motion.toneCrossfade, value: glowTone)
         }
         .allowsHitTesting(false)
-        // The tone just changed: unpause synchronously, before the task below has a
-        // chance to run, so the strip never sits paused for even one frame it should
-        // be animating.
-        .onChange(of: since) { _, _ in bloomSettled = false }
-        // Cancelled and restarted whenever `since` changes. Sleeps for the rest of the
-        // bloom and then pauses the timer; on first appearance, when the tone has
+        // First appearance only: once `glowTone` has been set to anything real, later
+        // `onAppear`s from the controller's view-reassignment must not touch it —
+        // that is what `.onChange(of: tone)` below is for.
+        .onAppear {
+            guard glowTone == .sleeping else { return }
+            glowTone = tone
+            glowSince = Date()
+            bloomSettled = false
+        }
+        // The indicator's own tone changed — not the aggregate's — so this is the one
+        // place the glow's bloom restarts.
+        .onChange(of: tone) { _, newTone in
+            glowTone = newTone
+            glowSince = Date()
+            bloomSettled = false
+        }
+        // Cancelled and restarted whenever `glowSince` changes. Sleeps for the rest of
+        // the bloom and then pauses the timer; on first appearance, when the tone has
         // already been settled for a while, the remaining time is zero or negative and
         // this sets `bloomSettled` on the next run loop turn without ever sleeping.
-        .task(id: since) {
-            let remaining = Motion.bloomDuration + 0.05 - Date().timeIntervalSince(since)
+        .task(id: glowSince) {
+            let remaining = Motion.bloomDuration + 0.05 - Date().timeIntervalSince(glowSince)
             if remaining > 0 {
                 try? await Task.sleep(for: .seconds(remaining))
             }
             // A second tone change within one bloom window cancels this task and starts
-            // a new one for the new `since`; `Task.sleep` then throws and `try?` above
-            // swallows it. Without this guard the cancelled task would fall straight
-            // through to `bloomSettled = true`, racing the new task's own
-            // `.onChange(of: since)` reset and freezing the glow mid-bloom for the tone
-            // that replaced it.
+            // a new one for the new `glowSince`; `Task.sleep` then throws and `try?`
+            // above swallows it. Without this guard the cancelled task would fall
+            // straight through to `bloomSettled = true`, racing the new task's own
+            // reset above and freezing the glow mid-bloom for the tone that replaced
+            // it.
             guard !Task.isCancelled else { return }
             bloomSettled = true
         }
