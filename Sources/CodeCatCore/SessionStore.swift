@@ -17,8 +17,14 @@ public final class SessionStore: ObservableObject {
         routeCache = nil
     }
 
-    public init(routeCache: SessionRouteCache? = nil) {
+    /// Answers "does this path exist, and is it a folder" for `HandoffExtractor`.
+    /// Injected so the store's tests never touch the disk.
+    private let pathKind: (String) -> HandoffExtractor.PathKind?
+
+    public init(routeCache: SessionRouteCache? = nil,
+                pathKind: @escaping (String) -> HandoffExtractor.PathKind? = HandoffExtractor.realPathKind) {
         self.routeCache = routeCache
+        self.pathKind = pathKind
     }
 
     /// The list the panel and island render, leading with the sessions that need the
@@ -118,6 +124,14 @@ public final class SessionStore: ObservableObject {
         return MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false)
     }
 
+    /// One tone per session that counts — the same population as `indicator`, in
+    /// the order `ordered` shows them. The island draws these as a cluster of dots
+    /// when there are four or fewer, so "two working and one waiting" is visible
+    /// without opening the menu.
+    public var dots: [MascotTone] {
+        ordered.compactMap { $0.status == .idle ? nil : $0.status.tone }
+    }
+
     /// Whether there are any tracked sessions at all, regardless of what they are doing.
     ///
     /// It answers exactly the question "are there sessions", and that is the whole
@@ -176,6 +190,8 @@ public final class SessionStore: ObservableObject {
                 // conversation the task belonged to. Keeping it would leave the row
                 // describing work the agent no longer remembers being asked for.
                 s.taskText = nil
+                s.steps = []
+                s.handoff = nil
                 // Not `.working`: the event says "a session appeared", not "an agent
                 // started working" — see `SessionStatus.idle`. Work begins when the
                 // first line of a turn shows up in the transcript (written at the same
@@ -199,6 +215,8 @@ public final class SessionStore: ObservableObject {
                    TaskText.replaces(current: s.taskText, with: prompt) {
                     s.taskText = prompt
                 }
+                // The next turn has begun; the old result is stale.
+                s.handoff = nil
             }
         case "Notification":
             let text = (event.message ?? "").lowercased()
@@ -237,6 +255,7 @@ public final class SessionStore: ObservableObject {
         if let task = activity.taskText, TaskText.replaces(current: s.taskText, with: task) {
             s.taskText = task
         }
+        for update in activity.stepsUpdates { s.apply(update) }
         // The end of a turn is visible in the transcript itself (`stop_reason ==
         // "end_turn"`), and relying on that is safer than relying on the `Stop` hook,
         // which does not always arrive — measurements are in `TranscriptActivity.endsTurn`.
@@ -250,6 +269,12 @@ public final class SessionStore: ObservableObject {
             s.finishedAt = activity.timestamp
             s.lastActivity = activity.timestamp
             if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
+            // What the turn hands over. Set to the extraction's answer even when that
+            // is nil: a turn that said nothing worth a chip replaces an older handoff
+            // rather than leaving it up.
+            s.handoff = activity.finalText.flatMap {
+                HandoffExtractor.extract(from: $0, pathKind: pathKind)
+            }
             sessions[activity.sessionId] = s
             return
         }
@@ -264,6 +289,7 @@ public final class SessionStore: ObservableObject {
             : activity.description
         s.lastActivity = activity.timestamp
         s.finishedAt = nil
+        s.handoff = nil
         if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
         sessions[activity.sessionId] = s
     }
@@ -520,4 +546,25 @@ public final class SessionStore: ObservableObject {
 private func nonEmpty(_ s: String?) -> String? {
     guard let s, !s.isEmpty else { return nil }
     return s
+}
+
+private extension Session {
+    mutating func apply(_ update: StepsUpdate) {
+        switch update {
+        case .replaceAll(let list):
+            steps = list
+        case .create(let id, let title):
+            // A create replayed from the primed transcript tail must not duplicate.
+            if let index = steps.firstIndex(where: { $0.id == id }) {
+                steps[index].title = title
+            } else {
+                steps.append(TaskStep(id: id, title: title, status: .pending))
+            }
+        case .update(let id, let status):
+            guard let index = steps.firstIndex(where: { $0.id == id }) else { return }
+            steps[index].status = status
+        case .remove(let id):
+            steps.removeAll { $0.id == id }
+        }
+    }
 }
