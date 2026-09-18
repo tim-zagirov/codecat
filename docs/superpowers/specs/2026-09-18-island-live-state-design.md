@@ -361,8 +361,8 @@ Concrete values:
 | --- | --- | --- | --- |
 | Tone glow | tone changes | colour crossfade 250 ms `easeOut`; on arrival one bloom: scale 0.9 → 1.0 and opacity 0 → 1 over 250 ms `easeOut`, computed from `statusSince` (bloom shows only while `now − statusSince < 0.25 s`) | crossfade only |
 | Tone glow | to sleeping | opacity 1 → 0 over 250 ms | same |
-| Session dot | appears | scale 0.6 → 1.0, opacity 0 → 1, 180 ms `easeOut` | opacity only |
-| Session dot | disappears | reverse, 150 ms | opacity only |
+| Session dot | appears | scale 0.6 → 1.0 (0.6 on the way out) and opacity, on the reposition spring together with the neighbours' move | opacity only |
+| Session dot | disappears | scale 0.6 → 1.0 (0.6 on the way out) and opacity, on the reposition spring together with the neighbours' move | opacity only |
 | Session dot | neighbours reposition | `IslandView.reveal` spring (0.28, damping 1.0) via `.animation(_, value: dots)` | none (instant) |
 | Session dot | tone changes | colour crossfade 250 ms | same |
 | Session dot | waiting | scale 1.0 ↔ 1.35, 3 s `easeInOut`, the existing cycle | static ring |
@@ -371,9 +371,12 @@ Concrete values:
 | Progress bar | fill changes | `IslandView.reveal` spring, both directions | instant |
 | Handoff chips | appear | stagger 40 ms per chip, each scale 0.95 → 1.0 and opacity 0 → 1 over 200 ms `easeOut` | opacity, no stagger |
 | Handoff chip | mouse down | scale 0.97 over 120 ms, on **down** not up: the chip is a `Button` with a custom `ButtonStyle`, whose `configuration.isPressed` is true from mouse-down (`onHoverRegion` cannot see the press, and a `DragGesture` would fight `.onDrag`) | same, it is feedback |
-| Handoff chip | drag begins | scale 1.04 and shadow radius 6 at opacity 0.35, 120 ms; the preview follows the cursor 1:1 | same |
 | Menu head tint | tone changes or appears | opacity crossfade 300 ms | same |
 | Row grows a step line | step appears / goes | height on the `IslandView.reveal` spring, with `.animation(_, value:)` on the row's derived layout key; the island's window height follows through the existing `IslandContentHeightKey` path | instant |
+
+A chip does not lift on drag start: `.onDrag` offers no end-of-drag callback
+to put it back down, and the default drag preview (the chip itself) already
+says what is being carried.
 
 Easing names refer to SwiftUI's `Animation.easeOut(duration:)` etc. Every
 duration above is a constant in one place (`Motion.swift` in `CodeCatApp`) so
@@ -387,8 +390,7 @@ every key at a call site is present and vice-versa):
 - `row.step.progress` — `%d/%d`
 - `handoff.title.pr` — `PR #%@`; `handoff.title.github` — `GitHub`;
   `handoff.title.figma` — `Figma`; `handoff.title.artifact` — `Artifact`
-- `settings.taskText.title` — text change; `settings.taskText.help` — new
-- `demo.handoff.summary` — the demo summary
+- `setting.show.task` — text change; `setting.show.task.help` — new
 
 ## 10. Testing
 
