@@ -298,6 +298,16 @@ struct SessionListView: View {
             return "\(session.projectName) · \(tty)"
         }()
 
+        // Computed once so the row-growth animation below and the view drawn in the
+        // VStack agree on exactly the same thing being shown. `stepKey` is nil
+        // whenever `step` is nil — not just the step's id — because `stepLine`
+        // depends on more than `currentStep`'s identity: `showsTaskText` and
+        // `session.status` can also flip the line on or off (a session finishing,
+        // or the setting toggled) without `currentStep.id` itself changing, and the
+        // row's height needs to animate on that transition too.
+        let step = stepLine(session)
+        let stepKey = step.map { _ in session.currentStep?.id ?? "" }
+
         let content = HStack(alignment: .top, spacing: 8) {
             Circle().fill(color(for: session.status))
                 .frame(width: dotSize, height: dotSize)
@@ -320,7 +330,7 @@ struct SessionListView: View {
                     // parser · 3/5" says where the work is, "editing api.ts" only
                     // that it moves. On the panel the step takes the status line's
                     // place; on the island the row grows a third line for it.
-                    if let step = stepLine(session) {
+                    if let step {
                         step
                     } else if style.rowLayout == .threeLine {
                         statusLine(session, demoted: true)
@@ -383,10 +393,14 @@ struct SessionListView: View {
         // keeps its original inset (compensation is 0 there).
         .padding(.horizontal, style.rowInsetCompensation)
         // The row's height changes when a step line appears, disappears, or the
-        // task/status line it replaces swaps in its place. Animating on the step's
-        // id (not the whole session) means an unrelated field changing elsewhere on
-        // the row — the duration ticking, say — doesn't also trigger this spring.
-        .animation(reduceMotion ? nil : Motion.reposition, value: session.currentStep?.id)
+        // task/status line it replaces swaps in its place. Keying on `stepKey`
+        // (presence plus id, not the bare step id) catches every path that flips
+        // the line on or off — the step itself changing, but also the session
+        // leaving `.working`, or `showsTaskText` being toggled — none of which
+        // necessarily change `currentStep.id` on their own. Keying on the whole
+        // session would also fire the spring for unrelated changes elsewhere on
+        // the row, like the duration ticking.
+        .animation(reduceMotion ? nil : Motion.reposition, value: stepKey)
 
         // Only a row with an actual route gets the tap target and hover/cursor
         // wiring — an unavailable row states its non-interactivity in the view
