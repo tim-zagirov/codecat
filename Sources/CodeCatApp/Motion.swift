@@ -13,8 +13,6 @@ enum Motion {
     /// A new tone's single bloom — scale 0.9 → 1 and opacity 0 → 1 — measured from
     /// `AppState.statusSince`, so a rebuilt view does not replay it.
     static let bloomDuration: TimeInterval = 0.25
-    static let dotAppear = Animation.easeOut(duration: 0.18)
-    static let dotDisappear = Animation.easeOut(duration: 0.15)
     /// Repositioning and any height change: the island's own reveal spring, no
     /// overshoot (see `IslandView.reveal`).
     static var reposition: Animation { IslandView.reveal }
