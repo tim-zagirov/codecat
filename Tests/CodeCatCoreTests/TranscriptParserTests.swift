@@ -225,5 +225,90 @@ final class TranscriptParserTests: XCTestCase {
         """
         XCTAssertEqual(TranscriptParser.parseLine(l)?.taskText, "собери релиз")
     }
+
+    // MARK: - Task list
+
+    func testTodoWriteReplacesTheWholeList() {
+        let l = line("assistant", content: #"""
+            {"type":"tool_use","name":"TodoWrite","input":{"todos":[
+              {"content":"Read the parser","activeForm":"Reading the parser","status":"completed"},
+              {"content":"Write the test","activeForm":"Writing the test","status":"in_progress"},
+              {"content":"Ship it","activeForm":"Shipping it","status":"pending"}]}}
+            """#)
+        let updates = TranscriptParser.parseLine(l)?.stepsUpdates
+        XCTAssertEqual(updates, [.replaceAll([
+            TaskStep(id: "0", title: "Read the parser", activeForm: "Reading the parser", status: .completed),
+            TaskStep(id: "1", title: "Write the test", activeForm: "Writing the test", status: .inProgress),
+            TaskStep(id: "2", title: "Ship it", activeForm: "Shipping it", status: .pending),
+        ])])
+    }
+
+    func testTaskCreateIsReadFromItsResultLine() {
+        let l = line("user", content:
+            #"{"type":"tool_result","tool_use_id":"toolu_1","content":"Task #3 created successfully: Propose 2-3 approaches"}"#)
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.stepsUpdates,
+                       [.create(id: "3", title: "Propose 2-3 approaches")])
+    }
+
+    func testTaskCreateResultAsTextBlocksIsReadToo() {
+        let l = line("user", content:
+            #"{"type":"tool_result","tool_use_id":"toolu_1","content":[{"type":"text","text":"Task #4 created successfully: Write docs"}]}"#)
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.stepsUpdates, [.create(id: "4", title: "Write docs")])
+    }
+
+    func testTaskUpdateStatusesAndDeletion() {
+        XCTAssertEqual(TranscriptParser.parseLine(line("assistant", content:
+            #"{"type":"tool_use","name":"TaskUpdate","input":{"taskId":"2","status":"completed"}}"#))?.stepsUpdates,
+            [.update(id: "2", status: .completed)])
+        XCTAssertEqual(TranscriptParser.parseLine(line("assistant", content:
+            #"{"type":"tool_use","name":"TaskUpdate","input":{"taskId":"2","status":"in_progress"}}"#))?.stepsUpdates,
+            [.update(id: "2", status: .inProgress)])
+        XCTAssertEqual(TranscriptParser.parseLine(line("assistant", content:
+            #"{"type":"tool_use","name":"TaskUpdate","input":{"taskId":"2","status":"deleted"}}"#))?.stepsUpdates,
+            [.remove(id: "2")])
+        XCTAssertEqual(TranscriptParser.parseLine(line("assistant", content:
+            #"{"type":"tool_use","name":"TaskUpdate","input":{"taskId":"2","status":"blocked"}}"#))?.stepsUpdates,
+            [])
+    }
+
+    func testOneLineWithTwoToolBlocksYieldsTwoUpdatesInOrder() {
+        let l = line("assistant", content: #"""
+            {"type":"tool_use","name":"TaskUpdate","input":{"taskId":"1","status":"completed"}},
+            {"type":"tool_use","name":"TaskUpdate","input":{"taskId":"2","status":"in_progress"}}
+            """#)
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.stepsUpdates,
+                       [.update(id: "1", status: .completed), .update(id: "2", status: .inProgress)])
+    }
+
+    func testASubagentsTodoListDoesNotTouchTheParent() {
+        let l = """
+        {"type":"assistant","sessionId":"s1","cwd":"/p","agentId":"a1",\
+        "timestamp":"2026-08-28T10:00:00.123Z","message":{"content":[\
+        {"type":"tool_use","name":"TodoWrite","input":{"todos":[{"content":"x","status":"pending"}]}}]}}
+        """
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.stepsUpdates, [])
+    }
+
+    func testAnOrdinaryToolLineCarriesNoUpdates() {
+        let l = line("assistant", content: #"{"type":"tool_use","name":"Bash","input":{"command":"ls"}}"#)
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.stepsUpdates, [])
+    }
+
+    // MARK: - Final text
+
+    func testTheTurnEndingLineCarriesItsText() {
+        let l = """
+        {"type":"assistant","sessionId":"s1","cwd":"/p","timestamp":"2026-09-01T00:00:00.000Z",\
+        "message":{"stop_reason":"end_turn","content":[{"type":"text","text":"Done."},\
+        {"type":"text","text":"See http://localhost:4321"}]}}
+        """
+        let a = TranscriptParser.parseLine(l)
+        XCTAssertEqual(a?.endsTurn, true)
+        XCTAssertEqual(a?.finalText, "Done.\nSee http://localhost:4321")
+    }
+
+    func testALineThatDoesNotEndTheTurnHasNoFinalText() {
+        XCTAssertNil(TranscriptParser.parseLine(assistant(stopReason: "tool_use", tool: "Bash"))?.finalText)
+    }
 }
 
