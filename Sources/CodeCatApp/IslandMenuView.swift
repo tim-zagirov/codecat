@@ -31,6 +31,20 @@ struct IslandMenuView: View {
     let maxContentHeight: CGFloat
     var onJump: () -> Void = {}
 
+    /// A faint wash of the aggregate tone at the top of the menu when it is asking
+    /// for attention — waiting or problem. Not for working or done: a permanent
+    /// green head would teach the eye to ignore the orange one.
+    private var headTint: some View {
+        let tone = appState.store.indicator.tone
+        let shown = tone == .waiting || tone == .problem
+        return LinearGradient(colors: [ToneColor.color(for: tone).opacity(0.16), .clear],
+                              startPoint: .top, endPoint: .bottom)
+            .frame(height: 64)
+            .opacity(shown ? 1 : 0)
+            .animation(Motion.headTint, value: tone)
+            .allowsHitTesting(false)
+    }
+
     var body: some View {
         // The silhouette is already clamped to the screen by `IslandLayout.windowFrame`;
         // without a scroll view the content taller than that clamp is simply clipped, and
@@ -66,6 +80,7 @@ struct IslandMenuView: View {
                                        value: min(proxy.size.height, maxContentHeight))
             })
         }
+        .background(alignment: .top) { headTint }
         .scrollBounceBehavior(.basedOnSize)
         .frame(width: width)
         .frame(maxHeight: maxContentHeight)
