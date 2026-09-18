@@ -423,10 +423,7 @@ struct SessionListView: View {
         // Grey: the session is open but nothing is happening — exactly what the
         // sleeping cat and the empty counter say.
         case .idle: return .secondary
-        case .working: return .green
-        case .waitingForYou: return .orange
-        case .done: return .blue
-        case .crashed: return .red
+        default: return ToneColor.color(for: status.tone)
         }
     }
 
