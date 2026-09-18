@@ -29,6 +29,16 @@ public enum DemoFeed {
 
     public static let sessionIDs = ["demo-0001", "demo-0002", "demo-0003"]
 
+    /// What each session was asked for. The third has none: it is open and has been
+    /// given nothing to do, and a demo that never shows that row hides half of what
+    /// the list says. Written the way people really write prompts — a request, not a
+    /// label — because the row's whole claim is that it shows the user's own words.
+    public static let tasks = [
+        "почини пагинацию в ленте — при скролле дублируются карточки",
+        "прогони тесты и собери релиз 0.4.1",
+        nil,
+    ]
+
     /// One step of the loop. Each is a full description of where all three sessions
     /// should be, not a delta, so a capture script can jump straight to the state it
     /// wants to photograph.
@@ -65,7 +75,11 @@ public enum DemoFeed {
                 sessionId: id,
                 cwd: projects[index],
                 message: name == "Notification" ? "Claude is asking a question" : nil,
-                source: name == "SessionStart" ? "startup" : nil)
+                source: name == "SessionStart" ? "startup" : nil,
+                // Only `UserPromptSubmit` carries a prompt, exactly as in the real
+                // payload: a session that was never asked for anything must stay
+                // without a task here too.
+                prompt: name == "UserPromptSubmit" ? tasks[index] : nil)
         }
     }
 
@@ -84,9 +98,27 @@ public enum DemoFeed {
             // the screenshot is about.
             if phase == .waiting && index == 0 { return nil }
             if phase == .working && index == 2 { return nil }
+            // A second after the phase's hooks, not at the same instant as them:
+            // `SessionStore.apply(activity:)` ignores an activity that is not LATER
+            // than the session's last activity, and the app applies both from one
+            // `Date()`. With an equal timestamp every one of these was dropped and
+            // the rows kept the hook's placeholder — which is what the shipped
+            // README screenshots show.
             return TranscriptActivity(sessionId: id, projectPath: projects[index],
-                                      description: descriptions[index], timestamp: now,
+                                      description: descriptions[index],
+                                      timestamp: now.addingTimeInterval(1),
                                       isSubagent: false, endsTurn: false)
+        }
+    }
+
+    /// The phases a pinned phase needs applied ahead of it, so a cold start lands
+    /// where the loop would have been. A session that is waiting on its user, or that
+    /// has finished, was asked for something first; pinned straight to that phase for
+    /// a screenshot it would otherwise be waiting over nothing in particular.
+    public static func leadIn(for phase: Phase) -> [Phase] {
+        switch phase {
+        case .waiting, .done: return [.working]
+        case .idle, .working: return []
         }
     }
 

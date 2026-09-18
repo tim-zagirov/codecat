@@ -163,9 +163,6 @@ struct SessionListView: View {
     private var dotSize: CGFloat { style.rowLayout == .twoLine ? 6 : 8 }
     private var dotTopInset: CGFloat { style.rowLayout == .twoLine ? 4 : 5 }
 
-    /// The second line. In the two-line layout the duration moves here too and is
-    /// pushed right: every session's duration lines up in a column at the right edge —
-    /// that column is the grid holding the list together.
     /// The default activity strings — the ones a session carries when its activity is
     /// nothing more than a restatement of its status. Drawing "waiting for you ·
     /// waiting for you" (status title · activity) was the M4 finding: when the activity
@@ -180,28 +177,62 @@ struct SessionListView: View {
         ]
     }
 
-    /// M4: `title · activity`, collapsed to `activity` alone when the activity is one
-    /// of the default strings or simply repeats the status title. A real activity like
-    /// "editing IslandLayout.swift" keeps its "working · " prefix.
-    private func secondLineText(_ session: Session) -> String {
+    /// What the user asked this session for, or nil — when no prompt has been seen
+    /// yet, or when the text is switched off (`showsTaskText`). Nil means the line is
+    /// not drawn at all: a two-line row where its neighbours have three says "nothing
+    /// has been asked here yet" better than any placeholder could.
+    private func task(_ session: Session) -> String? {
+        guard appState.showsTaskText, let text = session.taskText, !text.isEmpty else { return nil }
+        return text
+    }
+
+    /// A session waiting for the user, or one that ended badly, has something to say
+    /// that outranks what it was asked for: this product exists for the moment an
+    /// agent is stuck and nobody noticed. The task keeps its line, underneath.
+    private func statusOutranksTask(_ session: Session) -> Bool {
+        switch session.status {
+        case .waitingForYou, .crashed: return true
+        case .idle, .working, .done: return false
+        }
+    }
+
+    /// `title · activity`, collapsed to `activity` alone when the activity is one of
+    /// the default strings, when it merely repeats the status title, or when the
+    /// session is working: a working session is announced by the green dot and by
+    /// having a task line above it, so "working · editing X" spends a word on nothing.
+    /// Every other status keeps its name — "editing api.ts" over a session that
+    /// crashed would otherwise read as work still in progress.
+    private func statusLineText(_ session: Session) -> String {
         let activity = session.activityDescription
         if Self.defaultActivityStrings.contains(activity) || activity == session.status.title {
             return activity
         }
+        if session.status == .working { return activity }
         return "\(session.status.title) · \(activity)"
     }
 
+    /// The status line. `demoted` is the panel's third line — under a task, where the
+    /// tool-level activity is quiet proof that something is still happening rather
+    /// than the row's headline.
+    ///
+    /// On the panel the duration sits in this line's right-hand column, whichever of
+    /// the two lines it turns out to be, so every row's duration still lines up in one
+    /// column. On the island it rides the name line instead (see `sessionRow`), which
+    /// leaves the whole width of the second line to the task.
     @ViewBuilder
-    private func secondLine(_ session: Session) -> some View {
-        let status = Text(secondLineText(session))
-            .font(.system(size: 11))
-            .foregroundStyle(style.secondary)
-        // The duration lives in the second line's right column on the island always,
-        // and on the panel for every status except `.working` — a working session's
-        // duration is drawn by the "running for" third line below, so putting it here
-        // too would print it twice. Every other status has no third line now (see
-        // `sessionRow`), so this is where its duration has to appear.
-        if style.rowLayout == .twoLine || session.status != .working {
+    private func statusLine(_ session: Session, demoted: Bool) -> some View {
+        // Under a task line, a placeholder activity ("started on the task") repeats
+        // what the task line has just said in the user's own words. The status's own
+        // name is what is left worth saying there — "working", next to the duration.
+        let text = demoted && Self.defaultActivityStrings.contains(session.activityDescription)
+            ? session.status.title
+            : statusLineText(session)
+        let status = Text(text)
+            .font(.system(size: demoted ? 10 : 11))
+            .foregroundStyle(demoted ? style.tertiary : style.secondary)
+        if style.rowLayout == .twoLine {
+            status
+        } else {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 status
                 Spacer(minLength: 8)
@@ -210,9 +241,19 @@ struct SessionListView: View {
                     .foregroundStyle(style.tertiary)
                     .monospacedDigit()
             }
-        } else {
-            status
         }
+    }
+
+    /// The task line: the user's own words, wrapped to `lines` and cut with an
+    /// ellipsis. Two lines on the panel, one in the island's menu, one when a status
+    /// that outranks it has taken the line above.
+    private func taskLine(_ text: String, lines: Int) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(style.primary)
+            .lineLimit(lines)
+            .truncationMode(.tail)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     /// The SF Symbol naming where a click on this row would land, or nil when the row
@@ -255,16 +296,24 @@ struct SessionListView: View {
                 Text(displayName)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(style.primary)
-                secondLine(session)
-                // "running for %@" is a claim about a session that is running — only
-                // ever drawn for `.working`. A waiting, done, crashed or idle session
-                // is not running, and saying so ("running for 0 min" over a session
-                // that stopped) was the review finding this removes: those rows carry
-                // their honest duration in the second line's right column instead.
-                if style.rowLayout == .threeLine && session.status == .working {
-                    Text(L10n.f("panel.running.for", "running for %@", duration(session)))
-                        .font(.system(size: 10))
-                        .foregroundStyle(style.tertiary)
+                // The row answers two questions in the order the user needs them.
+                // Normally that is "what is this session working on" (the task, in
+                // their own words) and then "is it still moving" (the tool-level
+                // activity, quietly, with the duration). When the session is waiting
+                // on the user or has crashed, the order flips: what they must DO
+                // outranks what they asked for, and the task drops to a single line
+                // below — on the island, where there are only two lines, it gives way
+                // entirely.
+                if let task = task(session), !statusOutranksTask(session) {
+                    taskLine(task, lines: style.rowLayout == .twoLine ? 1 : 2)
+                    if style.rowLayout == .threeLine {
+                        statusLine(session, demoted: true)
+                    }
+                } else {
+                    statusLine(session, demoted: false)
+                    if let task = task(session), style.rowLayout == .threeLine {
+                        taskLine(task, lines: 1)
+                    }
                 }
                 // S4: with the list-level hint suppressed (reasons differ, or some
                 // rows are routable) the per-row hint stays, but only while the pointer
@@ -278,9 +327,20 @@ struct SessionListView: View {
                 }
             }
             Spacer(minLength: 0)
-            // S3: the destination glyph sits at the trailing edge of the name line
-            // (the HStack is top-aligned, so it rides level with the project name).
-            if hasRoute, let glyph = routeGlyph(route) {
+            // The trailing edge of the name line — the HStack is top-aligned, so
+            // whatever sits here rides level with the project name.
+            //
+            // On the island that is the duration: with only two lines to spend, the
+            // second one belongs to the task in full width, and how long a session has
+            // been going is worth more there than a glyph naming where a click lands.
+            // On the panel the duration has its own column in the status line, and the
+            // glyph keeps this spot (S3).
+            if style.rowLayout == .twoLine {
+                Text(duration(session))
+                    .font(.system(size: 10))
+                    .foregroundStyle(style.tertiary)
+                    .monospacedDigit()
+            } else if hasRoute, let glyph = routeGlyph(route) {
                 Image(systemName: glyph)
                     .font(.system(size: 12))
                     .foregroundStyle(style.tertiary)

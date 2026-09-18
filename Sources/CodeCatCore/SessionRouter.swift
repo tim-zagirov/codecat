@@ -48,12 +48,23 @@ public enum SessionRouter {
         "com.googlecode.iterm2",
     ]
 
-    public static func route(for session: Session, isHostRunning: (pid_t) -> Bool) -> JumpRoute {
+    /// - Parameter livePID: the pid of a running instance of the given bundle id, or
+    ///   nil when none is running. Consulted **only** when the recorded pid is dead,
+    ///   and only for the one route that can outlive its process — see
+    ///   `survivingDesktopRoute`. The default answers "nothing is running", which
+    ///   keeps every caller that does not care (and every test about a live host)
+    ///   behaving exactly as before.
+    public static func route(for session: Session,
+                             isHostRunning: (pid_t) -> Bool,
+                             livePID: (String) -> pid_t? = { _ in nil }) -> JumpRoute {
         guard let pid = session.hostPID,
               let bundlePath = session.hostBundlePath, !bundlePath.isEmpty else {
             return .unavailable(reason: .noHostRecorded)
         }
-        guard isHostRunning(pid) else { return .unavailable(reason: .hostGone) }
+        guard isHostRunning(pid) else {
+            return survivingDesktopRoute(for: session, bundlePath: bundlePath, livePID: livePID)
+                ?? .unavailable(reason: .hostGone)
+        }
 
         if let bundleID = session.hostBundleID, terminalBundleIDs.contains(bundleID),
            let tty = session.tty, !tty.isEmpty {
@@ -63,6 +74,31 @@ public enum SessionRouter {
             return .desktopSession(pid: pid, bundlePath: bundlePath, sessionID: session.id)
         }
         return .application(pid: pid, bundlePath: bundlePath)
+    }
+
+    /// The route for a session whose recorded host process is gone but whose
+    /// destination is not — or nil when the session dies with its process.
+    ///
+    /// The recorded pid comes from the persisted route cache (`SessionRouteCache`),
+    /// so it survives restarts and the process it names does not: after the desktop
+    /// app quits and comes back, or after CodeCat itself restarts and restores rows
+    /// from the cache, every one of those rows names a pid that no longer exists.
+    /// Treating that as "the destination is gone" made the row silently dead — no
+    /// hover cursor, no tap gesture, a click that did nothing — for a session the
+    /// user could still see and still open by hand.
+    ///
+    /// Only the desktop route recovers, and the asymmetry is the whole point: it is
+    /// addressed by *session id* (a deep link `DesktopSessionIndex` resolves at click
+    /// time) and carries the pid solely for the fallback activation, so any live
+    /// instance of the same app serves. A terminal tab and a plain application are
+    /// addressed by *process* — a new instance has neither that tab nor that window,
+    /// and sending the user there would be a jump to the wrong place, which is worse
+    /// than an honest "it's gone".
+    private static func survivingDesktopRoute(for session: Session, bundlePath: String,
+                                              livePID: (String) -> pid_t?) -> JumpRoute? {
+        guard let bundleID = session.hostBundleID, bundleID == DesktopSessionIndex.desktopBundleID,
+              let pid = livePID(bundleID) else { return nil }
+        return .desktopSession(pid: pid, bundlePath: bundlePath, sessionID: session.id)
     }
 
     /// `kill(pid, 0)` performs the permission and existence check without sending a

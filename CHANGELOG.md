@@ -8,6 +8,51 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 CodeCat uses [semantic versioning](https://semver.org/) — pre-1.0, so the minor
 number carries breaking changes.
 
+## [Unreleased]
+
+### Added
+- **Every row says what its session was asked for.** Under the project name, a
+  session now shows the prompt in the user's own words — "почини пагинацию в
+  ленте — при скролле дублируются карточки" — instead of only the tool it is
+  touching. The text comes from the transcript, with the hook's copy as the
+  instant path; a short follow-up ("продолжай", "газ" — 28 % of real prompts are
+  15 characters or less) does not overwrite it, `/clear` wipes it and compaction
+  keeps it. A session waiting on you puts what it needs first and the task below;
+  a session nobody has asked anything simply has no such line (`TaskText`).
+- **A switch for it.** "Show what you asked each session for", on by default. The
+  text is the user's own words, and a demo or a shared screen is reason enough to
+  hide it — nothing else changes when it is off.
+
+### Fixed
+- **A long prompt no longer loses the "work started" event.** A unix datagram on
+  macOS is capped at 2 048 bytes and `sendto` refuses anything bigger, so a
+  `UserPromptSubmit` payload carrying a prompt over ~1.4 KB never arrived at all —
+  measured on live data: of 1 760 delivered hook events not one exceeded 2 045 B,
+  and the losses were logged as "app not running?" while the app was running. The
+  hook now trims the prompt to what the row can show before forwarding it.
+- **A session survives its host app restarting.** The host's pid is remembered in
+  `routes.json` and outlives the process it names, so after Claude (or CodeCat)
+  restarts, every restored row pointed at a pid that no longer existed. The row
+  went dead with it — no highlight, no cursor, a click that did nothing — and
+  said "can't open its terminal — that app has been closed" about an app that was
+  running. A session of the desktop app is addressed by session id, not by
+  process (the deep link `DesktopSessionIndex` builds), so it now routes through
+  any live instance of the same app. A terminal tab and a plain application still
+  die with their process: a new instance has neither that tab nor that window, and
+  sending the user to the wrong one is worse than saying it is gone.
+- **Session rows in the island's menu react to the first click.** The menu opened
+  by hover belongs to a window that is deliberately not key, and the SwiftUI views
+  a click lands on there all refuse the first mouse — so the first click was spent
+  making the window key and the row needed clicking twice. The panel now takes key
+  status itself when a click arrives, before handing the event on, and the same
+  click is routed normally (`OverlayPanel.sendEvent`).
+- **The demo no longer writes to the real route cache, and its rows show their
+  real activity.** Demo sessions were being recorded in `routes.json` and read
+  back on the next run, so a screenshot meant to show "4 min" could say "25h 12m";
+  the demo's activity lines were also being dropped for sharing one timestamp with
+  the hooks that preceded them, which is why the shipped screenshots read "started
+  on the task".
+
 ## [0.4.0] — 2026-09-14
 
 Pets from the Codex ecosystem, a straight jump into a desktop-app chat, and a

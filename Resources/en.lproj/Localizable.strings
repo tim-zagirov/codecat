@@ -33,6 +33,7 @@
 "setting.keep.awake" = "Keep the Mac awake while agents work";
 "setting.lid.mode" = "Keep agents running with the lid closed";
 "setting.sounds" = "Play a sound when an agent needs you";
+"setting.show.task" = "Show what you asked each session for";
 "setting.show.cat" = "Show the cat on screen";
 "setting.hide.when.idle" = "Hide the cat when nothing is running";
 "settings.no.notch" = "Island needs a display with a notch. This Mac doesn't have one, so the cat stays floating.";
@@ -54,7 +55,6 @@
 "panel.title.done" = "all done";
 "panel.title.sleeping" = "nothing running";
 /* %@ is a duration such as "12 min". */
-"panel.running.for" = "running for %@";
 "duration.minutes" = "%d min";
 "duration.hours.minutes" = "%dh %dm";
 /* Shown instead of "0 min" for a span under a minute. */

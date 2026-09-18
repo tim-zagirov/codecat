@@ -43,6 +43,15 @@ public struct Session: Identifiable, Equatable, Sendable {
     public var projectPath: String
     public var status: SessionStatus
     public var activityDescription: String
+    /// What the user asked this session for, as one line — the answer to "what is
+    /// this session working on", which neither the status nor the tool-level activity
+    /// gives. Nil until a prompt has been seen: a session that is merely open has
+    /// been asked for nothing, and the row says so by having no such line at all.
+    ///
+    /// Set from the transcript (the full prompt) and from `UserPromptSubmit` (the
+    /// same prompt, trimmed by the hook so its datagram fits). A short follow-up does
+    /// not overwrite it — see `TaskText.replaces`.
+    public var taskText: String? = nil
     public var startedAt: Date
     public var lastActivity: Date
     /// When this session most recently entered a terminal state (`.done` or `.crashed`).
@@ -132,11 +141,16 @@ public struct HookEvent: Codable, Equatable, Sendable {
     /// route-cache-report.md. `nil` for every other event, and for a `SessionStart`
     /// sent by an older Claude Code version that doesn't send it.
     public let source: String?
+    /// The prompt the user typed, on `UserPromptSubmit`. Claude Code sends it in
+    /// full; `codecat-hook` trims it to `TaskText.maxLength` before forwarding,
+    /// because the payload has to fit in a 2 048-byte datagram — a longer one is not
+    /// truncated in transit, it is lost whole.
+    public let prompt: String?
 
     public init(hookEventName: String, sessionId: String, cwd: String?, message: String?,
                 hostPID: pid_t? = nil, hostBundlePath: String? = nil,
                 hostBundleID: String? = nil, tty: String? = nil, source: String? = nil,
-                agentPID: pid_t? = nil) {
+                agentPID: pid_t? = nil, prompt: String? = nil) {
         self.hookEventName = hookEventName
         self.sessionId = sessionId
         self.cwd = cwd
@@ -147,12 +161,13 @@ public struct HookEvent: Codable, Equatable, Sendable {
         self.tty = tty
         self.source = source
         self.agentPID = agentPID
+        self.prompt = prompt
     }
 
     enum CodingKeys: String, CodingKey {
         case hookEventName = "hook_event_name"
         case sessionId = "session_id"
-        case cwd, message, source
+        case cwd, message, source, prompt
         case tty = "host_tty"
         case hostPID = "host_pid"
         case hostBundlePath = "host_bundle_path"
@@ -186,13 +201,19 @@ public struct TranscriptActivity: Equatable, Sendable {
     /// against 19 `end_turn`, so confusing the two is out of the question.
     public let endsTurn: Bool
 
+    /// What the user asked for, when this entry is a typed prompt — see
+    /// `TranscriptParser.taskText`. Nil on every other entry, which is most of them:
+    /// only the line where a turn begins sets the task.
+    public let taskText: String?
+
     public init(sessionId: String, projectPath: String, description: String, timestamp: Date,
-                isSubagent: Bool = false, endsTurn: Bool = false) {
+                isSubagent: Bool = false, endsTurn: Bool = false, taskText: String? = nil) {
         self.sessionId = sessionId
         self.projectPath = projectPath
         self.description = description
         self.timestamp = timestamp
         self.isSubagent = isSubagent
         self.endsTurn = endsTurn
+        self.taskText = taskText
     }
 }

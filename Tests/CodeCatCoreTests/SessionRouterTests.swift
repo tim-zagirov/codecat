@@ -119,6 +119,69 @@ final class SessionRouterTests: XCTestCase {
                        .application(pid: 4242, bundlePath: "/System/Applications/Utilities/Terminal.app"))
     }
 
+    // MARK: - A host that restarted under a new pid
+
+    /// The defect this covers: the recorded pid is read from the persisted route
+    /// cache, so after the desktop app (or CodeCat) restarts every restored row
+    /// carries the *previous* run's pid. It is dead, and the row went dead with it —
+    /// a click that did nothing at all, until the next hook event refreshed the pid.
+    ///
+    /// Nothing about the session was actually gone: the desktop route opens one exact
+    /// chat by deep link (`DesktopSessionIndex`), which is addressed by session id and
+    /// never needed the pid. The pid is carried only for the fallback activation, so a
+    /// live instance of the same app is a complete substitute for it.
+    func testDesktopSessionSurvivesItsHostRestartingUnderANewPid() {
+        XCTAssertEqual(SessionRouter.route(for: session(), isHostRunning: gone,
+                                           livePID: { _ in 7777 }),
+                       .desktopSession(pid: 7777, bundlePath: "/Applications/Claude.app",
+                                       sessionID: "s1"))
+    }
+
+    /// With no instance running there is nothing to open the link with, and
+    /// `.hostGone` is the honest answer — the same one as before.
+    func testDesktopSessionWithNoLiveInstanceIsStillUnavailable() {
+        XCTAssertEqual(SessionRouter.route(for: session(), isHostRunning: gone,
+                                           livePID: { _ in nil }),
+                       .unavailable(reason: .hostGone))
+    }
+
+    /// Only the bundle the session actually ran in counts. A live *other* app cannot
+    /// stand in for it, and the lookup is keyed by the recorded bundle id to prove it.
+    func testLiveInstanceIsLookedUpByTheSessionsOwnBundleID() {
+        var asked: [String] = []
+        _ = SessionRouter.route(for: session(), isHostRunning: gone,
+                                livePID: { asked.append($0); return 7777 })
+        XCTAssertEqual(asked, ["com.anthropic.claudefordesktop"])
+    }
+
+    /// A terminal tab does not survive its terminal quitting: a fresh instance has no
+    /// such tab, and aiming a jump at it would put the user in an unrelated window.
+    /// The narrow rule is deliberate — only a route addressed by session id, not by
+    /// process, may outlive its process.
+    func testTerminalTabIsNotRevivedByALiveInstance() {
+        let s = session(bundlePath: "/System/Applications/Utilities/Terminal.app",
+                        bundleID: "com.apple.Terminal", tty: "/dev/ttys001")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: gone, livePID: { _ in 7777 }),
+                       .unavailable(reason: .hostGone))
+    }
+
+    /// Same for a plain application host: "bring that app forward" was a claim about
+    /// the process that ran the session, and a new one is not it.
+    func testPlainApplicationIsNotRevivedByALiveInstance() {
+        let s = session(bundlePath: "/Applications/Warp.app", bundleID: "dev.warp.Warp-Stable")
+        XCTAssertEqual(SessionRouter.route(for: s, isHostRunning: gone, livePID: { _ in 7777 }),
+                       .unavailable(reason: .hostGone))
+    }
+
+    /// A live host is never asked about: the recorded pid is the right one, and the
+    /// lookup costs a scan of the running applications.
+    func testALiveHostNeverConsultsTheLookup() {
+        var asked = 0
+        _ = SessionRouter.route(for: session(), isHostRunning: running,
+                                livePID: { _ in asked += 1; return 7777 })
+        XCTAssertEqual(asked, 0)
+    }
+
     // MARK: - The bundle the route was computed for
 
     /// The executor must be able to check that the pid it is about to activate still

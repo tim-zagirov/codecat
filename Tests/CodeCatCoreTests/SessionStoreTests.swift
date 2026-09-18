@@ -1229,4 +1229,123 @@ extension SessionStoreTests {
         let store = SessionStore()
         XCTAssertEqual(store.indicator, MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false))
     }
+
+    // MARK: - The task the session was set
+
+    /// The transcript is the source of truth for the task: it carries the prompt in
+    /// full, while the hook's copy is trimmed (and, before the trim, whole events
+    /// with a long prompt never arrived at all — see `TaskText.maxLength`).
+    func testATranscriptPromptBecomesTheSessionsTask() {
+        let store = SessionStore()
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "working on the task",
+            timestamp: t0, taskText: "почини пагинацию в ленте"))
+        XCTAssertEqual(store.ordered[0].taskText, "почини пагинацию в ленте")
+    }
+
+    /// "продолжай" is a real prompt and a useless task. It keeps the session working
+    /// but leaves the row saying what the session is actually about.
+    func testAShortFollowUpLeavesTheTaskAlone() {
+        let store = SessionStore()
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "working on the task",
+            timestamp: t0, taskText: "почини пагинацию в ленте"))
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "working on the task",
+            timestamp: t0.addingTimeInterval(60), taskText: "продолжай"))
+        XCTAssertEqual(store.ordered[0].taskText, "почини пагинацию в ленте")
+    }
+
+    /// A new request, though, is what the session is about now.
+    func testANewRequestReplacesTheTask() {
+        let store = SessionStore()
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "working on the task",
+            timestamp: t0, taskText: "почини пагинацию в ленте"))
+        store.apply(activity: TranscriptActivity(
+            sessionId: "s1", projectPath: "/proj", description: "working on the task",
+            timestamp: t0.addingTimeInterval(60),
+            taskText: "теперь собери релиз и обнови CHANGELOG"))
+        XCTAssertEqual(store.ordered[0].taskText, "теперь собери релиз и обнови CHANGELOG")
+    }
+
+    /// The hook arrives first — before FSEvents has delivered the transcript line —
+    /// so the row can say what was asked from the very first moment.
+    func testUserPromptSubmitCarriesTheTaskImmediately() {
+        let store = SessionStore()
+        store.apply(hook: HookEvent(hookEventName: "UserPromptSubmit", sessionId: "s1",
+                                    cwd: "/proj", message: nil,
+                                    prompt: "почини пагинацию в ленте"),
+                    now: t0)
+        XCTAssertEqual(store.ordered[0].taskText, "почини пагинацию в ленте")
+    }
+
+    /// `/clear` wipes the conversation. Keeping the old task would leave the row
+    /// describing work the agent can no longer remember being asked for.
+    func testClearWipesTheTask() {
+        let store = SessionStore()
+        store.apply(hook: HookEvent(hookEventName: "UserPromptSubmit", sessionId: "s1",
+                                    cwd: "/proj", message: nil,
+                                    prompt: "почини пагинацию в ленте"),
+                    now: t0)
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1",
+                                    cwd: "/proj", message: nil, source: "clear"),
+                    now: t0.addingTimeInterval(60))
+        XCTAssertNil(store.ordered[0].taskText)
+    }
+
+    /// Auto-compaction is not a new session: the same request is still being worked
+    /// on, and `SessionStart(source: "compact")` already leaves the status and the
+    /// start time alone for exactly that reason.
+    func testCompactionKeepsTheTask() {
+        let store = SessionStore()
+        store.apply(hook: HookEvent(hookEventName: "UserPromptSubmit", sessionId: "s1",
+                                    cwd: "/proj", message: nil,
+                                    prompt: "почини пагинацию в ленте"),
+                    now: t0)
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1",
+                                    cwd: "/proj", message: nil, source: "compact"),
+                    now: t0.addingTimeInterval(60))
+        XCTAssertEqual(store.ordered[0].taskText, "почини пагинацию в ленте")
+    }
+
+    /// A finished session keeps saying what it was doing — that is the whole value of
+    /// its row until it disappears.
+    func testAFinishedSessionKeepsItsTask() {
+        let store = SessionStore()
+        store.apply(hook: HookEvent(hookEventName: "UserPromptSubmit", sessionId: "s1",
+                                    cwd: "/proj", message: nil,
+                                    prompt: "почини пагинацию в ленте"),
+                    now: t0)
+        store.apply(hook: hook("Stop"), now: t0.addingTimeInterval(60))
+        XCTAssertEqual(store.ordered[0].taskText, "почини пагинацию в ленте")
+    }
+
+    func testHookEventDecodesThePrompt() throws {
+        let json = #"""
+        {"hook_event_name":"UserPromptSubmit","session_id":"abc","cwd":"/tmp/p",
+         "prompt":"почини пагинацию в ленте"}
+        """#.data(using: .utf8)!
+        XCTAssertEqual(try JSONDecoder().decode(HookEvent.self, from: json).prompt,
+                       "почини пагинацию в ленте")
+    }
+
+    /// The demo invents sessions, and they have no business in the file that
+    /// remembers where REAL ones live. They were landing there: a demo run wrote
+    /// `demo-0001`…`demo-0003` into the user's `routes.json`, and the next demo run
+    /// read their `startedAt` back — which is how a screenshot meant to show "4 min"
+    /// came out saying "25h 12m".
+    func testADetachedStoreWritesNothingToTheRouteCache() {
+        let cache = SessionRouteCache(url: nil)
+        let store = SessionStore(routeCache: cache)
+        store.detachRouteCache()
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "demo-0001",
+                                    cwd: "/proj", message: nil, hostPID: 4242,
+                                    hostBundlePath: "/Applications/Claude.app",
+                                    hostBundleID: "com.anthropic.claudefordesktop",
+                                    tty: "/dev/ttys001"),
+                    now: t0)
+        XCTAssertNil(cache.route(for: "demo-0001"))
+    }
 }
+
