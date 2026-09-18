@@ -170,5 +170,27 @@ final class DemoFeedTests: XCTestCase {
         XCTAssertNotNil(store.sessions[DemoFeed.sessionIDs[0]]?.taskText,
                         "pinned \(pinned) has nothing to show", file: file, line: line)
     }
+
+    func testTheWorkingSessionCarriesAStepListWithACurrentStep() {
+        let store = SessionStore()
+        let now = Date()
+        _ = aggregate(after: .working, in: store, now: now)
+        let s = store.sessions[DemoFeed.sessionIDs[0]]
+        XCTAssertEqual(s?.steps.count, 5)
+        XCTAssertEqual(s?.currentStep?.displayTitle, DemoFeed.steps[2].activeForm)
+        XCTAssertEqual(s?.stepProgress?.done, 2)
+    }
+
+    func testTheDoneSessionCarriesAHandoffWithThreeChips() {
+        let store = SessionStore(pathKind: { _ in nil })
+        var now = Date()
+        for phase in DemoFeed.leadIn(for: .done) + [.done] {
+            now = now.addingTimeInterval(4)
+            _ = aggregate(after: phase, in: store, now: now)
+        }
+        let h = store.sessions[DemoFeed.sessionIDs[1]]?.handoff
+        XCTAssertEqual(h?.summary, "Готово: тесты зелёные, релиз 0.4.1 собран.")
+        XCTAssertEqual(h?.links.map(\.title), ["localhost:4321", "PR #12", "Figma"])
+    }
 }
 

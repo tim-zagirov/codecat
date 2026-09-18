@@ -83,11 +83,38 @@ public enum DemoFeed {
         }
     }
 
+    /// The first session's plan — five steps with the third under way, so a
+    /// screenshot shows a bar that is neither empty nor full.
+    public static let steps: [TaskStep] = [
+        TaskStep(id: "0", title: "Найти, где дублируются карточки", activeForm: "Ищу, где дублируются карточки", status: .completed),
+        TaskStep(id: "1", title: "Написать падающий тест", activeForm: "Пишу падающий тест", status: .completed),
+        TaskStep(id: "2", title: "Починить курсор пагинации", activeForm: "Чиню курсор пагинации", status: .inProgress),
+        TaskStep(id: "3", title: "Прогнать тесты ленты", activeForm: "Прогоняю тесты ленты", status: .pending),
+        TaskStep(id: "4", title: "Снять скриншоты для PR", activeForm: "Снимаю скриншоты для PR", status: .pending),
+    ]
+
+    /// The second session's final message — a summary line and three links, one of
+    /// each kind a chip most often is.
+    public static let handoffText = """
+        Готово: тесты зелёные, релиз 0.4.1 собран.
+
+        Посмотреть: http://localhost:4321 и https://github.com/you/orbit-api/pull/12
+        Макет: https://www.figma.com/design/demo/orbit
+        """
+
     /// The activity line each session shows in `phase`, as the transcript watcher
     /// would report it. Without these every row would read "started on the task",
     /// which is exactly the detail a screenshot is meant to show.
     public static func activities(for phase: Phase, now: Date) -> [TranscriptActivity] {
-        guard phase == .working || phase == .waiting else { return [] }
+        guard phase != .idle else { return [] }
+        if phase == .done {
+            // The second session's turn ends in the transcript, with its text — the
+            // hook alone (`Stop`) has no message to hand over.
+            return [TranscriptActivity(sessionId: sessionIDs[1], projectPath: projects[1],
+                                       description: L10n.t("activity.done", "finished the task"),
+                                       timestamp: now.addingTimeInterval(1), endsTurn: true,
+                                       finalText: handoffText)]
+        }
         let descriptions = [
             L10n.f("activity.editing.file", "editing %@", "IslandLayout.swift"),
             L10n.t("activity.running", "running a command"),
@@ -107,7 +134,8 @@ public enum DemoFeed {
             return TranscriptActivity(sessionId: id, projectPath: projects[index],
                                       description: descriptions[index],
                                       timestamp: now.addingTimeInterval(1),
-                                      isSubagent: false, endsTurn: false)
+                                      isSubagent: false, endsTurn: false,
+                                      stepsUpdates: index == 0 ? [.replaceAll(steps)] : [])
         }
     }
 
