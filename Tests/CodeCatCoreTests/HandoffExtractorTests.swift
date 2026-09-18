@@ -89,6 +89,10 @@ final class HandoffExtractorTests: XCTestCase {
 
     func testSummaryIsCappedLikeTheTaskText() {
         let long = String(repeating: "word ", count: 60)
+        // Guard against the assertion below passing vacuously: `?? 0` would make a
+        // `nil` summary read as "capped at 0", satisfying the length check without
+        // ever exercising the cap.
+        XCTAssertNotNil(extract(long)?.summary)
         XCTAssertLessThanOrEqual(extract(long)?.summary?.count ?? 0, TaskText.maxLength)
     }
 

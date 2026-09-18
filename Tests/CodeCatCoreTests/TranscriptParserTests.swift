@@ -310,5 +310,22 @@ final class TranscriptParserTests: XCTestCase {
     func testALineThatDoesNotEndTheTurnHasNoFinalText() {
         XCTAssertNil(TranscriptParser.parseLine(assistant(stopReason: "tool_use", tool: "Bash"))?.finalText)
     }
+
+    /// A sidechain's own "end_turn" ends the errand a subagent was sent on, not the
+    /// session's turn. Unlike the `agentId` subagent marker, a sidechain entry can
+    /// carry no `agentId` at all, so this is the one place `isSidechain` alone has to
+    /// gate `finalText` — without it, a subagent's sign-off text would surface as the
+    /// parent session's handoff summary.
+    func testASidechainEndTurnCarriesNoFinalTextOrStepsUpdates() {
+        let l = """
+        {"type":"assistant","sessionId":"s1","cwd":"/p","isSidechain":true,\
+        "timestamp":"2026-09-01T00:00:00.000Z",\
+        "message":{"stop_reason":"end_turn","content":[{"type":"text","text":"Done with the errand."}]}}
+        """
+        let a = TranscriptParser.parseLine(l)
+        XCTAssertEqual(a?.endsTurn, true)
+        XCTAssertNil(a?.finalText)
+        XCTAssertEqual(a?.stepsUpdates, [])
+    }
 }
 
