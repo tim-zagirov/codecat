@@ -11,6 +11,26 @@ number carries breaking changes.
 ## [Unreleased]
 
 ### Added
+- **The island says which session is in which state.** Up to four dots in the
+  right wing, one per session in its own colour, instead of one colour and a
+  count — "two working, one waiting for you" without opening the menu. Five or
+  more go back to the counter. A glow behind the cat carries the overall tone
+  (`IslandView`).
+- **Every working row shows the agent's current step.** Claude Code writes its
+  plan into the transcript (`TodoWrite`, `TaskCreate`, `TaskUpdate`); CodeCat
+  now reads it and the row says "Writing the parser · 3/5" with a thin bar,
+  under the task in your words (`TaskStep`, `StepLineView`).
+- **A finished row hands over what to look at.** The first line of the agent's
+  last message and chips for the links and files in it — `localhost:4321`,
+  `PR #12`, `Figma`, an artifact, a file it wrote. Click opens; drag carries the
+  link out of the island into a browser or Finder window (`HandoffExtractor`,
+  `HandoffChipView`). Measured on real transcripts, one turn in ten ends with
+  one.
+- **The island menu's head takes the tone** of a session waiting for you or
+  one that died — a faint orange or red wash, nothing for working or done.
+- **Motion with a rule.** Nothing new loops; every change animates once, under
+  300 ms, from the value on screen; Reduce Motion turns scale and stagger into
+  crossfades and the waiting pulse into a ring (`Motion`).
 - **Every row says what its session was asked for.** Under the project name, a
   session now shows the prompt in the user's own words — "почини пагинацию в
   ленте — при скролле дублируются карточки" — instead of only the tool it is
@@ -22,6 +42,10 @@ number carries breaking changes.
 - **A switch for it.** "Show what you asked each session for", on by default. The
   text is the user's own words, and a demo or a shared screen is reason enough to
   hide it — nothing else changes when it is off.
+
+### Changed
+- **"Show what you asked each session for"** is now "Show what each session is
+  doing" and hides the step and the handoff together with the task.
 
 ### Fixed
 - **A long prompt no longer loses the "work started" event.** A unix datagram on

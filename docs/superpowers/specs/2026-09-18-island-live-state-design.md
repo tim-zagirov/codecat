@@ -162,16 +162,17 @@ public struct Handoff: Equatable, Sendable {
 
 `Session` gains `handoff: Handoff?`.
 
-`HandoffExtractor.extract(from text: String, cwd: String, fileExists: (String) -> Bool) -> Handoff?`
-is a pure function in `CodeCatCore`:
+`HandoffExtractor.extract(from text: String, pathKind: (String) -> PathKind?) -> Handoff?`,
+with `PathKind { file, folder }` and `realPathKind` as the default, is a pure
+function in `CodeCatCore`:
 
 - **URLs**: `https?://[^\s<>()\[\]"'`]+`, then trailing `.,;:!?)*_` stripped
   (markdown and sentence punctuation). Deduplicated by string.
 - **Paths**: `/Users/…` and `~/…` runs without whitespace or quotes, trailing
   `.,;:)*_` stripped, `~` expanded with `NSString.expandingTildeInPath`. A
   relative path is *not* extracted: "src/foo.ts" in prose is too ambiguous.
-  Kept only when `fileExists` says so (injected: the real one is
-  `FileManager.default.fileExists(atPath:isDirectory:)`; tests pass a closure).
+  Kept only when `pathKind` says so (injected: the real one is `realPathKind`,
+  backed by `FileManager`; tests pass a closure).
   A path under `~/.claude` or `~/Library` is dropped (the agent's own bookkeeping
   is not a deliverable).
 - **Kind and title**:
@@ -186,10 +187,11 @@ is a pure function in `CodeCatCore`:
   | existing file | file | last path component |
   | existing directory | folder | last path component + `/` |
 - **Summary**: the first non-empty line of the text after stripping markdown
-  markers (`**`, `__`, leading `#`, `>` and `-`/`*` bullets, backticks) and
-  after removing every extracted URL and path *when the line is nothing but the
-  link*. Capped by `TaskText.sanitized` (one line, ≤ 160). A line that is a
-  fenced-code marker (```) is skipped. Nil when nothing is left.
+  markers (`**`, `__`, leading `#`, `>` and `-`/`*` bullets, backticks; inline
+  markdown links `[text](url)` collapse to `text`) and after removing every
+  extracted URL and path *when the line is nothing but the link*. Capped by
+  `TaskText.sanitized` (one line, ≤ 160). A line that is a fenced-code marker
+  (```) is skipped. Nil when nothing is left.
 - **Cap**: the first four links. Four is the most a row can carry at island
   width without wrapping to a second row of chips.
 - Returns nil when there is neither summary nor links.
@@ -208,18 +210,21 @@ Lifecycle in `SessionStore`:
 - `Stop` hook leaves it alone (the transcript's `end_turn` line, which carries
   the text, may arrive before or after the hook).
 
-The store gets `fileExists` injected at init (default: FileManager) so tests
+The store gets `pathKind` injected at init (default: `realPathKind`) so tests
 never touch the disk.
 
 ### 3.5 Session dots
 
-`SessionStore.dots: [MascotTone]` — one tone per session that counts (the same
-population as `indicator`: waiting, working, crashed, done; `idle` excluded),
-ordered as `ordered` is (urgency first). The island renders it when the count is
-1…4 and falls back to the existing capsule at 5+ or when it is empty. The
-mapping from `SessionStatus` to `MascotTone` is one function, shared with the
-session-row dot (`SessionListView.color(for:)` today draws from status directly;
-it moves to go through the tone so the three surfaces cannot drift).
+`SessionStore.dots: [SessionDot]` — `id` is the session id, `tone` the status
+tone — one entry per session that counts (the same population as `indicator`:
+waiting, working, crashed, done; `idle` excluded), ordered as `ordered` is
+(urgency first), so the island can animate each session's own dot: the cluster
+is one `ZStack` with per-slot offsets keyed by session id. The island renders
+it when the count is 1…4 and falls back to the existing capsule at 5+ or when
+it is empty. The mapping from `SessionStatus` to `MascotTone` is one function,
+shared with the session-row dot (`SessionListView.color(for:)` today draws from
+status directly; it moves to go through the tone so the three surfaces cannot
+drift).
 
 ### 3.6 Demo feed
 
@@ -382,8 +387,6 @@ every key at a call site is present and vice-versa):
 - `row.step.progress` — `%d/%d`
 - `handoff.title.pr` — `PR #%@`; `handoff.title.github` — `GitHub`;
   `handoff.title.figma` — `Figma`; `handoff.title.artifact` — `Artifact`
-- `island.dots.help` — `%@` composed from the existing `menubar.working` /
-  `menubar.waiting` strings
 - `settings.taskText.title` — text change; `settings.taskText.help` — new
 - `demo.handoff.summary` — the demo summary
 
