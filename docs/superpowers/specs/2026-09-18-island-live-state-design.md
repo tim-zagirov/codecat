@@ -227,8 +227,10 @@ it moves to go through the tone so the three surfaces cannot drift).
 screenshots and the verification checklist can show them: session 0 carries a
 five-step list with step 3 in progress; session 1, in its `.done` phase,
 carries the summary "Готово: тесты зелёные, релиз 0.4.1 собран" and links
-`localhost:4321`, `PR #12`, and a folder. Demo sessions go through the same
-`apply` paths (synthetic `TranscriptActivity` values), not a side door.
+`localhost:4321`, `PR #12` and `Figma` (a folder would need a real path on the
+capture machine; a folder chip is checked on a live session instead). Demo
+sessions go through the same `apply` paths (synthetic `TranscriptActivity`
+values), not a side door.
 
 ## 4. Island strip (`IslandView`)
 
