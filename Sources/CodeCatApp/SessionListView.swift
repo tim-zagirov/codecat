@@ -266,6 +266,17 @@ struct SessionListView: View {
                             demoted: style.rowLayout == .twoLine)
     }
 
+    /// The handoff block, when the session has one to show and the switch is on. It
+    /// is the agent's words and the user's paths — the same class of content as the
+    /// task, hidden by the same switch.
+    private func handoffBlock(_ session: Session) -> HandoffBlockView? {
+        guard appState.showsTaskText, let handoff = session.handoff else { return nil }
+        switch session.status {
+        case .done, .waitingForYou: return HandoffBlockView(handoff: handoff, compact: style.rowLayout == .twoLine)
+        case .idle, .working, .crashed: return nil
+        }
+    }
+
     /// The SF Symbol naming where a click on this row would land, or nil when the row
     /// is not routable. Trailing the name line (S3), it reads as a quiet destination
     /// hint next to the project name.
@@ -346,6 +357,9 @@ struct SessionListView: View {
                 // is over this row — otherwise every unavailable row shouts the same
                 // caption at once. Hover here comes from `hoveredHint`, set by the
                 // non-interactive branch below.
+                if let handoff = handoffBlock(session) {
+                    handoff.padding(.top, 2)
+                }
                 if let reason = unavailableReason, !suppressRowHint, hoveredHint == session.id {
                     Text(JumpMessages.rowHint(for: reason))
                         .font(.system(size: 10))
