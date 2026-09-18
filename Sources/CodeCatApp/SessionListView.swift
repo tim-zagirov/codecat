@@ -51,6 +51,7 @@ struct SessionListView: View {
     @State private var hoveredHint: String?
 
     @Environment(\.menuStyle) private var style
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The single reason to show under the whole list, or nil. It is non-nil only when
     /// every row is unavailable (`.unavailable`) and every one carries the *same*
@@ -256,6 +257,15 @@ struct SessionListView: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// The step line, or nil when there is nothing to show: the session is not
+    /// working, has no list, its list is finished, or the switch is off.
+    private func stepLine(_ session: Session) -> StepLineView? {
+        guard appState.showsTaskText, session.status == .working,
+              let step = session.currentStep, let progress = session.stepProgress else { return nil }
+        return StepLineView(title: step.displayTitle, done: progress.done, total: progress.total,
+                            demoted: style.rowLayout == .twoLine)
+    }
+
     /// The SF Symbol naming where a click on this row would land, or nil when the row
     /// is not routable. Trailing the name line (S3), it reads as a quiet destination
     /// hint next to the project name.
@@ -306,7 +316,13 @@ struct SessionListView: View {
                 // entirely.
                 if let task = task(session), !statusOutranksTask(session) {
                     taskLine(task, lines: style.rowLayout == .twoLine ? 1 : 2)
-                    if style.rowLayout == .threeLine {
+                    // The agent's own plan outranks the tool in hand: "Writing the
+                    // parser · 3/5" says where the work is, "editing api.ts" only
+                    // that it moves. On the panel the step takes the status line's
+                    // place; on the island the row grows a third line for it.
+                    if let step = stepLine(session) {
+                        step
+                    } else if style.rowLayout == .threeLine {
                         statusLine(session, demoted: true)
                     }
                 } else {
@@ -366,6 +382,11 @@ struct SessionListView: View {
         // its inset while the text column lines up with everything else. The panel
         // keeps its original inset (compensation is 0 there).
         .padding(.horizontal, style.rowInsetCompensation)
+        // The row's height changes when a step line appears, disappears, or the
+        // task/status line it replaces swaps in its place. Animating on the step's
+        // id (not the whole session) means an unrelated field changing elsewhere on
+        // the row — the duration ticking, say — doesn't also trigger this spring.
+        .animation(reduceMotion ? nil : Motion.reposition, value: session.currentStep?.id)
 
         // Only a row with an actual route gets the tap target and hover/cursor
         // wiring — an unavailable row states its non-interactivity in the view

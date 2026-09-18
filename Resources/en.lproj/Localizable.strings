@@ -197,6 +197,9 @@
 
 /* MARK: - Session row: steps and handoff */
 
+/* The step counter beside the current step: completed over total. */
+"row.step.progress" = "%d/%d";
+
 /* %@ is the pull request number. */
 "handoff.title.pr" = "PR #%@";
 "handoff.title.github" = "GitHub";
