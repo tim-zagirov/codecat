@@ -10,6 +10,7 @@ import CodeCatCore
 /// whole black shape drifted off the screen's centre and was cat-heavy.
 struct IslandView: View {
     @ObservedObject var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let notchWidth: CGFloat
     let wingWidth: CGFloat
     let spriteSize: CGSize
@@ -127,6 +128,33 @@ struct IslandView: View {
                    showsBadge: false,
                    since: appState.statusSince,
                    onLoadFailure: { [appState] skin in appState.reportSkinLoadFailure(skin) })
+            .background(glow)
+    }
+
+    /// A soft radial wash behind the cat in the aggregate tone — the state readable
+    /// from across the room, before the eye finds the dots. Sleeping draws nothing.
+    ///
+    /// The bloom on a new tone is computed from `statusSince`, not from view state:
+    /// the controller reassigns the island's root view on every state change, and a
+    /// `@State` would replay the bloom on each of those. `TimelineView` runs only
+    /// while the bloom is under way (`paused` afterwards), so the strip costs nothing
+    /// at rest.
+    private var glow: some View {
+        let tone = appState.store.indicator.tone
+        let since = appState.statusSince
+        let settled = Date().timeIntervalSince(since) > Motion.bloomDuration + 0.05
+        return TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: settled)) { context in
+            let progress = reduceMotion ? 1.0
+                : Motion.easeOut(context.date.timeIntervalSince(since) / Motion.bloomDuration)
+            Circle()
+                .fill(RadialGradient(colors: [ToneColor.color(for: tone).opacity(0.42), .clear],
+                                     center: .center, startRadius: 0, endRadius: height))
+                .frame(width: height * 2, height: height * 2)
+                .scaleEffect(0.9 + 0.1 * progress)
+                .opacity(tone == .sleeping ? 0 : progress)
+                .animation(Motion.toneCrossfade, value: tone)
+        }
+        .allowsHitTesting(false)
     }
 
     /// The counter in a capsule rather than a bare digit.
@@ -147,19 +175,83 @@ struct IslandView: View {
             Circle()
                 .fill(color(for: .sleeping))
                 .frame(width: 6, height: 6)
-        } else if indicator.tone == .waiting {
-            // Waiting is the one state that pulses — the same device the badge uses,
-            // and now the same calm 3 s cycle (C6) — because it is the one asking for
-            // the user's input. Nothing else pulses.
-            capsule(for: indicator)
-                .phaseAnimator([false, true]) { content, pulse in
-                    content.scaleEffect(pulse ? 1.08 : 1.0)
-                } animation: { _ in .easeInOut(duration: 3.0) }
         } else {
-            // Problem/done are now visible too: the capsule shows for every non-sleeping
-            // tone, so a crashed session is no longer an invisible grey dot.
-            capsule(for: indicator)
+            let dots = appState.store.dots
+            if (1...4).contains(dots.count) {
+                // One dot per session reads state and count at once; the capsule below
+                // collapses both into a single tone and a number.
+                cluster(dots)
+            } else if indicator.tone == .waiting {
+                // Waiting is the one state that pulses — the same device the badge uses,
+                // and now the same calm 3 s cycle (C6) — because it is the one asking for
+                // the user's input. Nothing else pulses.
+                capsule(for: indicator)
+                    .phaseAnimator([false, true]) { content, pulse in
+                        content.scaleEffect(pulse ? 1.08 : 1.0)
+                    } animation: { _ in .easeInOut(duration: 3.0) }
+            } else {
+                // Problem/done are now visible too: the capsule shows for every non-sleeping
+                // tone, so a crashed session is no longer an invisible grey dot.
+                capsule(for: indicator)
+            }
         }
+    }
+
+    /// One dot per session, up to four: one centred, two in a row, three or four in
+    /// a 2×2 grid. Each dot is its session's own tone, so "two working and one
+    /// waiting" is legible without opening the menu — the capsule's one tone and
+    /// one count could not say it. Five or more fall back to the capsule: a cluster
+    /// of nine dots is a rash, not a reading.
+    private func cluster(_ dots: [MascotTone]) -> some View {
+        let rows: [[(Int, MascotTone)]] = stride(from: 0, to: dots.count, by: 2).map { start in
+            Array(dots.enumerated().dropFirst(start).prefix(dots.count <= 2 ? dots.count : 2))
+        }
+        return VStack(spacing: 4) {
+            ForEach(rows, id: \.first!.0) { row in
+                HStack(spacing: 4) {
+                    ForEach(row, id: \.0) { _, tone in dot(tone) }
+                }
+            }
+        }
+        .animation(reduceMotion ? nil : Motion.reposition, value: dots)
+        .help(clusterHelp(dots))
+    }
+
+    private func dot(_ tone: MascotTone) -> some View {
+        let base = Circle()
+            .fill(ToneColor.color(for: tone))
+            .frame(width: 6, height: 6)
+            .animation(Motion.toneCrossfade, value: tone)
+            .transition(reduceMotion ? .opacity
+                        : .scale(scale: 0.6).combined(with: .opacity))
+        return Group {
+            if tone == .waiting {
+                if reduceMotion {
+                    // No movement, but the signal survives: a ring makes the waiting
+                    // dot the one that is not like the others.
+                    base.overlay(Circle().strokeBorder(ToneColor.color(for: .waiting), lineWidth: 1.5)
+                                    .frame(width: 11, height: 11))
+                } else {
+                    base.phaseAnimator([false, true]) { content, pulse in
+                        content.scaleEffect(pulse ? 1.35 : 1.0)
+                    } animation: { _ in Motion.pulse }
+                }
+            } else {
+                base
+            }
+        }
+    }
+
+    /// "2 working, 1 waiting for you" — the same words the menu-bar tooltip uses.
+    private func clusterHelp(_ dots: [MascotTone]) -> String {
+        var parts: [String] = []
+        let working = dots.filter { $0 == .working }.count
+        let waiting = dots.filter { $0 == .waiting }.count
+        if working > 0 { parts.append(L10n.f("menubar.working", "working: %d", working)) }
+        if waiting > 0 { parts.append(L10n.f("menubar.waiting", "waiting: %d", waiting)) }
+        if dots.contains(.problem) { parts.append(L10n.t("menubar.problem", "problem")) }
+        if dots.contains(.done) { parts.append(L10n.t("menubar.done", "done")) }
+        return parts.joined(separator: ", ")
     }
 
     /// The counter capsule: the state dot, the count when there is one, and — when a
