@@ -7,7 +7,15 @@ public final class SessionStore: ObservableObject {
     /// default so every existing call site (and every existing test) that
     /// constructs a bare `SessionStore()` keeps working unchanged; a route
     /// cache is something a caller opts into, not something the store requires.
-    private let routeCache: SessionRouteCache?
+    private var routeCache: SessionRouteCache?
+
+    /// Stops this store reading from or writing to the persisted route cache. Used
+    /// by demo mode, whose sessions are make-believe: they were being recorded in the
+    /// user's real `routes.json`, and read back on the next run, so a demo pinned for
+    /// a screenshot inherited a `startedAt` from a previous day.
+    public func detachRouteCache() {
+        routeCache = nil
+    }
 
     public init(routeCache: SessionRouteCache? = nil) {
         self.routeCache = routeCache
@@ -164,6 +172,10 @@ public final class SessionStore: ObservableObject {
             let isCompact = event.source == "compact"
             upsert(event: event, now: now, resetStartedAt: !isCompact) { s in
                 guard !isCompact else { return }
+                // A real start is a clean slate — `/clear` above all, which wipes the
+                // conversation the task belonged to. Keeping it would leave the row
+                // describing work the agent no longer remembers being asked for.
+                s.taskText = nil
                 // Not `.working`: the event says "a session appeared", not "an agent
                 // started working" — see `SessionStatus.idle`. Work begins when the
                 // first line of a turn shows up in the transcript (written at the same
@@ -180,6 +192,13 @@ public final class SessionStore: ObservableObject {
             upsert(event: event, now: now) { s in
                 s.status = .working
                 s.activityDescription = L10n.t("activity.session.started", "started on the task")
+                // The hook beats the transcript to the punch, so the row can say what
+                // was asked from the first moment. The transcript refines it later,
+                // by which time this is usually already the same text.
+                if let prompt = event.prompt.flatMap(TaskText.sanitized),
+                   TaskText.replaces(current: s.taskText, with: prompt) {
+                    s.taskText = prompt
+                }
             }
         case "Notification":
             let text = (event.message ?? "").lowercased()
@@ -211,6 +230,13 @@ public final class SessionStore: ObservableObject {
             lastActivity: activity.timestamp)
         guard activity.timestamp > s.lastActivity || isNew else { return }
         guard s.status != .crashed else { return }
+        // The one entry in a transcript that says what the session is FOR. It is set
+        // before the `endsTurn` return below on purpose: a prompt and the end of a
+        // turn never share an entry, but the task must survive whichever way this
+        // call leaves.
+        if let task = activity.taskText, TaskText.replaces(current: s.taskText, with: task) {
+            s.taskText = task
+        }
         // The end of a turn is visible in the transcript itself (`stop_reason ==
         // "end_turn"`), and relying on that is safer than relying on the `Stop` hook,
         // which does not always arrive — measurements are in `TranscriptActivity.endsTurn`.

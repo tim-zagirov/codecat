@@ -43,7 +43,35 @@ public enum TranscriptParser {
         let isSubagent = !((obj["agentId"] as? String ?? "").isEmpty)
         return TranscriptActivity(sessionId: sessionId, projectPath: cwd,
                                   description: description, timestamp: ts,
-                                  isSubagent: isSubagent, endsTurn: endsTurn)
+                                  isSubagent: isSubagent, endsTurn: endsTurn,
+                                  taskText: taskText(obj, type: type))
+    }
+
+    /// What the user asked for, when this entry is the asking. Only a typed prompt
+    /// qualifies, and the shape of one was read off live transcripts rather than
+    /// guessed:
+    ///
+    ///  * `type == "user"` with `message.content` a plain STRING. A tool result is a
+    ///    `user` entry too, but its content is an array — the agent talking to itself.
+    ///  * not `isMeta`: that marks text Claude Code injected into the conversation
+    ///    (caveats, image placeholders), not text a person typed.
+    ///  * not `isSidechain`: a subagent's instructions travel under the PARENT
+    ///    session's id, so without this the parent's row would describe the errand
+    ///    the subagent was sent on.
+    ///  * `origin.kind`, when present, is "human". The other kinds seen in the wild
+    ///    ("task-notification") are the harness talking. A transcript without the
+    ///    field at all is old, not suspicious, and still counts — `TaskText.sanitized`
+    ///    throws out the machine-written shapes it cannot rule out here.
+    private static func taskText(_ obj: [String: Any], type: String) -> String? {
+        guard type == "user",
+              let content = (obj["message"] as? [String: Any])?["content"] as? String,
+              obj["isMeta"] as? Bool != true,
+              obj["isSidechain"] as? Bool != true
+        else { return nil }
+        if let kind = (obj["origin"] as? [String: Any])?["kind"] as? String, kind != "human" {
+            return nil
+        }
+        return TaskText.sanitized(content)
     }
 
     private static func describeAssistant(_ obj: [String: Any]) -> String {

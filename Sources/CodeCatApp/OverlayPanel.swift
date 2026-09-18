@@ -19,6 +19,33 @@ import CodeCatCore
 class OverlayPanel: NSPanel {
     private let allowsKey: Bool
 
+    /// Routes a click that lands in a panel which is not key.
+    ///
+    /// AppKit spends such a click on making the window key, and only delivers it to
+    /// the view as well if that view answers `acceptsFirstMouse` with true. It asks
+    /// the view the click LANDS on, never an ancestor — and the views SwiftUI builds
+    /// underneath a hosting view (`PlatformGroupContainer`, `NSClipView` inside a
+    /// `ScrollView`, …) all answer false. Overriding `acceptsFirstMouse` on the
+    /// hosting view therefore changed nothing, and chasing SwiftUI's private view
+    /// classes one at a time is a game with no end.
+    ///
+    /// The island's menu opened by hover is exactly this case: it is deliberately not
+    /// key (a key panel would take keystrokes from whatever the user is typing in),
+    /// so every session row in it needed clicking twice — the first click vanished
+    /// into taking key status. Measured live, with the panel's own events logged:
+    /// `sendEvent down key=false` → `hitTest -> PlatformGroupContainer afm=false` →
+    /// nothing else; no `mouseDown`, no tap.
+    ///
+    /// Taking key status here, before `super.sendEvent`, makes the window key first
+    /// and the very same click is then routed normally — verified by the same log:
+    /// `down key=false -> makeKey` → `mouseDown` → the row's tap. Nothing about focus
+    /// changes: AppKit was about to make this panel key with that click anyway. Panels
+    /// that may never become key (the cat) are untouched.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown, allowsKey, !isKeyWindow { makeKey() }
+        super.sendEvent(event)
+    }
+
     override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { false }
 

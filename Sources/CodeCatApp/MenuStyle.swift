@@ -249,6 +249,20 @@ struct HoverRegion: ViewModifier {
 /// The hand appears only while the window is key (the floating panel, the island's
 /// full menu): macOS ignores a cursor set from a non-key window of an inactive app,
 /// so on the island's short menu the highlight alone answers the question.
+///
+/// That is a limit of the platform, not a gap here — measured in a standalone
+/// accessory app with two non-key `.nonactivatingPanel`s and a screenshot of the
+/// cursor over each. All four routes produced the arrow: `set()` from `mouseMoved`
+/// (what this modifier does), `push()` on entry, `disableCursorRects()` before
+/// `set()`, and `set()` deferred to the next runloop turn. A tracking area with
+/// `.cursorUpdate` and `.activeAlways` — the documented way to own the cursor
+/// without cursor rects — was never invoked at all in a non-key window: zero calls
+/// while the pointer moved across it.
+///
+/// The one thing that does work is making the window key, and that is the trade the
+/// short menu exists to avoid: a key panel takes keystrokes from whatever the user
+/// is typing in (it is how Escape reaches the full menu), so hovering the notch on
+/// the way past would swallow what they type. The hand is not worth that.
 struct PointingHandOnHover: ViewModifier {
     @State private var inside = false
 

@@ -86,4 +86,42 @@ final class HookPayloadTests: XCTestCase {
         XCTAssertEqual(event.sessionId, "abc")
         XCTAssertEqual(event.hookEventName, "SessionStart")
     }
+
+    // MARK: - The prompt, and the datagram it has to fit in
+
+    /// Measured, not assumed: `net.local.dgram.maxdgram` on macOS is 2 048 bytes, and
+    /// `sendto` fails outright above it — the event is not truncated, it is lost. A
+    /// `UserPromptSubmit` payload carries the whole prompt, so before this trim every
+    /// prompt longer than ~1.4 KB meant CodeCat never learned the session had started
+    /// working. Confirmed in the field: across 1 760 delivered hook events not one
+    /// exceeded 2 045 B, and no delivered `UserPromptSubmit` ever matched a prompt
+    /// longer than 1 500 characters.
+    func testALongPromptIsTrimmedSoTheDatagramFits() {
+        let prompt = String(repeating: "почини пагинацию ", count: 400)
+        let input = try! JSONSerialization.data(withJSONObject: [
+            "hook_event_name": "UserPromptSubmit", "session_id": "abc",
+            "cwd": "/Users/x/proj", "prompt": prompt,
+        ])
+        XCTAssertGreaterThan(input.count, 2048, "the untrimmed payload is over the limit")
+        let result = HookPayload.enriched(input, with: fields)
+        XCTAssertLessThan(result.count, 2048, "a payload that fits is a payload that arrives")
+        let trimmed = object(result)["prompt"] as? String
+        XCTAssertNotNil(trimmed, "trimmed, never dropped — the row still has something to show")
+        XCTAssertLessThanOrEqual(trimmed?.count ?? .max, TaskText.maxLength)
+    }
+
+    /// A prompt that is already short reaches the app exactly as it was typed.
+    func testAShortPromptIsPassedThroughUnchanged() {
+        let input = #"{"hook_event_name":"UserPromptSubmit","session_id":"abc","prompt":"собери релиз"}"#
+            .data(using: .utf8)!
+        XCTAssertEqual(object(HookPayload.enriched(input, with: fields))["prompt"] as? String,
+                       "собери релиз")
+    }
+
+    /// Nothing else has a prompt, and nothing else grows a key that was not there.
+    func testAPayloadWithNoPromptGrowsNoPromptKey() {
+        let input = #"{"hook_event_name":"Stop","session_id":"abc"}"#.data(using: .utf8)!
+        XCTAssertNil(object(HookPayload.enriched(input, with: fields))["prompt"])
+    }
 }
+

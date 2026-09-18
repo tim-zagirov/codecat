@@ -101,6 +101,19 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(hidesWhenNoSessions, forKey: "islandHidesWhenIdle") }
     }
 
+    /// Whether a session's row shows what the user asked it for. On by default: the
+    /// row exists to answer "what is this session working on", and a fix shipped
+    /// switched off is not a fix.
+    ///
+    /// It is a setting at all because the text is the user's own words, and there are
+    /// moments — a demo, a screen recording, a shared call — when a project someone
+    /// else should not read is on screen. The always-on-screen surface never shows it
+    /// (the island plate carries the cat and the counter, nothing else); it appears
+    /// only in the panel and in the menu, both opened deliberately.
+    @Published var showsTaskText: Bool {
+        didSet { UserDefaults.standard.set(showsTaskText, forKey: "showTaskText") }
+    }
+
     /// Whether the island should be hidden right now under the "hide when nothing is
     /// running" setting.
     ///
@@ -168,7 +181,7 @@ final class AppState: ObservableObject {
             "keepAwake": true, "lidMode": false, "sounds": false, "showMascot": true,
             "mascotSkin": MascotSkins.default.id,
             "mascotDisplayMode": MascotDisplayMode.default.rawValue,
-            "islandHidesWhenIdle": false,
+            "islandHidesWhenIdle": false, "showTaskText": true,
         ])
         keepAwakeEnabled = defaults.bool(forKey: "keepAwake")
         lidModeEnabled = defaults.bool(forKey: "lidMode")
@@ -176,6 +189,7 @@ final class AppState: ObservableObject {
         showMascot = defaults.bool(forKey: "showMascot")
         displayMode = MascotDisplayMode.mode(withID: defaults.string(forKey: "mascotDisplayMode"))
         hidesWhenNoSessions = defaults.bool(forKey: "islandHidesWhenIdle")
+        showsTaskText = defaults.bool(forKey: "showTaskText")
         // Scan for pets before resolving the stored skin, so an imported id is
         // recognised on the very launch that brings its folder back (or takes it
         // away). `scanPets` is `static` and takes `reportedPetProblems` `inout`
@@ -317,8 +331,11 @@ final class AppState: ObservableObject {
     ///   "waiting for you" taken against a four-second loop is a race; this makes it
     ///   a fact. `.problem` is reachable only this way — see `DemoFeed.Pin`.
     func startDemo(interval: TimeInterval = 4, pin: DemoFeed.Pin? = nil) {
-        log.write("demo mode — no socket, no watcher, no power assertion"
+        log.write("demo mode — no socket, no watcher, no power assertion, no route cache"
             + (pin.map { ", pinned to \($0)" } ?? ""))
+        // The demo must leave no trace in the user's state — see
+        // `SessionStore.detachRouteCache`.
+        store.detachRouteCache()
         powerManager.isEnabled = false
         lidController.isEnabled = false
         var step = 0
@@ -330,6 +347,9 @@ final class AppState: ObservableObject {
         }
         switch pin {
         case .phase(let phase):
+            // Pinned phases arrive cold, so whatever the loop would have applied
+            // before this phase is applied first — see `DemoFeed.leadIn`.
+            for earlier in DemoFeed.leadIn(for: phase) { apply(earlier) }
             apply(phase)
         case .problem:
             DemoFeed.applyProblem(to: store, now: Date())
@@ -720,9 +740,19 @@ final class AppState: ObservableObject {
     // MARK: - Jumping to a session
 
     /// Where a click on this session's row would send the user. Cheap enough to call
-    /// during a view body: one `kill(pid, 0)` per visible row.
+    /// during a view body: one `kill(pid, 0)` per visible row, and the running-app
+    /// scan below only for a row whose recorded pid is already dead — a rare row, and
+    /// one that would otherwise be drawn as unreachable.
     func route(for session: Session) -> JumpRoute {
-        SessionRouter.route(for: session, isHostRunning: SessionRouter.isProcessRunning)
+        SessionRouter.route(for: session, isHostRunning: SessionRouter.isProcessRunning,
+                            livePID: Self.runningPID(ofBundleID:))
+    }
+
+    /// The pid of a running instance of `bundleID`, or nil. Several instances are
+    /// possible in principle; any of them can open a deep link, so the first will do.
+    private static func runningPID(ofBundleID bundleID: String) -> pid_t? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first?.processIdentifier
     }
 
     /// Executes the jump and reports the outcome. Successful jumps say nothing — the

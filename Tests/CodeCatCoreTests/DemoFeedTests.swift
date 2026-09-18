@@ -103,4 +103,72 @@ final class DemoFeedTests: XCTestCase {
         XCTAssertEqual(byID[DemoFeed.sessionIDs[0]]?.activityDescription,
                        L10n.f("activity.editing.file", "editing %@", "IslandLayout.swift"))
     }
+
+    /// A demo whose rows have no task text would photograph the very state this line
+    /// was added to fix — three rows that say nothing about what they are doing.
+    func testWorkingDemoSessionsCarryATask() {
+        let store = SessionStore()
+        let now = Date()
+        for event in DemoFeed.events(for: .working) { store.apply(hook: event, now: now) }
+        for activity in DemoFeed.activities(for: .working, now: now) { store.apply(activity: activity) }
+        let working = store.ordered.filter { $0.status == .working }
+        XCTAssertFalse(working.isEmpty)
+        for session in working {
+            XCTAssertNotNil(session.taskText, "\(session.projectName) has nothing to show")
+        }
+    }
+
+    /// The session that was never given a prompt has no task, and the demo has to
+    /// show that state too — it is the row a new user sees first.
+    func testTheUnpromptedDemoSessionHasNoTask() {
+        let store = SessionStore()
+        let now = Date()
+        for event in DemoFeed.events(for: .working) { store.apply(hook: event, now: now) }
+        XCTAssertNil(store.sessions[DemoFeed.sessionIDs[2]]?.taskText)
+    }
+
+    /// The demo's activity lines have to actually land. They did not: the app applies
+    /// the phase's hooks and its activities with ONE `Date()`, and
+    /// `SessionStore.apply(activity:)` drops an activity whose timestamp is not later
+    /// than the session's last — so every demo row kept the hook's placeholder
+    /// ("started on the task") and the README screenshots shipped showing it.
+    func testDemoActivitiesLandOnTopOfTheirPhasesHooks() {
+        let store = SessionStore()
+        let now = Date()
+        for event in DemoFeed.events(for: .working) { store.apply(hook: event, now: now) }
+        for activity in DemoFeed.activities(for: .working, now: now) { store.apply(activity: activity) }
+        XCTAssertEqual(store.sessions[DemoFeed.sessionIDs[0]]?.activityDescription,
+                       L10n.f("activity.editing.file", "editing %@", "IslandLayout.swift"))
+    }
+
+    /// A finished session in the real world was asked for something first — the loop
+    /// reaches `.done` through `.working`. Pinned straight to `.done` for a
+    /// screenshot, it has to arrive in the same state, or the picture shows three
+    /// rows that finished nothing in particular.
+    func testAPinnedDonePhaseStillShowsWhatWasAsked() {
+        assertPinnedPhaseKeepsTheTask(.done, expecting: .done)
+    }
+
+    /// The same for the state the product is really about: a session waiting on the
+    /// user has to say both what it needs AND what it was asked for.
+    func testAPinnedWaitingPhaseStillShowsWhatWasAsked() {
+        assertPinnedPhaseKeepsTheTask(.waiting, expecting: .waitingForYou(.question))
+    }
+
+    private func assertPinnedPhaseKeepsTheTask(_ pinned: DemoFeed.Phase,
+                                               expecting status: SessionStatus,
+                                               file: StaticString = #filePath,
+                                               line: UInt = #line) {
+        let store = SessionStore()
+        var now = Date()
+        for phase in DemoFeed.leadIn(for: pinned) + [pinned] {
+            for event in DemoFeed.events(for: phase) { store.apply(hook: event, now: now) }
+            now = now.addingTimeInterval(60)
+        }
+        XCTAssertEqual(store.sessions[DemoFeed.sessionIDs[0]]?.status, status,
+                       file: file, line: line)
+        XCTAssertNotNil(store.sessions[DemoFeed.sessionIDs[0]]?.taskText,
+                        "pinned \(pinned) has nothing to show", file: file, line: line)
+    }
 }
+

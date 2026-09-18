@@ -38,6 +38,22 @@ public enum HookPayload {
         // place would fail `HookEvent` decoding — losing *every* event, not just this one.
         if let tty = fields.tty { object["host_tty"] = tty }
         if let agentPID = fields.agentPID { object["agent_pid"] = Int(agentPID) }
+        // `UserPromptSubmit` carries the whole prompt, and the whole prompt is how
+        // this payload gets big. A unix datagram on macOS is capped at 2 048 bytes
+        // (`net.local.dgram.maxdgram`) and `sendto` REFUSES anything larger — the
+        // event is not truncated in transit, it never arrives. Measured on this
+        // machine: of 1 760 delivered hook events not one exceeded 2 045 B, while
+        // prompts of 2–27 KB are ordinary, and their events were logged as "did not
+        // reach the socket (app not running?)" when the app was running perfectly
+        // well.
+        //
+        // The app only ever shows `TaskText.maxLength` characters of it, so trimming
+        // here costs nothing and buys back every long-prompt event. Trimmed to the
+        // same one line the row draws, by the same code, so the hook and the
+        // transcript can never disagree about what a prompt says.
+        if let prompt = object["prompt"] as? String {
+            object["prompt"] = TaskText.sanitized(prompt)
+        }
 
         guard let encoded = try? JSONSerialization.data(withJSONObject: object) else { return data }
         return encoded
