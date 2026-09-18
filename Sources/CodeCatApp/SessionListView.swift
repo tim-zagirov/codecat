@@ -319,7 +319,7 @@ struct SessionListView: View {
         let step = stepLine(session)
         let stepKey = step.map { _ in session.currentStep?.id ?? "" }
 
-        let content = HStack(alignment: .top, spacing: 8) {
+        let row = HStack(alignment: .top, spacing: 8) {
             Circle().fill(color(for: session.status))
                 .frame(width: dotSize, height: dotSize)
                 .padding(.top, dotTopInset)
@@ -360,9 +360,6 @@ struct SessionListView: View {
                         step
                     }
                 }
-                if let handoff = handoffBlock(session) {
-                    handoff.padding(.top, 2)
-                }
                 // S4: with the list-level hint suppressed (reasons differ, or some
                 // rows are routable) the per-row hint stays, but only while the pointer
                 // is over this row — otherwise every unavailable row shouts the same
@@ -392,6 +389,18 @@ struct SessionListView: View {
                 Image(systemName: glyph)
                     .font(.system(size: 12))
                     .foregroundStyle(style.tertiary)
+            }
+        }
+
+        // The handoff block sits under the whole row, not inside the text column's
+        // `VStack`: its chips need the row's full width to lay out without
+        // truncating (S18.1), while the trailing duration column only belongs next
+        // to the name line above. The leading inset lines the block back up with
+        // the text column it would otherwise have been nested in.
+        let content = VStack(alignment: .leading, spacing: 5) {
+            row
+            if let handoff = handoffBlock(session) {
+                handoff.padding(.leading, dotSize + 8)
             }
         }
         .padding(.vertical, 3)

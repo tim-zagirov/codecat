@@ -62,6 +62,53 @@ struct HandoffChipView: View {
     }
 }
 
+/// Lays chips left to right at their own ideal width and wraps to a new line
+/// instead of letting a fixed-width row crush them: a chip's title is a name —
+/// "localhost:4321" — and a name cut off mid-digit is not the name it names, so
+/// truncation was never an option here the way it is for a summary line.
+private struct ChipFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var lineWidth: CGFloat = 0
+        var usedWidth: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if lineWidth > 0, lineWidth + spacing + size.width > maxWidth {
+                totalHeight += lineHeight + spacing
+                usedWidth = max(usedWidth, lineWidth)
+                lineWidth = 0
+                lineHeight = 0
+            }
+            lineWidth += (lineWidth > 0 ? spacing : 0) + size.width
+            lineHeight = max(lineHeight, size.height)
+        }
+        usedWidth = max(usedWidth, lineWidth)
+        totalHeight += lineHeight
+        return CGSize(width: usedWidth, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var lineHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x - bounds.minX + size.width > bounds.width {
+                x = bounds.minX
+                y += lineHeight + spacing
+                lineHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
+}
+
 /// Press feedback on mouse-down, not on release — the interface is listening.
 private struct ChipButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -103,7 +150,7 @@ struct HandoffBlockView: View {
                     .truncationMode(.tail)
             }
             if !handoff.links.isEmpty {
-                HStack(spacing: 6) {
+                ChipFlow(spacing: 6) {
                     ForEach(Array(handoff.links.enumerated()), id: \.element.id) { index, link in
                         HandoffChipView(link: link, index: index)
                     }

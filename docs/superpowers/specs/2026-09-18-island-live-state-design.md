@@ -292,12 +292,13 @@ The step line is hidden by the same switch as the task text (§7).
 
 ### 5.2 Handoff block
 
-Shown when `handoff` is non-nil and the status is `.done` or `.waitingForYou`.
-Under the row's text column:
+Shown when `handoff` is non-nil and the status is `.done` or `.waitingForYou`:
 
 - The summary, `style.secondary`, up to 2 lines on the panel and 1 on the
   island, `truncationMode(.tail)`.
-- A single row of chips, 6 pt apart: a capsule with a 10 pt SF Symbol and the
+- Chips 6 pt apart, wrapping to a second row when they do not fit; the block
+  sits under the whole row at the text column's inset, so the chips get the
+  row's full width. Each chip is a capsule with a 10 pt SF Symbol and the
   title at 10 pt medium, padding 7 × 3, fill `Color.white.opacity(0.10)`
   (island) / `Color.primary.opacity(0.07)` (panel), hover fill doubles. Symbols:
   localhost `globe`, pullRequest `arrow.triangle.pull`, github `chevron.left.forwardslash.chevron.right`,
@@ -308,7 +309,8 @@ Under the row's text column:
   Click does not close the menu (the user may want a second chip). It also
   does not trigger the row's jump: the chip's tap gesture wins, and the chip
   shows the pointing-hand cursor through the same `onHoverRegion` path the row
-  uses.
+  uses. Click on the short (hover) menu leaves it open; the full menu closes
+  when the opened app takes focus, as it does on any loss of focus.
 - **Drag**: `.onDrag { NSItemProvider(object: target as NSURL) }` with the chip
   itself as the preview. A URL dropped on a browser window opens it; a file
   URL dropped on Finder copies. Drag from the island's short (non-key) menu
