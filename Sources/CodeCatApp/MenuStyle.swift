@@ -56,6 +56,11 @@ struct MenuStyle {
     /// tall: these cats are four-legged and low, and in a square they float in space.
     var cellSize: CGSize
     var cellSpacing: CGFloat
+    /// A chip's fill, and the fill while the cursor is over it.
+    var chipFill: Color
+    var chipHover: Color
+    /// The track a progress or level bar sits in.
+    var barTrack: Color
     /// Outline of the selected skin.
     var selectionBorder: Color
     var selectionBorderWidth: CGFloat
@@ -102,6 +107,9 @@ struct MenuStyle {
         cellRadius: 6,
         cellSize: CGSize(width: 56, height: 40),
         cellSpacing: 8,
+        chipFill: Color.primary.opacity(0.07),
+        chipHover: Color.primary.opacity(0.14),
+        barTrack: Color.primary.opacity(0.10),
         selectionBorder: .primary,
         selectionBorderWidth: 2,
         separator: nil,
@@ -126,6 +134,9 @@ struct MenuStyle {
         cellRadius: 8,
         cellSize: CGSize(width: 60, height: 40),
         cellSpacing: 6,
+        chipFill: Color.white.opacity(0.10),
+        chipHover: Color.white.opacity(0.20),
+        barTrack: Color.white.opacity(0.10),
         selectionBorder: .white,
         selectionBorderWidth: 1,
         separator: Color.white.opacity(0.22),

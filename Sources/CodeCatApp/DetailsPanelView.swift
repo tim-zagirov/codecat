@@ -73,18 +73,14 @@ struct DetailsPanelView: View {
         }
     }
 
-    /// The R1 colour vocabulary, as its own local copy — the same pattern
-    /// `IslandView` and `MascotBadge` each follow. The four active tones match those
-    /// surfaces byte for byte; only `.sleeping` differs, because this panel sits on a
-    /// light system material where their `white@0.35` would be invisible — `.secondary`
-    /// is the material-aware muted grey that reads on it.
+    /// The four active tones read from `ToneColor`, byte for byte identical to
+    /// `IslandView` and `MascotBadge`; only `.sleeping` differs, because this panel
+    /// sits on a light system material where `ToneColor`'s `white@0.35` would be
+    /// invisible — `.secondary` is the material-aware muted grey that reads on it.
     private func color(for tone: MascotTone) -> Color {
         switch tone {
-        case .working: return .green
-        case .waiting: return .orange
-        case .done: return .blue
-        case .problem: return .red
         case .sleeping: return .secondary
+        default: return ToneColor.color(for: tone)
         }
     }
 }

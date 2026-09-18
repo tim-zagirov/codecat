@@ -199,13 +199,7 @@ struct IslandView: View {
     /// The R1 colour vocabulary — the same literals the session row dots and the
     /// floating badge use, so all three surfaces are byte-identical.
     private func color(for tone: MascotTone) -> Color {
-        switch tone {
-        case .working: return .green
-        case .waiting: return .orange
-        case .done: return .blue
-        case .problem: return .red
-        case .sleeping: return Color.white.opacity(0.35)
-        }
+        ToneColor.color(for: tone)
     }
 }
 
