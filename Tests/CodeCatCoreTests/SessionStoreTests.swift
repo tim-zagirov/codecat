@@ -1347,5 +1347,119 @@ extension SessionStoreTests {
                     now: t0)
         XCTAssertNil(cache.route(for: "demo-0001"))
     }
+
+    // MARK: - Task steps
+
+    private func activity(_ id: String = "s1", at time: Date, updates: [StepsUpdate] = [],
+                          endsTurn: Bool = false, finalText: String? = nil) -> TranscriptActivity {
+        TranscriptActivity(sessionId: id, projectPath: "/proj", description: "working on the task",
+                           timestamp: time, endsTurn: endsTurn, stepsUpdates: updates, finalText: finalText)
+    }
+
+    func testStepsUpdatesApplyInOrder() {
+        let store = SessionStore()
+        store.apply(activity: activity(at: t0, updates: [
+            .create(id: "1", title: "Read"), .create(id: "2", title: "Write"),
+            .update(id: "1", status: .completed), .update(id: "2", status: .inProgress)]))
+        let s = store.sessions["s1"]!
+        XCTAssertEqual(s.steps.map(\.id), ["1", "2"])
+        XCTAssertEqual(s.currentStep?.title, "Write")
+        XCTAssertEqual(s.stepProgress?.done, 1)
+    }
+
+    func testCreateOnAnExistingIdReplacesRatherThanDuplicates() {
+        let store = SessionStore()
+        store.apply(activity: activity(at: t0, updates: [.create(id: "1", title: "Read")]))
+        store.apply(activity: activity(at: t0 + 1, updates: [.create(id: "1", title: "Read again")]))
+        XCTAssertEqual(store.sessions["s1"]?.steps.map(\.title), ["Read again"])
+    }
+
+    func testUpdateOnAnUnknownIdIsIgnoredAndRemoveRemoves() {
+        let store = SessionStore()
+        store.apply(activity: activity(at: t0, updates: [.create(id: "1", title: "Read"),
+                                                        .update(id: "9", status: .completed),
+                                                        .remove(id: "1")]))
+        XCTAssertEqual(store.sessions["s1"]?.steps, [])
+    }
+
+    func testReplaceAllReplacesTheList() {
+        let store = SessionStore()
+        store.apply(activity: activity(at: t0, updates: [.create(id: "1", title: "Read")]))
+        let list = [TaskStep(id: "0", title: "A", status: .completed), TaskStep(id: "1", title: "B", status: .pending)]
+        store.apply(activity: activity(at: t0 + 1, updates: [.replaceAll(list)]))
+        XCTAssertEqual(store.sessions["s1"]?.steps, list)
+    }
+
+    func testStepsSurviveTheEndOfATurnAndAStopHook() {
+        let store = SessionStore()
+        store.apply(activity: activity(at: t0, updates: [.create(id: "1", title: "Read")]))
+        store.apply(activity: activity(at: t0 + 1, endsTurn: true))
+        store.apply(hook: hook("Stop"), now: t0 + 2)
+        XCTAssertEqual(store.sessions["s1"]?.steps.count, 1)
+    }
+
+    func testARealSessionStartClearsStepsButCompactionKeepsThem() {
+        let store = SessionStore()
+        store.apply(activity: activity(at: t0, updates: [.create(id: "1", title: "Read")]))
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1", cwd: "/proj",
+                                    message: nil, source: "compact"), now: t0 + 1)
+        XCTAssertEqual(store.sessions["s1"]?.steps.count, 1)
+        store.apply(hook: HookEvent(hookEventName: "SessionStart", sessionId: "s1", cwd: "/proj",
+                                    message: nil, source: "clear"), now: t0 + 2)
+        XCTAssertEqual(store.sessions["s1"]?.steps, [])
+    }
+
+    // MARK: - Handoff
+
+    func testTheEndOfATurnSetsTheHandoff() {
+        let store = SessionStore(pathKind: { _ in nil })
+        store.apply(activity: activity(at: t0))
+        store.apply(activity: activity(at: t0 + 1, endsTurn: true,
+                                       finalText: "Done.\nhttp://localhost:4321"))
+        let h = store.sessions["s1"]?.handoff
+        XCTAssertEqual(h?.summary, "Done.")
+        XCTAssertEqual(h?.links.map(\.title), ["localhost:4321"])
+    }
+
+    func testAnEndOfTurnWithNothingToHandOverClearsTheOldOne() {
+        let store = SessionStore(pathKind: { _ in nil })
+        store.apply(activity: activity(at: t0, endsTurn: true, finalText: "Done."))
+        XCTAssertNotNil(store.sessions["s1"]?.handoff)
+        store.apply(activity: activity(at: t0 + 1, endsTurn: true, finalText: nil))
+        XCTAssertNil(store.sessions["s1"]?.handoff)
+    }
+
+    func testTheNextPromptAndTheNextWorkClearTheHandoff() {
+        let store = SessionStore(pathKind: { _ in nil })
+        store.apply(activity: activity(at: t0, endsTurn: true, finalText: "Done."))
+        store.apply(hook: hook("UserPromptSubmit"), now: t0 + 1)
+        XCTAssertNil(store.sessions["s1"]?.handoff)
+
+        store.apply(activity: activity(at: t0 + 2, endsTurn: true, finalText: "Done again."))
+        XCTAssertNotNil(store.sessions["s1"]?.handoff)
+        store.apply(activity: activity(at: t0 + 3))
+        XCTAssertNil(store.sessions["s1"]?.handoff)
+    }
+
+    func testAStopHookAfterTheTranscriptKeepsTheHandoff() {
+        let store = SessionStore(pathKind: { _ in nil })
+        store.apply(activity: activity(at: t0, endsTurn: true, finalText: "Done."))
+        store.apply(hook: hook("Stop"), now: t0 + 1)
+        XCTAssertEqual(store.sessions["s1"]?.handoff?.summary, "Done.")
+    }
+
+    // MARK: - Dots
+
+    func testDotsFollowTheOrderedListAndSkipIdleSessions() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart", id: "idle"), now: t0)
+        startWorking(store, id: "w", at: t0 + 1)
+        startWorking(store, id: "q", at: t0 + 2)
+        store.apply(hook: hook("Notification", id: "q", message: "Claude is asking"), now: t0 + 3)
+        store.apply(activity: TranscriptActivity(sessionId: "d", projectPath: "/proj",
+                                                 description: "finished the task",
+                                                 timestamp: t0 + 4, endsTurn: true))
+        XCTAssertEqual(store.dots, [.waiting, .working, .done])
+    }
 }
 
