@@ -41,7 +41,9 @@ struct StepLineView: View {
                     Capsule().fill(style.barTrack)
                     Capsule()
                         .fill(ToneColor.color(for: .working))
-                        .frame(width: proxy.size.width * CGFloat(done) / CGFloat(max(total, 1)))
+                        // Clamped so a transient `done > total` (a step list mid-update)
+                        // fills the bar at most fully, never past the track's edge.
+                        .frame(width: proxy.size.width * CGFloat(min(done, total)) / CGFloat(max(total, 1)))
                 }
             }
             .frame(height: 2)
