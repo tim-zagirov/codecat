@@ -99,6 +99,20 @@ final class SpriteScaleTests: XCTestCase {
                                           maxWidth: SpriteScale.maxWidth), 4)
     }
 
+    /// The 0.5 poses change the union bounding box LuizMelo is scaled from: the
+    /// sitting cat is two pixels taller than any 0.4 frame. Both new boxes must keep
+    /// the island at x2 and the floating cat at x4 — a box one pixel wider than 30
+    /// would drop the island cat to x1, half its size.
+    func testTheZeroFivePosesKeepTheirScale() {
+        for (w, h) in [(27, 16), (28, 16)] {
+            XCTAssertEqual(SpriteScale.factor(boundsWidth: w, boundsHeight: h), 4, "\(w)x\(h) floating")
+            XCTAssertEqual(SpriteScale.factor(boundsWidth: w, boundsHeight: h,
+                                              targetHeight: SpriteScale.islandTargetHeight,
+                                              maxWidth: SpriteScale.islandMaxWidth),
+                           2, "\(w)x\(h) island")
+        }
+    }
+
     // MARK: - Oversized sprites (imported pets whose pitch could not be detected)
 
     /// Whatever fits keeps the integer rule bit for bit.

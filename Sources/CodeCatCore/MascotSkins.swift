@@ -66,21 +66,26 @@ public enum MascotSkins {
         }
         let sleepingFrames = [SpriteFrame(sheet: "Cat-\(n)-Sleeping1.png", index: 0),
                               SpriteFrame(sheet: "Cat-\(n)-Sleeping2.png", index: 0)]
-        // `Cat-3` is the only cat without an `Itch` sheet. `Licking 2` is the nearest
-        // "something is off" motion it does have — and it must come from the same
-        // pack, because styles are never mixed.
-        let problem = n == 3
-            ? strip("Licking 2", count: 5, fps: 6)
-            : strip("Itch", count: 2, fps: 3)
+        // Crashed: the cat crouches, hunched — the last two frames of the pack's
+        // `Run`, where it lands low. Scratching (`Itch`) said nothing about a
+        // session dying. Every cat has a `Run` sheet, so Cat-3's old fallback
+        // (`Licking 2`, for its missing `Itch`) goes away.
+        let problem = SpriteAnimation(
+            frames: [SpriteFrame(sheet: "Cat-\(n)-Run.png", index: 6),
+                     SpriteFrame(sheet: "Cat-\(n)-Run.png", index: 7)],
+            framesPerSecond: 2)
         return [
             // Two single-frame files looped slowly read as breathing. `Laying` is not
             // usable here: it is a sit-down-then-lie-down *transition*, so looping it
             // would have the cat standing up and lying down forever.
             .sleeping: SpriteAnimation(frames: sleepingFrames, framesPerSecond: 0.6),
-            .working: strip("Idle", count: 10, fps: 8),
-            // The cat opens its mouth and calls — the closest thing in the pack to
-            // "your agent is asking you something".
-            .waiting: strip("Meow", count: 4, fps: 5),
+            // Working: the cat walks on the spot. Standing still (`Idle`) read as
+            // waiting, which is the one thing working must never look like.
+            .working: strip("Walk", count: 8, fps: 8),
+            // Waiting for you: the cat sits and looks straight at you. `Meow` lowered
+            // the head with the mouth open and people read it as the cat being sick.
+            // A single still frame: the island's rim and the dot carry the motion.
+            .waiting: strip("Sitting", count: 1, fps: 1),
             // Work is over: the cat stretches a couple of times, lies down and falls
             // asleep. `Laying` is a ready-made sit-down-then-lie-down transition from
             // the pack itself: in a loop it would look like endless getting up, and in

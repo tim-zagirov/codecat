@@ -169,14 +169,26 @@ extension MascotSkinsTests {
         XCTAssertEqual(MascotSkins.skin(withID: "drawn").id, MascotSkins.default.id)
     }
 
-    /// `Cat-3` is the one LuizMelo cat with no `Itch` sheet, so its "problem" state
-    /// falls back to `Licking 2` — the substitution most likely to be lost in a
-    /// later refactor, so it is asserted directly.
-    func testCat3UsesLickingBecauseItHasNoItchSheet() {
-        let cat3 = MascotSkins.skin(withID: "luizmelo-cat-3")
-        XCTAssertEqual(cat3.animation(for: .problem)?.frames.first?.sheet, "Cat-3-Licking 2.png")
-        let cat1 = MascotSkins.skin(withID: "luizmelo-cat-1")
-        XCTAssertEqual(cat1.animation(for: .problem)?.frames.first?.sheet, "Cat-1-Itch.png")
+    /// 0.5 poses (spec §3). `Meow` lowered the head and opened the mouth and was read
+    /// as the cat being sick; `Idle` stood still and read as waiting; `Itch` meant
+    /// nothing. Asserted for all six cats because the sheets are per cat and one
+    /// missing file would only show on that skin.
+    func testLuizMeloPosesSayWhatTheyMean() {
+        for n in 1...6 {
+            let skin = MascotSkins.skin(withID: "luizmelo-cat-\(n)")
+            let working = try? XCTUnwrap(skin.animation(for: .working))
+            XCTAssertEqual(working?.frames.map(\.sheet), Array(repeating: "Cat-\(n)-Walk.png", count: 8), "cat \(n)")
+            XCTAssertEqual(working?.frames.map(\.index), Array(0..<8), "cat \(n)")
+            XCTAssertEqual(working?.phases.first?.framesPerSecond, 8, "cat \(n)")
+
+            let waiting = try? XCTUnwrap(skin.animation(for: .waiting))
+            XCTAssertEqual(waiting?.frames, [SpriteFrame(sheet: "Cat-\(n)-Sitting.png", index: 0)], "cat \(n)")
+
+            let problem = try? XCTUnwrap(skin.animation(for: .problem))
+            XCTAssertEqual(problem?.frames, [SpriteFrame(sheet: "Cat-\(n)-Run.png", index: 6),
+                                             SpriteFrame(sheet: "Cat-\(n)-Run.png", index: 7)], "cat \(n)")
+            XCTAssertEqual(problem?.phases.first?.framesPerSecond, 2, "cat \(n)")
+        }
     }
 
     /// mxmaze's bottom row is drawn with the eyes closed. "Done" must not come from
