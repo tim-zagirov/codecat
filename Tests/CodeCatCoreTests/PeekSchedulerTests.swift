@@ -126,6 +126,37 @@ final class PeekSchedulerTests: XCTestCase {
                        "the summary counts everything, switches or not")
     }
 
+    /// An event just before the lock was queued, not shown; the lock drops the
+    /// queue, so what is still true in it goes into the summary instead of vanishing.
+    /// The peek on screen was seen, and a queued item that stopped being true is not
+    /// news.
+    func testWhatWasQueuedAtTheLockGoesIntoTheSummary() {
+        let ids = ["a", "b", "c", "d", "e"]
+        func all(_ changes: [String: SessionStatus]) -> [Session] {
+            ids.map { s($0, changes[$0] ?? .working) }
+        }
+        let p = seeded(all([:]))
+        p.sessionsChanged(all(["a": .waitingForYou(.permission)]), now: t0.addingTimeInterval(1))
+        XCTAssertNotNil(p.next(now: t0.addingTimeInterval(1)))            // a on screen
+        var now: [String: SessionStatus] = ["a": .waitingForYou(.permission)]
+        now["b"] = .crashed
+        p.sessionsChanged(all(now), now: t0.addingTimeInterval(2.5))      // queued
+        now["e"] = .crashed
+        p.sessionsChanged(all(now), now: t0.addingTimeInterval(2.6))      // merged into b's
+        now["c"] = .done
+        p.sessionsChanged(all(now), now: t0.addingTimeInterval(2.7))      // queued
+        now["d"] = .waitingForYou(.question)
+        p.sessionsChanged(all(now), now: t0.addingTimeInterval(4))        // queued
+        now["d"] = .working
+        p.sessionsChanged(all(now), now: t0.addingTimeInterval(4.2))      // answered: no longer true
+        XCTAssertEqual(p.queue.count, 3)
+
+        p.lock()
+        p.peekEnded(now: t0.addingTimeInterval(5))
+        p.unlock(now: t0.addingTimeInterval(60))
+        XCTAssertEqual(p.next(now: t0.addingTimeInterval(60))?.kind, .away(done: 1, waiting: 0, crashed: 2))
+    }
+
     func testUnlockWithNothingToSayIsSilent() {
         let p = seeded([s("a", .working)])
         p.lock()

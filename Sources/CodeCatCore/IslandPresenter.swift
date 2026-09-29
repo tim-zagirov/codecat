@@ -90,10 +90,12 @@ public struct IslandPresenter {
             presentation = .compact
             return nil
         }
+        // A hold only runs while the pointer is outside — entering pauses it — so a
+        // peek that runs out always falls back to the compact island.
         if let end = peekEndsAt, now >= end {
             let ended = currentPeek
             clearPeek()
-            presentation = pointerInside ? .inhaled : .compact
+            presentation = .compact
             return ended
         }
         return nil

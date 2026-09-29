@@ -234,6 +234,53 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertEqual(path.boundingBoxOfPath.minY, 14, accuracy: 0.001)
     }
 
+    /// The rim sits inside the silhouette at a constant distance, so its corners
+    /// share the silhouette's centres with a radius smaller by the inset — a corner
+    /// of the same radius drawn from the inset walls would run closer to the edge in
+    /// the corner than along the walls.
+    func testRimCornersAreConcentricWithTheSilhouette() {
+        let rect = CGRect(x: 0, y: 0, width: 448, height: 487)
+        let path = IslandLayout.rimPath(in: rect, bottomRadius: 24, edgeRadius: 14)
+        let centres = [CGPoint(x: 14 + 24, y: 487 - 24), CGPoint(x: 448 - 14 - 24, y: 487 - 24)]
+        var current = CGPoint.zero
+        var curve = 0
+        path.applyWithBlock { element in
+            let e = element.pointee
+            switch e.type {
+            case .moveToPoint, .addLineToPoint:
+                current = e.points[0]
+            case .addCurveToPoint:
+                let (p0, p1, p2, p3) = (current, e.points[0], e.points[1], e.points[2])
+                let centre = centres[min(curve, 1)]
+                for t in stride(from: CGFloat(0), through: 1, by: 0.25) {
+                    let u = 1 - t
+                    let x = u*u*u*p0.x + 3*u*u*t*p1.x + 3*u*t*t*p2.x + t*t*t*p3.x
+                    let y = u*u*u*p0.y + 3*u*u*t*p1.y + 3*u*t*t*p2.y + t*t*t*p3.y
+                    XCTAssertEqual(hypot(x - centre.x, y - centre.y), 23.25, accuracy: 0.02,
+                                   "corner \(curve) at t = \(t)")
+                }
+                current = p3
+                curve += 1
+            default:
+                break
+            }
+        }
+        XCTAssertEqual(curve, 2)
+    }
+
+    /// The expanded island and the peek use a 14 pt fillet, so their window has to
+    /// make room for 14, not the compact island's 10.
+    func testTheSilhouetteAndTheWindowTakeTheFilletTheyAreGiven() {
+        let island = CGRect(x: 100, y: 900, width: 420, height: 32)
+        XCTAssertEqual(IslandLayout.silhouetteFrame(island: island, edgeRadius: 14),
+                       CGRect(x: 86, y: 900, width: 448, height: 32))
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let frame = IslandLayout.windowFrame(island: island, totalHeight: 78, screenFrame: screen,
+                                             edgeRadius: 14)
+        XCTAssertEqual(frame, CGRect(x: 86, y: 854, width: 448, height: 78))
+        XCTAssertEqual(IslandLayout.silhouetteFrame(island: island).width, 440, "the default is still the compact 10")
+    }
+
     func testTheExpandedConstantsMatchTheSpec() {
         XCTAssertEqual(IslandLayout.expandedWidth, 420)
         XCTAssertEqual(IslandLayout.expandedEdgeRadius, 14)

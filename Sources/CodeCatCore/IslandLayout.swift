@@ -64,9 +64,14 @@ public enum IslandLayout {
     /// room for a task line, still close to Apple's expanded Dynamic Island (371–408).
     public static let expandedWidth: CGFloat = 420
     /// Fillet and bottom radius grow with the shape; a 16 pt corner on a 487 pt panel
-    /// looks sharp, and the inner cards' 12 pt corners sit concentric to 24.
+    /// looks sharp.
     public static let expandedEdgeRadius: CGFloat = 14
+    /// The expanded island's and the peek's bottom corners: the cards' 12 pt corners,
+    /// 12 pt in from the side, are concentric with 24 — spec §5.4.
     public static let expandedCornerRadius: CGFloat = 24
+    /// The peek's height: the 32 pt compact band stays on top so the cat and the dots
+    /// do not move, and the one reason line sits below it at y 42 — spec §6.2. One
+    /// line is all a peek says; anything longer is the expanded list's job.
     public static let peekHeight: CGFloat = 78
     /// How much the island grows under the cursor before it opens.
     public static let inhaleGrowth = CGSize(width: 6, height: 4)
@@ -81,6 +86,11 @@ public enum IslandLayout {
     /// fillet, around the bottom and up the right wall, and never along the top, which
     /// is the screen's edge. Inset so a centred stroke stays inside the silhouette.
     /// Same coordinates and clamping as `silhouettePath`.
+    ///
+    /// The bottom corners are concentric with the silhouette's: the same centres, the
+    /// radius smaller by the inset. Drawn with the silhouette's own radius from the
+    /// inset walls, the corner ran up to a third of a point closer to the edge than the
+    /// walls did, and a 1.5 pt stroke showed it as a pinch at each corner.
     public static func rimPath(in rect: CGRect, bottomRadius: CGFloat, edgeRadius: CGFloat,
                                inset: CGFloat = 0.75) -> CGPath {
         let k: CGFloat = 0.5523
@@ -89,19 +99,20 @@ public enum IslandLayout {
         let b = max(0, min(bottomRadius, min(bodyWidth / 2, rect.height - e)))
         let left = rect.minX + e + inset, right = rect.maxX - e - inset
         let top = rect.minY + e, bottom = rect.maxY - inset
+        let r = max(0, b - inset)
         let path = CGMutablePath()
         path.move(to: CGPoint(x: left, y: top))
-        path.addLine(to: CGPoint(x: left, y: bottom - b))
-        if b > 0 {
-            path.addCurve(to: CGPoint(x: left + b, y: bottom),
-                          control1: CGPoint(x: left, y: bottom - b + b * k),
-                          control2: CGPoint(x: left + b - b * k, y: bottom))
+        path.addLine(to: CGPoint(x: left, y: bottom - r))
+        if r > 0 {
+            path.addCurve(to: CGPoint(x: left + r, y: bottom),
+                          control1: CGPoint(x: left, y: bottom - r + r * k),
+                          control2: CGPoint(x: left + r - r * k, y: bottom))
         }
-        path.addLine(to: CGPoint(x: right - b, y: bottom))
-        if b > 0 {
-            path.addCurve(to: CGPoint(x: right, y: bottom - b),
-                          control1: CGPoint(x: right - b + b * k, y: bottom),
-                          control2: CGPoint(x: right, y: bottom - b + b * k))
+        path.addLine(to: CGPoint(x: right - r, y: bottom))
+        if r > 0 {
+            path.addCurve(to: CGPoint(x: right, y: bottom - r),
+                          control1: CGPoint(x: right - r + r * k, y: bottom),
+                          control2: CGPoint(x: right, y: bottom - r + r * k))
         }
         path.addLine(to: CGPoint(x: right, y: top))
         return path
@@ -133,7 +144,12 @@ public enum IslandLayout {
     /// Kept apart from `islandFrame` because they are different quantities:
     /// `islandFrame` is what the content is laid out against (wing, notch, wing), and
     /// this is what has to be painted.
-    public static func silhouetteFrame(island: CGRect) -> CGRect {
+    ///
+    /// `edgeRadius` is the fillet the shape is drawn with: the expanded island and the
+    /// peek use `expandedEdgeRadius`, and a window sized for the compact 10 pt would
+    /// clip their 14 pt fillets.
+    public static func silhouetteFrame(island: CGRect,
+                                       edgeRadius: CGFloat = IslandLayout.edgeRadius) -> CGRect {
         island.insetBy(dx: -edgeRadius, dy: 0)
     }
 
@@ -210,8 +226,9 @@ public enum IslandLayout {
     /// and above by the bottom of the screen.
     public static func windowFrame(island: CGRect,
                                    totalHeight: CGFloat,
-                                   screenFrame: CGRect) -> CGRect {
-        let silhouette = silhouetteFrame(island: island)
+                                   screenFrame: CGRect,
+                                   edgeRadius: CGFloat = IslandLayout.edgeRadius) -> CGRect {
+        let silhouette = silhouetteFrame(island: island, edgeRadius: edgeRadius)
         let available = island.maxY - screenFrame.minY
         let height = max(island.height, min(totalHeight, available))
         return CGRect(x: silhouette.minX, y: island.maxY - height,

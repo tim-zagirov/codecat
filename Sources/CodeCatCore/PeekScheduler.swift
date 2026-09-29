@@ -145,9 +145,26 @@ public final class PeekScheduler {
         queue.removeAll()
     }
 
+    /// The queue is dropped — nothing peeks on a locked screen — but what in it is
+    /// still true goes into the away summary first: an event a moment before the lock
+    /// was queued behind the peek on screen, and dropping it silently would lose it.
     public func lock() {
         isLocked = true
         away = (0, 0, 0)
+        for item in queue where isStillTrue(item) {
+            if case .away(let done, let waiting, let crashed) = item.kind {
+                away.done += done; away.waiting += waiting; away.crashed += crashed
+                continue
+            }
+            for id in item.sessionIDs {
+                switch lastStatus[id] {
+                case .done: away.done += 1
+                case .crashed: away.crashed += 1
+                case .waitingForYou(.permission), .waitingForYou(.question): away.waiting += 1
+                default: break
+                }
+            }
+        }
         queue.removeAll()
     }
 

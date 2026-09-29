@@ -183,6 +183,7 @@ extension MascotSkinsTests {
 
             let waiting = try? XCTUnwrap(skin.animation(for: .waiting))
             XCTAssertEqual(waiting?.frames, [SpriteFrame(sheet: "Cat-\(n)-Sitting.png", index: 0)], "cat \(n)")
+            XCTAssertEqual(waiting?.phases.first?.framesPerSecond, 1, "cat \(n)")
 
             let problem = try? XCTUnwrap(skin.animation(for: .problem))
             XCTAssertEqual(problem?.frames, [SpriteFrame(sheet: "Cat-\(n)-Run.png", index: 6),
