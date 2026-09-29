@@ -123,6 +123,53 @@ public struct Handoff: Equatable, Sendable {
     }
 }
 
+/// What the agent is about to do: its last tool call with no result yet. The
+/// `Notification` hook only says "Claude needs your permission to use Bash"; the
+/// transcript says *which* command, and that is what makes a peek worth reading.
+public struct PendingAction: Equatable, Sendable {
+    public enum Kind: Equatable, Sendable {
+        case run(command: String)
+        case edit(file: String)
+        case open(host: String)
+        case use(tool: String)
+    }
+    public let kind: Kind
+    public init(kind: Kind) { self.kind = kind }
+
+    /// A peek has one line; a command longer than this is cut with an ellipsis.
+    public static let commandLimit = 40
+
+    public static func from(tool name: String, input: [String: Any]) -> PendingAction {
+        switch name {
+        case "Bash":
+            let first = ((input["command"] as? String) ?? "")
+                .split(separator: "\n", omittingEmptySubsequences: true).first
+                .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+            guard !first.isEmpty else { return PendingAction(kind: .use(tool: name)) }
+            let cut = first.count > commandLimit ? String(first.prefix(commandLimit)) + "…" : first
+            return PendingAction(kind: .run(command: cut))
+        case "Edit", "Write", "MultiEdit", "NotebookEdit":
+            guard let path = (input["file_path"] as? String) ?? (input["notebook_path"] as? String) else {
+                return PendingAction(kind: .use(tool: name))
+            }
+            return PendingAction(kind: .edit(file: (path as NSString).lastPathComponent))
+        case "WebFetch":
+            guard let raw = input["url"] as? String, let host = URL(string: raw)?.host else {
+                return PendingAction(kind: .use(tool: name))
+            }
+            return PendingAction(kind: .open(host: host))
+        default:
+            return PendingAction(kind: .use(tool: name))
+        }
+    }
+}
+
+/// What one transcript line says about the pending action.
+public enum PendingActionChange: Equatable, Sendable {
+    case set(PendingAction)
+    case clear
+}
+
 public struct Session: Identifiable, Equatable, Sendable {
     public let id: String
     public var projectPath: String
@@ -347,10 +394,14 @@ public struct TranscriptActivity: Equatable, Sendable {
     /// The assistant's text on the line that ends the turn — the message the user
     /// would read in the terminal. Nil on every other line.
     public let finalText: String?
+    /// What this line says about the agent's pending tool call — see `PendingAction`.
+    /// Nil on most lines; never set by a subagent or a sidechain.
+    public let pendingAction: PendingActionChange?
 
     public init(sessionId: String, projectPath: String, description: String, timestamp: Date,
                 isSubagent: Bool = false, endsTurn: Bool = false, taskText: String? = nil,
-                stepsUpdates: [StepsUpdate] = [], finalText: String? = nil) {
+                stepsUpdates: [StepsUpdate] = [], finalText: String? = nil,
+                pendingAction: PendingActionChange? = nil) {
         self.sessionId = sessionId
         self.projectPath = projectPath
         self.description = description
@@ -360,5 +411,6 @@ public struct TranscriptActivity: Equatable, Sendable {
         self.taskText = taskText
         self.stepsUpdates = stepsUpdates
         self.finalText = finalText
+        self.pendingAction = pendingAction
     }
 }

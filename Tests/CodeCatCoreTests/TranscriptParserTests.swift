@@ -327,5 +327,61 @@ final class TranscriptParserTests: XCTestCase {
         XCTAssertNil(a?.finalText)
         XCTAssertEqual(a?.stepsUpdates, [])
     }
+
+    // MARK: - Pending action (what a permission prompt is about)
+
+    private func toolUse(_ name: String, _ input: String) -> String {
+        line("assistant", content: #"{"type":"tool_use","name":"\#(name)","input":\#(input)}"#)
+    }
+
+    func testBashCallIsARunWithItsCommand() {
+        let a = TranscriptParser.parseLine(toolUse("Bash", #"{"command":"npm test"}"#))
+        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .run(command: "npm test"))))
+    }
+
+    /// Only the first line: `cd … && …` scripts often start with the interesting
+    /// part, and a multi-line script does not fit a peek anyway. Cut at 40 chars
+    /// with an ellipsis.
+    func testBashCommandIsItsFirstLineCutAtForty() {
+        let long = String(repeating: "a", count: 50)
+        let a = TranscriptParser.parseLine(toolUse("Bash", #"{"command":"\#(long)\nsecond line"}"#))
+        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .run(command: String(repeating: "a", count: 40) + "…"))))
+    }
+
+    func testEditCallIsAnEditOfTheFileName() {
+        let a = TranscriptParser.parseLine(toolUse("Edit", #"{"file_path":"/Users/x/proj/src/api.ts"}"#))
+        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .edit(file: "api.ts"))))
+    }
+
+    func testWebFetchIsAnOpenOfTheHost() {
+        let a = TranscriptParser.parseLine(toolUse("WebFetch", #"{"url":"https://docs.swift.org/swift-book/"}"#))
+        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .open(host: "docs.swift.org"))))
+    }
+
+    func testAnyOtherToolIsAUseOfItsName() {
+        let a = TranscriptParser.parseLine(toolUse("Grep", #"{"pattern":"x"}"#))
+        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .use(tool: "Grep"))))
+    }
+
+    /// A result means the call ran: whatever was pending is not any more.
+    func testToolResultClearsThePendingAction() {
+        let a = TranscriptParser.parseLine(line("user", content: #"{"type":"tool_result","content":"ok"}"#))
+        XCTAssertEqual(a?.pendingAction, .clear)
+    }
+
+    func testEndOfTurnClearsThePendingAction() {
+        XCTAssertEqual(TranscriptParser.parseLine(assistant(stopReason: "end_turn"))?.pendingAction, .clear)
+    }
+
+    func testATypedPromptSaysNothingAboutPendingActions() {
+        let l = #"{"type":"user","sessionId":"s1","cwd":"/p","timestamp":"2026-08-28T10:00:00.123Z","message":{"content":"fix the feed"}}"#
+        XCTAssertNil(TranscriptParser.parseLine(l)?.pendingAction)
+    }
+
+    /// A subagent's call is the errand's, not what the session asks the user for.
+    func testSidechainCallIsIgnored() {
+        let l = #"{"type":"assistant","sessionId":"s1","cwd":"/p","isSidechain":true,"timestamp":"2026-08-28T10:00:00.123Z","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}"#
+        XCTAssertNil(TranscriptParser.parseLine(l)?.pendingAction)
+    }
 }
 

@@ -49,11 +49,14 @@ public enum TranscriptParser {
         // not the session's turn — `finalText` becomes the row's handoff summary, and
         // a sidechain's text is not that.
         let finalText = (endsTurn && !isSidechain) ? assistantText(obj) : nil
+        let pendingAction = (isSubagent || isSidechain)
+            ? nil : pendingActionChange(obj, type: type, endsTurn: endsTurn)
         return TranscriptActivity(sessionId: sessionId, projectPath: cwd,
                                   description: description, timestamp: ts,
                                   isSubagent: isSubagent, endsTurn: endsTurn,
                                   taskText: taskText(obj, type: type),
-                                  stepsUpdates: stepsUpdates, finalText: finalText)
+                                  stepsUpdates: stepsUpdates, finalText: finalText,
+                                  pendingAction: pendingAction)
     }
 
     /// What the user asked for, when this entry is the asking. Only a typed prompt
@@ -108,6 +111,21 @@ public enum TranscriptParser {
         default:
             return L10n.f("activity.tool", "using %@", name)
         }
+    }
+
+    /// The pending tool call: set by the assistant's last `tool_use`, cleared by any
+    /// `tool_result` (the call ran) and by the end of the turn. A typed prompt says
+    /// nothing either way.
+    private static func pendingActionChange(_ obj: [String: Any], type: String,
+                                            endsTurn: Bool) -> PendingActionChange? {
+        let content = blocks(obj)
+        if type == "assistant" {
+            if endsTurn { return .clear }
+            guard let tool = content.last(where: { $0["type"] as? String == "tool_use" }),
+                  let name = tool["name"] as? String else { return nil }
+            return .set(PendingAction.from(tool: name, input: tool["input"] as? [String: Any] ?? [:]))
+        }
+        return content.contains(where: { $0["type"] as? String == "tool_result" }) ? .clear : nil
     }
 
     /// The message's content blocks, or none.
