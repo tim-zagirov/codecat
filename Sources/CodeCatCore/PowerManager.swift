@@ -42,6 +42,10 @@ public final class PowerManager {
 
     public var isHolding: Bool { assertion.isHeld }
 
+    /// When the assertion will be released if nothing starts working again: the end
+    /// of the grace period while it runs, else nil. Read by the island's footer.
+    public var releaseDeadline: Date? { pendingReleaseAt }
+
     public init(assertion: SleepAssertionHolding,
                 gracePeriod: TimeInterval = 120,
                 batteryFloor: Int = 15,

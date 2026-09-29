@@ -107,4 +107,15 @@ final class PowerManagerTests: XCTestCase {
         pm.tick(now: t0.addingTimeInterval(1000))
         XCTAssertFalse(mock.isHeld, "switched off — a tick must not take an assertion again")
     }
+
+    func testReleaseDeadlineIsTheEndOfTheGracePeriod() {
+        let (pm, _) = makeSUT(grace: 120)
+        XCTAssertNil(pm.releaseDeadline)
+        pm.update(anyWorking: true, now: t0)
+        XCTAssertNil(pm.releaseDeadline, "working: nothing pending")
+        pm.update(anyWorking: false, now: t0.addingTimeInterval(10))
+        XCTAssertEqual(pm.releaseDeadline, t0.addingTimeInterval(130))
+        pm.tick(now: t0.addingTimeInterval(130))
+        XCTAssertNil(pm.releaseDeadline, "released")
+    }
 }
