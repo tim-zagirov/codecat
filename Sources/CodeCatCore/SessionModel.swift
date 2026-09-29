@@ -228,6 +228,18 @@ public struct Session: Identifiable, Equatable, Sendable {
     public var hostBundleID: String? = nil
     public var tty: String? = nil
 
+    /// The agent's tool call awaiting a result — see `PendingAction`. What a
+    /// permission prompt is about.
+    public var pendingAction: PendingAction? = nil
+    /// Timestamp of the transcript line that last set or cleared `pendingAction`.
+    /// The action is ordered by the transcript's own clock, not by `lastActivity`:
+    /// hooks move `lastActivity` to *their* arrival time and would otherwise make the
+    /// line that says what is being asked look stale.
+    public var pendingActionAt: Date? = nil
+    /// The `Notification` hook's own text, the fallback for the peek's reason line
+    /// when the transcript has not said anything yet.
+    public var waitMessage: String? = nil
+
     public var projectName: String {
         (projectPath as NSString).lastPathComponent
     }

@@ -1492,3 +1492,88 @@ extension SessionStoreTests {
     }
 }
 
+extension SessionStoreTests {
+
+    // MARK: - What a waiting session is asking
+
+    private func toolCall(_ action: PendingAction, at time: Date, id: String = "s1") -> TranscriptActivity {
+        TranscriptActivity(sessionId: id, projectPath: "/proj", description: "running a command",
+                           timestamp: time, pendingAction: .set(action))
+    }
+
+    func testThePendingActionSurvivesIntoTheWait() {
+        let store = SessionStore()
+        store.apply(activity: toolCall(PendingAction(kind: .run(command: "npm test")), at: t0))
+        store.apply(hook: hook("Notification", message: "Claude needs your permission to use Bash"),
+                    now: t0.addingTimeInterval(1))
+        XCTAssertEqual(store.ordered[0].pendingAction, PendingAction(kind: .run(command: "npm test")))
+        XCTAssertEqual(store.ordered[0].waitMessage, "Claude needs your permission to use Bash")
+    }
+
+    /// The race that matters: the hook arrives over the socket before FSEvents
+    /// delivers the transcript line that was written first. The line is older than
+    /// `lastActivity` (the hook's time) and must still set the action — while the
+    /// status stays the hook's.
+    func testALateToolCallLineStillSetsTheActionButNotTheStatus() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.apply(hook: hook("Notification", message: "Claude needs your permission to use Bash"),
+                    now: t0.addingTimeInterval(10))
+        store.apply(activity: toolCall(PendingAction(kind: .run(command: "rm -rf build")),
+                                       at: t0.addingTimeInterval(5)))
+        XCTAssertEqual(store.ordered[0].status, .waitingForYou(.permission))
+        XCTAssertEqual(store.ordered[0].pendingAction, PendingAction(kind: .run(command: "rm -rf build")))
+    }
+
+    func testAnOlderClearDoesNotUndoANewerAction() {
+        let store = SessionStore()
+        store.apply(activity: toolCall(PendingAction(kind: .use(tool: "Grep")), at: t0.addingTimeInterval(5)))
+        store.apply(activity: TranscriptActivity(sessionId: "s1", projectPath: "/proj", description: "x",
+                                                 timestamp: t0.addingTimeInterval(3), pendingAction: .clear))
+        XCTAssertEqual(store.ordered[0].pendingAction, PendingAction(kind: .use(tool: "Grep")))
+    }
+
+    func testAToolResultClearsIt() {
+        let store = SessionStore()
+        store.apply(activity: toolCall(PendingAction(kind: .use(tool: "Grep")), at: t0))
+        store.apply(activity: TranscriptActivity(sessionId: "s1", projectPath: "/proj", description: "x",
+                                                 timestamp: t0.addingTimeInterval(1), pendingAction: .clear))
+        XCTAssertNil(store.ordered[0].pendingAction)
+    }
+
+    func testANewPromptAndStopClearTheActionAndTheMessage() {
+        for event in ["UserPromptSubmit", "Stop"] {
+            let store = SessionStore()
+            store.apply(activity: toolCall(PendingAction(kind: .use(tool: "Grep")), at: t0))
+            store.apply(hook: hook("Notification", message: "Claude needs your permission to use Grep"),
+                        now: t0.addingTimeInterval(1))
+            store.apply(hook: hook(event), now: t0.addingTimeInterval(2))
+            XCTAssertNil(store.ordered[0].pendingAction, event)
+            XCTAssertNil(store.ordered[0].waitMessage, event)
+        }
+    }
+
+    /// Back to work (a new transcript line after the user answered): the message
+    /// described a question that is no longer open.
+    func testWorkingAgainClearsTheWaitMessage() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.apply(hook: hook("Notification", message: "Claude has a question for you"),
+                    now: t0.addingTimeInterval(1))
+        startWorking(store, at: t0.addingTimeInterval(5))
+        XCTAssertNil(store.ordered[0].waitMessage)
+    }
+
+    // MARK: - Dismiss
+
+    func testDismissRemovesACrashedOrDoneSessionOnly() {
+        let store = SessionStore()
+        startWorking(store, id: "a", at: t0)
+        startWorking(store, id: "b", at: t0)
+        store.apply(hook: hook("Stop", id: "b"), now: t0.addingTimeInterval(1))
+        store.dismiss(id: "a")
+        store.dismiss(id: "b")
+        XCTAssertEqual(store.ordered.map(\.id), ["a"], "a working session is not the user's to dismiss")
+    }
+}
+

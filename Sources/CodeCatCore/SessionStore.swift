@@ -197,6 +197,8 @@ public final class SessionStore: ObservableObject {
                 s.taskText = nil
                 s.steps = []
                 s.handoff = nil
+                s.pendingAction = nil
+                s.waitMessage = nil
                 // Not `.working`: the event says "a session appeared", not "an agent
                 // started working" — see `SessionStatus.idle`. Work begins when the
                 // first line of a turn shows up in the transcript (written at the same
@@ -222,6 +224,9 @@ public final class SessionStore: ObservableObject {
                 }
                 // The next turn has begun; the old result is stale.
                 s.handoff = nil
+                s.pendingAction = nil
+                s.pendingActionAt = now
+                s.waitMessage = nil
             }
         case "Notification":
             let text = (event.message ?? "").lowercased()
@@ -236,11 +241,15 @@ public final class SessionStore: ObservableObject {
             upsert(event: event, now: now) { s in
                 s.status = .waitingForYou(reason)
                 s.activityDescription = L10n.t("activity.waiting", "waiting for you")
+                s.waitMessage = event.message
             }
         case "Stop":
             upsert(event: event, now: now) { s in
                 s.status = .done
                 s.activityDescription = L10n.t("activity.done", "finished the task")
+                s.pendingAction = nil
+                s.pendingActionAt = now
+                s.waitMessage = nil
             }
         case "SessionEnd":
             sessions.removeValue(forKey: event.sessionId)
@@ -258,7 +267,21 @@ public final class SessionStore: ObservableObject {
             id: activity.sessionId, projectPath: activity.projectPath,
             activityDescription: activity.description, fallbackStartedAt: activity.timestamp,
             lastActivity: activity.timestamp)
-        guard activity.timestamp > s.lastActivity || isNew else { return }
+        // The pending action has its own ordering (see `Session.pendingActionAt`) and is
+        // applied before the staleness check below, which compares against a hook's
+        // arrival time.
+        if let change = activity.pendingAction, s.status != .crashed,
+           activity.timestamp >= (s.pendingActionAt ?? .distantPast) {
+            switch change {
+            case .set(let action): s.pendingAction = action
+            case .clear: s.pendingAction = nil
+            }
+            s.pendingActionAt = activity.timestamp
+        }
+        guard activity.timestamp > s.lastActivity || isNew else {
+            if !isNew, activity.pendingAction != nil { sessions[activity.sessionId] = s }
+            return
+        }
         guard s.status != .crashed else { return }
         // The one entry in a transcript that says what the session is FOR. It is set
         // before the `endsTurn` return below on purpose: a prompt and the end of a
@@ -287,10 +310,16 @@ public final class SessionStore: ObservableObject {
             s.handoff = activity.finalText.flatMap {
                 HandoffExtractor.extract(from: $0, pathKind: pathKind)
             }
+            // The turn is over: there is nothing left pending, and any wait message
+            // described a question that is now moot.
+            s.pendingAction = nil
+            s.waitMessage = nil
             sessions[activity.sessionId] = s
             return
         }
         s.status = .working
+        // Back to work: whatever the `Notification` hook said is no longer open.
+        s.waitMessage = nil
         // A subagent's work is the session's work (see `isSubagent` on
         // `TranscriptActivity`): status, `aggregate`, `badgeCount` and `anyWorking`
         // do not tell them apart. The only difference is a note in the description, so
@@ -304,6 +333,17 @@ public final class SessionStore: ObservableObject {
         s.handoff = nil
         if !activity.projectPath.isEmpty { s.projectPath = activity.projectPath }
         sessions[activity.sessionId] = s
+    }
+
+    /// The user closed a finished row. Only `.done` and `.crashed`: a session that is
+    /// still working or waiting is not the user's to hide — it would come back with
+    /// the next event anyway.
+    public func dismiss(id: String) {
+        guard let s = sessions[id] else { return }
+        switch s.status {
+        case .done, .crashed: sessions.removeValue(forKey: id)
+        case .idle, .working, .waitingForYou: break
+        }
     }
 
     /// Removes sessions that no longer exist, two different ways — an exact one and
