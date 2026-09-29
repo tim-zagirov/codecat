@@ -92,12 +92,40 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.aggregate, .waiting(1))
     }
 
-    func testNotificationWithoutPermissionWordSetsWaitingQuestion() {
+    /// Claude Code's nudge after a finished turn ("Claude is waiting for your input")
+    /// is not a question: nothing new was asked. It gets its own reason so the peek
+    /// can skip it — the done peek already happened.
+    func testIdleNudgeSetsWaitingInput() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
         store.apply(hook: hook("Notification", message: "Claude is waiting for your input"),
                     now: t0.addingTimeInterval(10))
+        XCTAssertEqual(store.ordered[0].status, .waitingForYou(.input))
+        XCTAssertEqual(store.aggregate, .waiting(1), "still waiting as far as the cat is concerned")
+    }
+
+    func testAnyOtherNotificationIsAQuestion() {
+        let store = SessionStore()
+        store.apply(hook: hook("SessionStart"), now: t0)
+        store.apply(hook: hook("Notification", message: "Claude has a question for you"),
+                    now: t0.addingTimeInterval(10))
         XCTAssertEqual(store.ordered[0].status, .waitingForYou(.question))
+    }
+
+    /// `.input` must not keep the Mac awake: the turn is over. `.idle` (the hook-less
+    /// guess) still does — see `anyWorking`.
+    func testInputWaitIsNotWorkButTheIdleGuessStillIs() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.apply(hook: hook("Notification", message: "Claude is waiting for your input"),
+                    now: t0.addingTimeInterval(10))
+        XCTAssertFalse(store.anyWorking)
+
+        let guessed = SessionStore()
+        startWorking(guessed, at: t0)
+        guessed.applyIdleHeuristic(now: t0.addingTimeInterval(6 * 60))
+        XCTAssertEqual(guessed.ordered[0].status, .waitingForYou(.idle))
+        XCTAssertTrue(guessed.anyWorking)
     }
 
     func testStopSetsDoneAndSessionEndRemoves() {

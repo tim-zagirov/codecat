@@ -157,8 +157,8 @@ public final class SessionStore: ObservableObject {
     /// `.waitingForYou(.idle)` counts as working: it is a heuristic guess (no activity
     /// for a while in fallback mode without hooks installed), not a real signal that the
     /// user's input is needed — a long single tool call looks identical. Real
-    /// `.waitingForYou(.permission)` / `.waitingForYou(.question)` come from an actual
-    /// `Notification` hook firing and do not count as working.
+    /// `.waitingForYou(.permission)` / `.waitingForYou(.question)` / `.waitingForYou(.input)`
+    /// come from an actual `Notification` hook firing and do not count as working.
     public var anyWorking: Bool {
         sessions.values.contains { session in
             switch session.status {
@@ -225,7 +225,14 @@ public final class SessionStore: ObservableObject {
             }
         case "Notification":
             let text = (event.message ?? "").lowercased()
-            let reason: WaitReason = text.contains("permission") ? .permission : .question
+            let reason: WaitReason
+            if text.contains("permission") {
+                reason = .permission
+            } else if text.contains("waiting for your input") {
+                reason = .input
+            } else {
+                reason = .question
+            }
             upsert(event: event, now: now) { s in
                 s.status = .waitingForYou(reason)
                 s.activityDescription = L10n.t("activity.waiting", "waiting for you")

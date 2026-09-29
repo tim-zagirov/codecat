@@ -1,7 +1,16 @@
 import Foundation
 
 public enum WaitReason: Equatable, Sendable {
-    case permission, question, idle
+    /// A tool call needs the user's yes.
+    case permission
+    /// The agent asked something.
+    case question
+    /// Claude Code's nudge after a finished turn: "Claude is waiting for your input".
+    /// Nothing new was asked — the done state already said the turn is over.
+    case input
+    /// The hook-less heuristic: a working session went quiet for five minutes. A
+    /// guess, which is why `SessionStore.anyWorking` still counts it as work.
+    case idle
 }
 
 public enum SessionStatus: Equatable, Sendable {
