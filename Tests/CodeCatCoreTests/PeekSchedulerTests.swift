@@ -132,4 +132,50 @@ final class PeekSchedulerTests: XCTestCase {
         p.unlock(now: t0.addingTimeInterval(10))
         XCTAssertNil(p.next(now: t0.addingTimeInterval(10)))
     }
+    // MARK: - The open list
+
+    /// The dwell turned the peek into the list: the scheduler must stop waiting for
+    /// it and drop what was queued behind it.
+    func testOpeningTheListForgetsThePeekAndDropsTheQueue() {
+        let p = seeded([s("a", .working), s("b", .working), s("c", .working)])
+        p.sessionsChanged([s("a", .waitingForYou(.permission)), s("b", .working), s("c", .working)],
+                          now: t0.addingTimeInterval(1))
+        XCTAssertNotNil(p.next(now: t0.addingTimeInterval(1)))
+        p.sessionsChanged([s("a", .waitingForYou(.permission)), s("b", .crashed), s("c", .working)],
+                          now: t0.addingTimeInterval(3))
+        XCTAssertEqual(p.queue.count, 1)
+
+        p.listOpened()
+        XCTAssertTrue(p.queue.isEmpty)
+        p.sessionsChanged([s("a", .waitingForYou(.permission)), s("b", .crashed), s("c", .done)],
+                          now: t0.addingTimeInterval(10))
+        XCTAssertEqual(p.next(now: t0.addingTimeInterval(10))?.sessionIDs, ["c"])
+    }
+
+    /// Within the merge window of the peek the list replaced, a new attention event
+    /// must be a peek of its own — not merged into one that is no longer on screen.
+    func testAfterTheListOpensNothingMergesIntoTheOldPeek() {
+        let p = seeded([s("a", .working), s("b", .working)])
+        p.sessionsChanged([s("a", .waitingForYou(.permission)), s("b", .working)], now: t0.addingTimeInterval(1))
+        XCTAssertNotNil(p.next(now: t0.addingTimeInterval(1)))
+        p.listOpened()
+        let replacement = p.sessionsChanged([s("a", .waitingForYou(.permission)), s("b", .crashed)],
+                                            now: t0.addingTimeInterval(1.5))
+        XCTAssertNil(replacement)
+        let item = p.next(now: t0.addingTimeInterval(1.5))
+        XCTAssertEqual(item?.kind, .crashed)
+        XCTAssertEqual(item?.sessionIDs, ["b"])
+    }
+
+    /// The gap spaces peeks out; opening the list is not a peek and does not reset it.
+    func testOpeningTheListLeavesTheGapAlone() {
+        let p = seeded([s("a", .working), s("b", .working)])
+        p.sessionsChanged([s("a", .done), s("b", .working)], now: t0.addingTimeInterval(1))
+        _ = p.next(now: t0.addingTimeInterval(1))
+        p.peekEnded(now: t0.addingTimeInterval(2))
+        p.listOpened()
+        p.sessionsChanged([s("a", .done), s("b", .done)], now: t0.addingTimeInterval(2.1))
+        XCTAssertNil(p.next(now: t0.addingTimeInterval(2.2)), "still within the gap after the peek")
+        XCTAssertEqual(p.next(now: t0.addingTimeInterval(2.41))?.sessionIDs, ["b"])
+    }
 }

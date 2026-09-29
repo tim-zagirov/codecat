@@ -45,6 +45,21 @@ public struct PeekSettings: Equatable, Sendable {
 /// Turns session transitions into peeks: which ones, in what order, merged or
 /// queued, and what to say after a locked screen. Pure — the caller supplies `now`
 /// and asks for the next item when the island is free.
+///
+/// The scheduler remembers the peek it handed out until it is told the peek is
+/// over, so the caller drives it together with `IslandPresenter` by one protocol:
+///
+///  * ask `next(now:)` only while the presentation is `.compact` or `.inhaled` —
+///    then `IslandPresenter.show` always accepts the item (it refuses only while
+///    the list is open);
+///  * hand every `PeekItem` that `IslandPresenter.tick`, `escape`, `jumped` or
+///    `open` returns to `peekEnded(now:)`;
+///  * call `listOpened()` when the presentation becomes `.expanded`, and again
+///    after every `sessionsChanged` while it stays `.expanded`.
+///
+/// Break the first two and the scheduler waits forever for a peek that is no longer
+/// on screen: `next` returns nil for good and new events merge into a phantom.
+/// `IslandPeekFlowTests` drives both types through exactly this protocol.
 public final class PeekScheduler {
     public static let gap: TimeInterval = 0.4
     public static let mergeWindow: TimeInterval = 1.0
@@ -117,6 +132,17 @@ public final class PeekScheduler {
     public func peekEnded(now: Date) {
         showing = nil
         lastEnded = now
+    }
+
+    /// The list is open — spec §6: it already shows every session, so a peek on top
+    /// of it or after it would repeat what the user has just seen. Forgets the peek
+    /// on screen (the dwell that opened the list ended it) and drops the queue, which
+    /// is why the caller repeats this after every change while the list stays open.
+    /// The gap is left alone: it spaces peeks out, and the list was not one. Counting
+    /// for the away summary is unaffected — a locked screen shows no list.
+    public func listOpened() {
+        showing = nil
+        queue.removeAll()
     }
 
     public func lock() {

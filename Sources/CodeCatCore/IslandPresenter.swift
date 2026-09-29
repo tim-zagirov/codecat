@@ -12,6 +12,12 @@ public enum IslandPresentation: Equatable, Sendable {
 /// the controller feeds pointer events and `tick`s at `nextDeadline`, and executes
 /// whatever `presentation` became. Keeping the timers here and not in AppKit is what
 /// lets every one of these rules be tested.
+///
+/// Every peek this type ends — returned by `tick`, `escape`, `jumped` and `open` —
+/// must go to `PeekScheduler.peekEnded(now:)`, and becoming `.expanded` must be
+/// reported with `PeekScheduler.listOpened()`: the scheduler cannot see this state
+/// and otherwise keeps waiting for a peek that is gone. The full protocol is on
+/// `PeekScheduler`.
 public struct IslandPresenter {
     public static let closeDelay: TimeInterval = 0.15
 
