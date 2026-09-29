@@ -241,6 +241,32 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertEqual(IslandLayout.peekHeight, 78)
         XCTAssertEqual(IslandLayout.inhaleGrowth, CGSize(width: 6, height: 4))
     }
+
+    /// The rim's bottom corners must be tangent to the walls and the bottom edge,
+    /// which is revealed only by the control points: a swap of control1/control2 would
+    /// leave the anchor points and bounding box unchanged but break the shape.
+    func testRimCornersLeaveTheWallsAndMeetTheBottomTangentially() {
+        let rect = CGRect(x: 0, y: 0, width: 448, height: 487)
+        let path = IslandLayout.rimPath(in: rect, bottomRadius: 24, edgeRadius: 14)
+        let left: CGFloat = 14.75, right: CGFloat = 433.25, bottom: CGFloat = 486.25
+        var curveCount = 0
+        path.applyWithBlock { element in
+            let e = element.pointee
+            guard e.type == .addCurveToPoint else { return }
+            curveCount += 1
+            let cp1 = e.points[0], cp2 = e.points[1]
+            if curveCount == 1 {
+                // Bottom-left: leaves the wall vertically (cp1.x at wall), arrives at bottom horizontally (cp2.y at bottom)
+                XCTAssertEqual(cp1.x, left, accuracy: 0.001, "bottom-left control1 at left wall")
+                XCTAssertEqual(cp2.y, bottom, accuracy: 0.001, "bottom-left control2 at bottom edge")
+            } else if curveCount == 2 {
+                // Bottom-right: leaves the bottom horizontally (cp1.y at bottom), arrives at wall vertically (cp2.x at wall)
+                XCTAssertEqual(cp1.y, bottom, accuracy: 0.001, "bottom-right control1 at bottom edge")
+                XCTAssertEqual(cp2.x, right, accuracy: 0.001, "bottom-right control2 at right wall")
+            }
+        }
+        XCTAssertEqual(curveCount, 2, "exactly 2 curve elements")
+    }
 }
 
 /// The outline as a click hit test (see `IslandHostingView.hitTest`).
