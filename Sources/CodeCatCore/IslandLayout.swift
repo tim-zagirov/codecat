@@ -58,6 +58,55 @@ public enum IslandLayout {
     /// clamps the radius at that limit, so the difference would stop being visible.
     public static let cornerRadius: CGFloat = 16
 
+    // MARK: 0.5 shapes (spec §4–§6)
+
+    /// The expanded island and the peek: wider than the compact body so a card has
+    /// room for a task line, still close to Apple's expanded Dynamic Island (371–408).
+    public static let expandedWidth: CGFloat = 420
+    /// Fillet and bottom radius grow with the shape; a 16 pt corner on a 487 pt panel
+    /// looks sharp, and the inner cards' 12 pt corners sit concentric to 24.
+    public static let expandedEdgeRadius: CGFloat = 14
+    public static let expandedCornerRadius: CGFloat = 24
+    public static let peekHeight: CGFloat = 78
+    /// How much the island grows under the cursor before it opens.
+    public static let inhaleGrowth = CGSize(width: 6, height: 4)
+
+    /// A body of any size, centred on the notch, top at the screen edge.
+    public static func bodyFrame(notch: CGRect, size: CGSize) -> CGRect {
+        CGRect(x: notch.midX - size.width / 2, y: notch.maxY - size.height,
+               width: size.width, height: size.height)
+    }
+
+    /// The rim light's path — spec §4.1. Open: it runs down the left wall from the
+    /// fillet, around the bottom and up the right wall, and never along the top, which
+    /// is the screen's edge. Inset so a centred stroke stays inside the silhouette.
+    /// Same coordinates and clamping as `silhouettePath`.
+    public static func rimPath(in rect: CGRect, bottomRadius: CGFloat, edgeRadius: CGFloat,
+                               inset: CGFloat = 0.75) -> CGPath {
+        let k: CGFloat = 0.5523
+        let e = max(0, min(edgeRadius, min(rect.width / 2, rect.height)))
+        let bodyWidth = rect.width - 2 * e
+        let b = max(0, min(bottomRadius, min(bodyWidth / 2, rect.height - e)))
+        let left = rect.minX + e + inset, right = rect.maxX - e - inset
+        let top = rect.minY + e, bottom = rect.maxY - inset
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: left, y: top))
+        path.addLine(to: CGPoint(x: left, y: bottom - b))
+        if b > 0 {
+            path.addCurve(to: CGPoint(x: left + b, y: bottom),
+                          control1: CGPoint(x: left, y: bottom - b + b * k),
+                          control2: CGPoint(x: left + b - b * k, y: bottom))
+        }
+        path.addLine(to: CGPoint(x: right - b, y: bottom))
+        if b > 0 {
+            path.addCurve(to: CGPoint(x: right, y: bottom - b),
+                          control1: CGPoint(x: right - b + b * k, y: bottom),
+                          control2: CGPoint(x: right, y: bottom - b + b * k))
+        }
+        path.addLine(to: CGPoint(x: right, y: top))
+        return path
+    }
+
     /// Whether the display has a notch. On one without, the top safe-area inset is
     /// zero; on a MacBook Pro's built-in display it equals the menu bar's height (32 pt).
     public static func hasNotch(safeAreaTop: CGFloat) -> Bool { safeAreaTop > 0 }

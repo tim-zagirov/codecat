@@ -191,6 +191,56 @@ final class IslandLayoutTests: XCTestCase {
         XCTAssertTrue(rect.insetBy(dx: -0.01, dy: -0.01).contains(path.boundingBox))
         XCTAssertFalse(path.isEmpty)
     }
+
+    // MARK: - 0.5 shapes
+
+    private func points(of path: CGPath) -> [CGPoint] {
+        var result: [CGPoint] = []
+        path.applyWithBlock { element in
+            let e = element.pointee
+            switch e.type {
+            case .moveToPoint, .addLineToPoint: result.append(e.points[0])
+            case .addQuadCurveToPoint: result.append(e.points[1])
+            case .addCurveToPoint: result.append(e.points[2])
+            default: break
+            }
+        }
+        return result
+    }
+
+    func testBodyFrameAtTheCompactSizeIsTheIslandFrame() {
+        let notch = CGRect(x: 663.5, y: 950, width: 185, height: 32)
+        XCTAssertEqual(IslandLayout.bodyFrame(notch: notch, size: CGSize(width: 329, height: 32)),
+                       IslandLayout.islandFrame(notch: notch))
+    }
+
+    func testBodyFrameGrowsDownAndSidewaysAroundTheNotch() {
+        let notch = CGRect(x: 663.5, y: 950, width: 185, height: 32)
+        let body = IslandLayout.bodyFrame(notch: notch, size: CGSize(width: 420, height: 487))
+        XCTAssertEqual(body.midX, notch.midX)
+        XCTAssertEqual(body.maxY, notch.maxY, "the top stays at the screen edge")
+        XCTAssertEqual(body, CGRect(x: 546, y: 495, width: 420, height: 487))
+    }
+
+    /// The rim runs down the left wall, along the bottom and up the right wall — and
+    /// never along the top, which is the screen's edge.
+    func testRimStartsAndEndsAtTheFilletOnEachWall() {
+        let rect = CGRect(x: 0, y: 0, width: 448, height: 487)   // 420 body + 2 × 14 fillet
+        let path = IslandLayout.rimPath(in: rect, bottomRadius: 24, edgeRadius: 14)
+        let pts = points(of: path)
+        XCTAssertEqual(pts.first, CGPoint(x: 14.75, y: 14))
+        XCTAssertEqual(pts.last, CGPoint(x: 433.25, y: 14))
+        XCTAssertEqual(path.boundingBoxOfPath.maxY, 486.25, accuracy: 0.001)
+        XCTAssertEqual(path.boundingBoxOfPath.minY, 14, accuracy: 0.001)
+    }
+
+    func testTheExpandedConstantsMatchTheSpec() {
+        XCTAssertEqual(IslandLayout.expandedWidth, 420)
+        XCTAssertEqual(IslandLayout.expandedEdgeRadius, 14)
+        XCTAssertEqual(IslandLayout.expandedCornerRadius, 24)
+        XCTAssertEqual(IslandLayout.peekHeight, 78)
+        XCTAssertEqual(IslandLayout.inhaleGrowth, CGSize(width: 6, height: 4))
+    }
 }
 
 /// The outline as a click hit test (see `IslandHostingView.hitTest`).
