@@ -96,6 +96,16 @@
 /* %@ is another activity line: the session's work is being done by a subagent. */
 "activity.subagent" = "subagent %@";
 
+/* MARK: - Peek reason: the one-line reason what a session wants */
+
+"peek.reason.question" = "has a question for you";
+"peek.reason.input" = "waiting for your next message";
+"peek.reason.crashed" = "the session ended unexpectedly";
+"peek.reason.run" = "wants to run";
+"peek.reason.edit" = "wants to edit";
+"peek.reason.open" = "wants to open";
+"peek.reason.use" = "wants to use";
+
 /* MARK: - "While you were away" entries */
 
 "away.waiting" = "an agent is waiting for you";
