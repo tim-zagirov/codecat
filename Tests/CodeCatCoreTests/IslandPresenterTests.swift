@@ -118,4 +118,39 @@ final class IslandPresenterTests: XCTestCase {
         XCTAssertEqual(p.presentation, .compact)
         XCTAssertNil(p.nextDeadline)
     }
+    // MARK: - open(now:) — the Show button and a click on the floating cat
+
+    func testOpenFromCompactExpands() {
+        var p = IslandPresenter()
+        XCTAssertNil(p.open(now: at(0)))
+        XCTAssertEqual(p.presentation, .expanded)
+        XCTAssertNil(p.nextDeadline)
+    }
+
+    /// Opening during the dwell must not leave the dwell armed behind it.
+    func testOpenFromInhaledExpandsAndDropsTheDwell() {
+        var p = IslandPresenter(hoverDelay: 0.3)
+        p.pointerEntered(now: at(0))
+        XCTAssertNil(p.open(now: at(0.1)))
+        XCTAssertEqual(p.presentation, .expanded)
+        XCTAssertNil(p.nextDeadline)
+    }
+
+    func testOpenFromAPeekEndsItAndReturnsIt() {
+        var p = IslandPresenter()
+        let item = peek()
+        p.show(item, now: at(0))
+        XCTAssertEqual(p.open(now: at(1)), item)
+        XCTAssertEqual(p.presentation, .expanded)
+        XCTAssertNil(p.nextDeadline, "the hold must not fire on the open list")
+    }
+
+    func testOpenWhileExpandedIsANoOp() {
+        var p = IslandPresenter(hoverDelay: 0.3)
+        p.pointerEntered(now: at(0)); p.tick(now: at(0.3))
+        p.pointerLeft(now: at(1))
+        XCTAssertNil(p.open(now: at(1.05)))
+        XCTAssertEqual(p.presentation, .expanded)
+        assertDeadline(p, 1.15)
+    }
 }

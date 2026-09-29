@@ -109,6 +109,23 @@ public struct IslandPresenter {
         return true
     }
 
+    /// Open the list without a hover — the peek's Show button (spec §6.2, on merged
+    /// and away peeks, which name no single session to jump to) and a click on the
+    /// floating cat (§9). Both are explicit requests, so no dwell: the list opens
+    /// now, and a pending dwell, close or peek hold is dropped so none of them can
+    /// fire on the open list. Returns the peek this ended, which the caller hands to
+    /// `PeekScheduler.peekEnded` like any other. Already open: nothing changes.
+    @discardableResult
+    public mutating func open(now: Date) -> PeekItem? {
+        if case .expanded = presentation { return nil }
+        let ended = currentPeek
+        clearPeek()
+        dwellAt = nil
+        closeAt = nil
+        presentation = .expanded
+        return ended
+    }
+
     @discardableResult
     public mutating func escape() -> PeekItem? { closeAll() }
 
