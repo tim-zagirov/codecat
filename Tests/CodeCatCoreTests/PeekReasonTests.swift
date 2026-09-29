@@ -8,7 +8,7 @@ final class PeekReasonTests: XCTestCase {
                  message: String? = nil, summary: String? = nil) -> Session {
         var s = Session(id: "s1", projectPath: "/p/codecat", status: status,
                         activityDescription: "", startedAt: t0, lastActivity: t0)
-        s.pendingAction = action.map(PendingAction.init(kind:))
+        s.pendingActions = action.map { [PendingEntry(id: "toolu_a", action: PendingAction(tool: "Bash", kind: $0))] } ?? []
         s.waitMessage = message
         s.handoff = summary.map { Handoff(summary: $0, links: []) }
         return s

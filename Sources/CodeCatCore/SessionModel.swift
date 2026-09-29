@@ -123,7 +123,7 @@ public struct Handoff: Equatable, Sendable {
     }
 }
 
-/// What the agent is about to do: its last tool call with no result yet. The
+/// What the agent is about to do: a tool call with no result yet. The
 /// `Notification` hook only says "Claude needs your permission to use Bash"; the
 /// transcript says *which* command, and that is what makes a peek worth reading.
 public struct PendingAction: Equatable, Sendable {
@@ -133,8 +133,12 @@ public struct PendingAction: Equatable, Sendable {
         case open(host: String)
         case use(tool: String)
     }
+    /// The tool's own name ("Bash", "Edit"), kept apart from `kind` because it is
+    /// what the hook's message names: with several calls pending, it picks the one
+    /// the permission prompt is about — see `Session.pendingAction`.
+    public let tool: String
     public let kind: Kind
-    public init(kind: Kind) { self.kind = kind }
+    public init(tool: String, kind: Kind) { self.tool = tool; self.kind = kind }
 
     /// A peek has one line; a command longer than this is cut with an ellipsis.
     public static let commandLimit = 40
@@ -145,29 +149,44 @@ public struct PendingAction: Equatable, Sendable {
             let first = ((input["command"] as? String) ?? "")
                 .split(separator: "\n", omittingEmptySubsequences: true).first
                 .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-            guard !first.isEmpty else { return PendingAction(kind: .use(tool: name)) }
+            guard !first.isEmpty else { return PendingAction(tool: name, kind: .use(tool: name)) }
             let cut = first.count > commandLimit ? String(first.prefix(commandLimit)) + "…" : first
-            return PendingAction(kind: .run(command: cut))
+            return PendingAction(tool: name, kind: .run(command: cut))
         case "Edit", "Write", "MultiEdit", "NotebookEdit":
             guard let path = (input["file_path"] as? String) ?? (input["notebook_path"] as? String) else {
-                return PendingAction(kind: .use(tool: name))
+                return PendingAction(tool: name, kind: .use(tool: name))
             }
-            return PendingAction(kind: .edit(file: (path as NSString).lastPathComponent))
+            return PendingAction(tool: name, kind: .edit(file: (path as NSString).lastPathComponent))
         case "WebFetch":
             guard let raw = input["url"] as? String, let host = URL(string: raw)?.host else {
-                return PendingAction(kind: .use(tool: name))
+                return PendingAction(tool: name, kind: .use(tool: name))
             }
-            return PendingAction(kind: .open(host: host))
+            return PendingAction(tool: name, kind: .open(host: host))
         default:
-            return PendingAction(kind: .use(tool: name))
+            return PendingAction(tool: name, kind: .use(tool: name))
         }
     }
 }
 
-/// What one transcript line says about the pending action.
+/// What one transcript line says about the pending calls. Calls and results are
+/// matched by the `tool_use` block's id: parallel calls are written as separate
+/// lines (call A, call B, result A), so "the last call, cleared by any result" named
+/// the wrong command on a permission prompt — or lost the right one.
 public enum PendingActionChange: Equatable, Sendable {
-    case set(PendingAction)
-    case clear
+    /// A `tool_use`. The id is nil only in transcripts that carry none.
+    case set(id: String?, PendingAction)
+    /// A `tool_result` for the call with this id; nil (no id on the result) resolves
+    /// every call, which is how results were read before ids were.
+    case resolve(id: String?)
+    /// The turn ended: nothing is pending any more.
+    case clearAll
+}
+
+/// One tool call awaiting its result — see `Session.pendingActions`.
+public struct PendingEntry: Equatable, Sendable {
+    public let id: String?
+    public let action: PendingAction
+    public init(id: String?, action: PendingAction) { self.id = id; self.action = action }
 }
 
 public struct Session: Identifiable, Equatable, Sendable {
@@ -228,10 +247,10 @@ public struct Session: Identifiable, Equatable, Sendable {
     public var hostBundleID: String? = nil
     public var tty: String? = nil
 
-    /// The agent's tool call awaiting a result — see `PendingAction`. What a
-    /// permission prompt is about.
-    public var pendingAction: PendingAction? = nil
-    /// Timestamp of the transcript line that last set or cleared `pendingAction`.
+    /// The agent's tool calls awaiting a result, oldest first — see `PendingAction`.
+    /// Several at once when the agent calls tools in parallel.
+    public var pendingActions: [PendingEntry] = []
+    /// Timestamp of the transcript line that last changed `pendingActions`.
     /// The action is ordered by the transcript's own clock, not by `lastActivity`:
     /// hooks move `lastActivity` to *their* arrival time and would otherwise make the
     /// line that says what is being asked look stale.
@@ -242,6 +261,26 @@ public struct Session: Identifiable, Equatable, Sendable {
 
     public var projectName: String {
         (projectPath as NSString).lastPathComponent
+    }
+
+    /// What a permission prompt is about: of the calls still waiting for a result,
+    /// the newest of the tool the hook's message names ("…permission to use Bash"),
+    /// else the newest. With parallel calls the newest line alone can be a different
+    /// tool from the one asking — a peek that says "wants to run `ls`" while the
+    /// prompt is about an edit is worse than no reason at all.
+    public var pendingAction: PendingAction? {
+        if let message = waitMessage,
+           let named = pendingActions.last(where: { Self.message(message, names: $0.action.tool) }) {
+            return named.action
+        }
+        return pendingActions.last?.action
+    }
+
+    /// Whether `tool` is a whole word of `message`, ignoring case — whole, so that
+    /// "use MultiEdit" does not also name `Edit`.
+    private static func message(_ message: String, names tool: String) -> Bool {
+        let pattern = "(?<![A-Za-z0-9_])" + NSRegularExpression.escapedPattern(for: tool) + "(?![A-Za-z0-9_])"
+        return message.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     /// The step the agent is on: the first in progress, else the first still pending.
@@ -406,14 +445,15 @@ public struct TranscriptActivity: Equatable, Sendable {
     /// The assistant's text on the line that ends the turn — the message the user
     /// would read in the terminal. Nil on every other line.
     public let finalText: String?
-    /// What this line says about the agent's pending tool call — see `PendingAction`.
-    /// Nil on most lines; never set by a subagent or a sidechain.
-    public let pendingAction: PendingActionChange?
+    /// What this line says about the agent's pending tool calls, in block order —
+    /// see `PendingActionChange`. Empty on most lines, and always for a subagent or
+    /// a sidechain.
+    public let pendingActions: [PendingActionChange]
 
     public init(sessionId: String, projectPath: String, description: String, timestamp: Date,
                 isSubagent: Bool = false, endsTurn: Bool = false, taskText: String? = nil,
                 stepsUpdates: [StepsUpdate] = [], finalText: String? = nil,
-                pendingAction: PendingActionChange? = nil) {
+                pendingActions: [PendingActionChange] = []) {
         self.sessionId = sessionId
         self.projectPath = projectPath
         self.description = description
@@ -423,6 +463,6 @@ public struct TranscriptActivity: Equatable, Sendable {
         self.taskText = taskText
         self.stepsUpdates = stepsUpdates
         self.finalText = finalText
-        self.pendingAction = pendingAction
+        self.pendingActions = pendingActions
     }
 }

@@ -330,13 +330,17 @@ final class TranscriptParserTests: XCTestCase {
 
     // MARK: - Pending action (what a permission prompt is about)
 
-    private func toolUse(_ name: String, _ input: String) -> String {
-        line("assistant", content: #"{"type":"tool_use","name":"\#(name)","input":\#(input)}"#)
+    private func toolUse(_ name: String, _ input: String, id: String = "toolu_a") -> String {
+        line("assistant", content: #"{"type":"tool_use","id":"\#(id)","name":"\#(name)","input":\#(input)}"#)
+    }
+
+    private func toolResult(_ id: String) -> String {
+        #"{"type":"tool_result","tool_use_id":"\#(id)","content":"ok"}"#
     }
 
     func testBashCallIsARunWithItsCommand() {
         let a = TranscriptParser.parseLine(toolUse("Bash", #"{"command":"npm test"}"#))
-        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .run(command: "npm test"))))
+        XCTAssertEqual(a?.pendingActions, [.set(id: "toolu_a", PendingAction(tool: "Bash", kind: .run(command: "npm test")))])
     }
 
     /// Only the first line: `cd … && …` scripts often start with the interesting
@@ -345,43 +349,70 @@ final class TranscriptParserTests: XCTestCase {
     func testBashCommandIsItsFirstLineCutAtForty() {
         let long = String(repeating: "a", count: 50)
         let a = TranscriptParser.parseLine(toolUse("Bash", #"{"command":"\#(long)\nsecond line"}"#))
-        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .run(command: String(repeating: "a", count: 40) + "…"))))
+        XCTAssertEqual(a?.pendingActions, [.set(id: "toolu_a", PendingAction(
+            tool: "Bash", kind: .run(command: String(repeating: "a", count: 40) + "…")))])
     }
 
     func testEditCallIsAnEditOfTheFileName() {
         let a = TranscriptParser.parseLine(toolUse("Edit", #"{"file_path":"/Users/x/proj/src/api.ts"}"#))
-        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .edit(file: "api.ts"))))
+        XCTAssertEqual(a?.pendingActions, [.set(id: "toolu_a", PendingAction(tool: "Edit", kind: .edit(file: "api.ts")))])
     }
 
     func testWebFetchIsAnOpenOfTheHost() {
         let a = TranscriptParser.parseLine(toolUse("WebFetch", #"{"url":"https://docs.swift.org/swift-book/"}"#))
-        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .open(host: "docs.swift.org"))))
+        XCTAssertEqual(a?.pendingActions, [.set(id: "toolu_a", PendingAction(tool: "WebFetch", kind: .open(host: "docs.swift.org")))])
     }
 
     func testAnyOtherToolIsAUseOfItsName() {
         let a = TranscriptParser.parseLine(toolUse("Grep", #"{"pattern":"x"}"#))
-        XCTAssertEqual(a?.pendingAction, .set(PendingAction(kind: .use(tool: "Grep"))))
+        XCTAssertEqual(a?.pendingActions, [.set(id: "toolu_a", PendingAction(tool: "Grep", kind: .use(tool: "Grep")))])
     }
 
-    /// A result means the call ran: whatever was pending is not any more.
-    func testToolResultClearsThePendingAction() {
+    /// An older transcript without block ids still names the call; the store then
+    /// treats it the way it did before ids were read.
+    func testACallWithoutAnIdIsStillSet() {
+        let l = line("assistant", content: #"{"type":"tool_use","name":"Grep","input":{}}"#)
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.pendingActions,
+                       [.set(id: nil, PendingAction(tool: "Grep", kind: .use(tool: "Grep")))])
+    }
+
+    /// A result resolves the call it answers — by id, because parallel calls are
+    /// written as separate lines and their results do not come back in order.
+    func testAToolResultResolvesItsOwnCall() {
+        let a = TranscriptParser.parseLine(line("user", content: toolResult("toolu_b")))
+        XCTAssertEqual(a?.pendingActions, [.resolve(id: "toolu_b")])
+    }
+
+    func testEveryResultOnALineResolvesItsCall() {
+        let a = TranscriptParser.parseLine(line("user", content: toolResult("toolu_a") + "," + toolResult("toolu_b")))
+        XCTAssertEqual(a?.pendingActions, [.resolve(id: "toolu_a"), .resolve(id: "toolu_b")])
+    }
+
+    func testAResultWithoutAnIdResolvesWithoutOne() {
         let a = TranscriptParser.parseLine(line("user", content: #"{"type":"tool_result","content":"ok"}"#))
-        XCTAssertEqual(a?.pendingAction, .clear)
+        XCTAssertEqual(a?.pendingActions, [.resolve(id: nil)])
     }
 
-    func testEndOfTurnClearsThePendingAction() {
-        XCTAssertEqual(TranscriptParser.parseLine(assistant(stopReason: "end_turn"))?.pendingAction, .clear)
+    func testEndOfTurnClearsEveryPendingAction() {
+        XCTAssertEqual(TranscriptParser.parseLine(assistant(stopReason: "end_turn"))?.pendingActions, [.clearAll])
     }
 
     func testATypedPromptSaysNothingAboutPendingActions() {
         let l = #"{"type":"user","sessionId":"s1","cwd":"/p","timestamp":"2026-08-28T10:00:00.123Z","message":{"content":"fix the feed"}}"#
-        XCTAssertNil(TranscriptParser.parseLine(l)?.pendingAction)
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.pendingActions, [])
     }
 
     /// A subagent's call is the errand's, not what the session asks the user for.
     func testSidechainCallIsIgnored() {
-        let l = #"{"type":"assistant","sessionId":"s1","cwd":"/p","isSidechain":true,"timestamp":"2026-08-28T10:00:00.123Z","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}"#
-        XCTAssertNil(TranscriptParser.parseLine(l)?.pendingAction)
+        let l = #"{"type":"assistant","sessionId":"s1","cwd":"/p","isSidechain":true,"timestamp":"2026-08-28T10:00:00.123Z","message":{"content":[{"type":"tool_use","id":"toolu_a","name":"Bash","input":{"command":"ls"}}]}}"#
+        XCTAssertEqual(TranscriptParser.parseLine(l)?.pendingActions, [])
+    }
+
+    /// Same for a subagent's own transcript, which is marked by `agentId` alone.
+    func testSubagentCallAndResultAreIgnored() {
+        let call = #"{"type":"assistant","agentId":"a1","sessionId":"s1","cwd":"/p","timestamp":"2026-08-28T10:00:00.123Z","message":{"content":[{"type":"tool_use","id":"toolu_a","name":"Bash","input":{"command":"ls"}}]}}"#
+        let result = #"{"type":"user","agentId":"a1","sessionId":"s1","cwd":"/p","timestamp":"2026-08-28T10:00:01.123Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_a","content":"ok"}]}}"#
+        XCTAssertEqual(TranscriptParser.parseLine(call)?.pendingActions, [])
+        XCTAssertEqual(TranscriptParser.parseLine(result)?.pendingActions, [])
     }
 }
-

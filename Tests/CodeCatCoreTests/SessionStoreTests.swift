@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import CodeCatCore
 
 final class SessionStoreTests: XCTestCase {
@@ -1496,17 +1497,29 @@ extension SessionStoreTests {
 
     // MARK: - What a waiting session is asking
 
-    private func toolCall(_ action: PendingAction, at time: Date, id: String = "s1") -> TranscriptActivity {
+    private func toolCall(_ action: PendingAction, at time: Date, id: String = "s1",
+                          callID: String? = "toolu_a") -> TranscriptActivity {
         TranscriptActivity(sessionId: id, projectPath: "/proj", description: "running a command",
-                           timestamp: time, pendingAction: .set(action))
+                           timestamp: time, pendingActions: [.set(id: callID, action)])
     }
+
+    private func results(_ ids: [String?], at time: Date, id: String = "s1") -> TranscriptActivity {
+        TranscriptActivity(sessionId: id, projectPath: "/proj", description: "working on the task",
+                           timestamp: time, pendingActions: ids.map { .resolve(id: $0) })
+    }
+
+    private func bash(_ command: String) -> PendingAction {
+        PendingAction(tool: "Bash", kind: .run(command: command))
+    }
+
+    private var grep: PendingAction { PendingAction(tool: "Grep", kind: .use(tool: "Grep")) }
 
     func testThePendingActionSurvivesIntoTheWait() {
         let store = SessionStore()
-        store.apply(activity: toolCall(PendingAction(kind: .run(command: "npm test")), at: t0))
+        store.apply(activity: toolCall(bash("npm test"), at: t0))
         store.apply(hook: hook("Notification", message: "Claude needs your permission to use Bash"),
                     now: t0.addingTimeInterval(1))
-        XCTAssertEqual(store.ordered[0].pendingAction, PendingAction(kind: .run(command: "npm test")))
+        XCTAssertEqual(store.ordered[0].pendingAction, bash("npm test"))
         XCTAssertEqual(store.ordered[0].waitMessage, "Claude needs your permission to use Bash")
     }
 
@@ -1519,38 +1532,138 @@ extension SessionStoreTests {
         startWorking(store, at: t0)
         store.apply(hook: hook("Notification", message: "Claude needs your permission to use Bash"),
                     now: t0.addingTimeInterval(10))
-        store.apply(activity: toolCall(PendingAction(kind: .run(command: "rm -rf build")),
-                                       at: t0.addingTimeInterval(5)))
+        store.apply(activity: toolCall(bash("rm -rf build"), at: t0.addingTimeInterval(5)))
         XCTAssertEqual(store.ordered[0].status, .waitingForYou(.permission))
-        XCTAssertEqual(store.ordered[0].pendingAction, PendingAction(kind: .run(command: "rm -rf build")))
+        XCTAssertEqual(store.ordered[0].pendingAction, bash("rm -rf build"))
     }
 
     func testAnOlderClearDoesNotUndoANewerAction() {
         let store = SessionStore()
-        store.apply(activity: toolCall(PendingAction(kind: .use(tool: "Grep")), at: t0.addingTimeInterval(5)))
-        store.apply(activity: TranscriptActivity(sessionId: "s1", projectPath: "/proj", description: "x",
-                                                 timestamp: t0.addingTimeInterval(3), pendingAction: .clear))
-        XCTAssertEqual(store.ordered[0].pendingAction, PendingAction(kind: .use(tool: "Grep")))
+        store.apply(activity: toolCall(grep, at: t0.addingTimeInterval(5)))
+        store.apply(activity: results(["toolu_a"], at: t0.addingTimeInterval(3)))
+        XCTAssertEqual(store.ordered[0].pendingAction, grep)
     }
 
     func testAToolResultClearsIt() {
         let store = SessionStore()
-        store.apply(activity: toolCall(PendingAction(kind: .use(tool: "Grep")), at: t0))
-        store.apply(activity: TranscriptActivity(sessionId: "s1", projectPath: "/proj", description: "x",
-                                                 timestamp: t0.addingTimeInterval(1), pendingAction: .clear))
+        store.apply(activity: toolCall(grep, at: t0))
+        store.apply(activity: results(["toolu_a"], at: t0.addingTimeInterval(1)))
+        XCTAssertNil(store.ordered[0].pendingAction)
+        XCTAssertEqual(store.ordered[0].pendingActions, [])
+    }
+
+    /// Parallel calls are written as separate lines — call A, call B, then A's
+    /// result. The result answers A; B is still waiting, and it is what the prompt
+    /// is about.
+    func testAResultResolvesOnlyItsOwnCall() {
+        let store = SessionStore()
+        store.apply(activity: toolCall(grep, at: t0, callID: "toolu_a"))
+        store.apply(activity: toolCall(bash("npm test"), at: t0.addingTimeInterval(1), callID: "toolu_b"))
+        store.apply(activity: results(["toolu_a"], at: t0.addingTimeInterval(2)))
+        XCTAssertEqual(store.ordered[0].pendingAction, bash("npm test"))
+    }
+
+    /// A permission prompt must name the command it is about — the one that has not
+    /// run yet, not whichever line came last.
+    func testAPermissionPromptNamesTheNewestUnresolvedCallOfItsTool() {
+        let store = SessionStore()
+        store.apply(activity: toolCall(bash("rm -rf build"), at: t0, callID: "toolu_x"))
+        store.apply(activity: toolCall(bash("ls"), at: t0.addingTimeInterval(1), callID: "toolu_y"))
+        store.apply(hook: hook("Notification", message: "Claude needs your permission to use Bash"),
+                    now: t0.addingTimeInterval(2))
+        XCTAssertEqual(store.ordered[0].pendingAction, bash("ls"))
+        store.apply(activity: results(["toolu_y"], at: t0.addingTimeInterval(3)))
+        XCTAssertEqual(store.ordered[0].pendingAction, bash("rm -rf build"))
+    }
+
+    /// The hook names the tool; a newer call of another tool is not what it asks about.
+    func testTheToolTheHookNamesWinsOverANewerCall() {
+        let store = SessionStore()
+        let edit = PendingAction(tool: "Edit", kind: .edit(file: "api.ts"))
+        store.apply(activity: toolCall(edit, at: t0, callID: "toolu_e"))
+        store.apply(activity: toolCall(bash("npm test"), at: t0.addingTimeInterval(1), callID: "toolu_b"))
+        store.apply(hook: hook("Notification", message: "Claude needs your permission to use Edit"),
+                    now: t0.addingTimeInterval(2))
+        XCTAssertEqual(store.ordered[0].pendingAction, edit)
+    }
+
+    /// A tool whose name is inside another's ("Edit" in "MultiEdit") is not the one
+    /// the hook names.
+    func testTheHooksToolIsMatchedAsAWholeName() {
+        let store = SessionStore()
+        let multi = PendingAction(tool: "MultiEdit", kind: .edit(file: "a.ts"))
+        let edit = PendingAction(tool: "Edit", kind: .edit(file: "b.ts"))
+        store.apply(activity: toolCall(multi, at: t0, callID: "toolu_m"))
+        store.apply(activity: toolCall(edit, at: t0.addingTimeInterval(1), callID: "toolu_e"))
+        store.apply(hook: hook("Notification", message: "Claude needs your permission to use MultiEdit"),
+                    now: t0.addingTimeInterval(2))
+        XCTAssertEqual(store.ordered[0].pendingAction, multi)
+    }
+
+    /// Transcripts without ids behave as before ids were read: every call is kept,
+    /// the newest is shown, and any result clears them all.
+    func testCallsWithoutIdsAreClearedByAnyResult() {
+        let store = SessionStore()
+        store.apply(activity: toolCall(grep, at: t0, callID: nil))
+        store.apply(activity: toolCall(bash("ls"), at: t0.addingTimeInterval(1), callID: nil))
+        XCTAssertEqual(store.ordered[0].pendingActions.count, 2)
+        XCTAssertEqual(store.ordered[0].pendingAction, bash("ls"))
+        store.apply(activity: results([nil], at: t0.addingTimeInterval(2)))
         XCTAssertNil(store.ordered[0].pendingAction)
     }
 
-    func testANewPromptAndStopClearTheActionAndTheMessage() {
-        for event in ["UserPromptSubmit", "Stop"] {
+    /// The same call read twice (a re-read tail) is one entry, not two.
+    func testTheSameCallIdReplacesItsEntry() {
+        let store = SessionStore()
+        store.apply(activity: toolCall(grep, at: t0, callID: "toolu_a"))
+        store.apply(activity: toolCall(grep, at: t0.addingTimeInterval(1), callID: "toolu_a"))
+        XCTAssertEqual(store.ordered[0].pendingActions, [PendingEntry(id: "toolu_a", action: grep)])
+    }
+
+    func testTheEndOfTheTurnClearsEveryCall() {
+        let store = SessionStore()
+        store.apply(activity: toolCall(grep, at: t0, callID: "toolu_a"))
+        store.apply(activity: toolCall(bash("ls"), at: t0.addingTimeInterval(1), callID: "toolu_b"))
+        store.apply(activity: TranscriptActivity(sessionId: "s1", projectPath: "/proj", description: "done",
+                                                 timestamp: t0.addingTimeInterval(2),
+                                                 pendingActions: [.clearAll]))
+        XCTAssertEqual(store.ordered[0].pendingActions, [])
+    }
+
+    func testANewPromptStopAndStartClearTheActionAndTheMessage() {
+        for event in ["UserPromptSubmit", "Stop", "SessionStart"] {
             let store = SessionStore()
-            store.apply(activity: toolCall(PendingAction(kind: .use(tool: "Grep")), at: t0))
+            store.apply(activity: toolCall(grep, at: t0))
             store.apply(hook: hook("Notification", message: "Claude needs your permission to use Grep"),
                         now: t0.addingTimeInterval(1))
             store.apply(hook: hook(event), now: t0.addingTimeInterval(2))
             XCTAssertNil(store.ordered[0].pendingAction, event)
+            XCTAssertEqual(store.ordered[0].pendingActions, [], event)
             XCTAssertNil(store.ordered[0].waitMessage, event)
         }
+    }
+
+    /// `/clear` fires `SessionStart`; a tool call written before it and delivered
+    /// after it belongs to the wiped conversation and must not come back.
+    func testALateCallFromBeforeAClearDoesNotComeBack() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.apply(hook: hook("SessionStart"), now: t0.addingTimeInterval(10))
+        store.apply(activity: toolCall(bash("rm -rf build"), at: t0.addingTimeInterval(5)))
+        XCTAssertNil(store.ordered[0].pendingAction)
+    }
+
+    /// A stale line that changes nothing must not republish the session: every
+    /// write to `sessions` redraws the island.
+    func testAStaleLineThatChangesNothingDoesNotPublish() {
+        let store = SessionStore()
+        startWorking(store, at: t0.addingTimeInterval(10))
+        store.apply(hook: hook("UserPromptSubmit"), now: t0.addingTimeInterval(20))
+        var published = 0
+        let token = store.objectWillChange.sink { published += 1 }
+        store.apply(activity: results(["toolu_a"], at: t0.addingTimeInterval(5)))
+        token.cancel()
+        XCTAssertEqual(published, 0)
     }
 
     /// Back to work (a new transcript line after the user answered): the message

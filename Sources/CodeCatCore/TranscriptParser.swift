@@ -49,14 +49,14 @@ public enum TranscriptParser {
         // not the session's turn — `finalText` becomes the row's handoff summary, and
         // a sidechain's text is not that.
         let finalText = (endsTurn && !isSidechain) ? assistantText(obj) : nil
-        let pendingAction = (isSubagent || isSidechain)
-            ? nil : pendingActionChange(obj, type: type, endsTurn: endsTurn)
+        let pendingActions = (isSubagent || isSidechain)
+            ? [] : pendingActionChanges(obj, type: type, endsTurn: endsTurn)
         return TranscriptActivity(sessionId: sessionId, projectPath: cwd,
                                   description: description, timestamp: ts,
                                   isSubagent: isSubagent, endsTurn: endsTurn,
                                   taskText: taskText(obj, type: type),
                                   stepsUpdates: stepsUpdates, finalText: finalText,
-                                  pendingAction: pendingAction)
+                                  pendingActions: pendingActions)
     }
 
     /// What the user asked for, when this entry is the asking. Only a typed prompt
@@ -113,19 +113,25 @@ public enum TranscriptParser {
         }
     }
 
-    /// The pending tool call: set by the assistant's last `tool_use`, cleared by any
-    /// `tool_result` (the call ran) and by the end of the turn. A typed prompt says
-    /// nothing either way.
-    private static func pendingActionChange(_ obj: [String: Any], type: String,
-                                            endsTurn: Bool) -> PendingActionChange? {
+    /// The pending tool calls, matched by id — read off live transcripts: parallel
+    /// calls are separate `assistant` lines under one message id, one `tool_use`
+    /// block each with its `id`, and each result is a `tool_result` block on a `user`
+    /// line carrying `tool_use_id`. A call is set by the line's last `tool_use`,
+    /// resolved by the result naming it, and all are cleared by the end of the turn.
+    /// A typed prompt says nothing either way.
+    private static func pendingActionChanges(_ obj: [String: Any], type: String,
+                                             endsTurn: Bool) -> [PendingActionChange] {
         let content = blocks(obj)
         if type == "assistant" {
-            if endsTurn { return .clear }
+            if endsTurn { return [.clearAll] }
             guard let tool = content.last(where: { $0["type"] as? String == "tool_use" }),
-                  let name = tool["name"] as? String else { return nil }
-            return .set(PendingAction.from(tool: name, input: tool["input"] as? [String: Any] ?? [:]))
+                  let name = tool["name"] as? String else { return [] }
+            return [.set(id: tool["id"] as? String,
+                         PendingAction.from(tool: name, input: tool["input"] as? [String: Any] ?? [:]))]
         }
-        return content.contains(where: { $0["type"] as? String == "tool_result" }) ? .clear : nil
+        return content
+            .filter { $0["type"] as? String == "tool_result" }
+            .map { .resolve(id: $0["tool_use_id"] as? String) }
     }
 
     /// The message's content blocks, or none.

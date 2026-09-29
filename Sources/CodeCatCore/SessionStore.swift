@@ -197,7 +197,10 @@ public final class SessionStore: ObservableObject {
                 s.taskText = nil
                 s.steps = []
                 s.handoff = nil
-                s.pendingAction = nil
+                s.pendingActions = []
+                // Ordered like the other clears: a call line written before `/clear`
+                // and delivered after it belongs to the wiped conversation.
+                s.pendingActionAt = now
                 s.waitMessage = nil
                 // Not `.working`: the event says "a session appeared", not "an agent
                 // started working" — see `SessionStatus.idle`. Work begins when the
@@ -224,7 +227,7 @@ public final class SessionStore: ObservableObject {
                 }
                 // The next turn has begun; the old result is stale.
                 s.handoff = nil
-                s.pendingAction = nil
+                s.pendingActions = []
                 s.pendingActionAt = now
                 s.waitMessage = nil
             }
@@ -247,7 +250,7 @@ public final class SessionStore: ObservableObject {
             upsert(event: event, now: now) { s in
                 s.status = .done
                 s.activityDescription = L10n.t("activity.done", "finished the task")
-                s.pendingAction = nil
+                s.pendingActions = []
                 s.pendingActionAt = now
                 s.waitMessage = nil
             }
@@ -267,19 +270,21 @@ public final class SessionStore: ObservableObject {
             id: activity.sessionId, projectPath: activity.projectPath,
             activityDescription: activity.description, fallbackStartedAt: activity.timestamp,
             lastActivity: activity.timestamp)
-        // The pending action has its own ordering (see `Session.pendingActionAt`) and is
-        // applied before the staleness check below, which compares against a hook's
-        // arrival time.
-        if let change = activity.pendingAction, s.status != .crashed,
+        // The pending calls have their own ordering (see `Session.pendingActionAt`) and
+        // are applied before the staleness check below, which compares against a
+        // hook's arrival time.
+        let pendingBefore = (s.pendingActions, s.pendingActionAt)
+        if !activity.pendingActions.isEmpty, s.status != .crashed,
            activity.timestamp >= (s.pendingActionAt ?? .distantPast) {
-            switch change {
-            case .set(let action): s.pendingAction = action
-            case .clear: s.pendingAction = nil
-            }
+            for change in activity.pendingActions { s.applyPending(change) }
             s.pendingActionAt = activity.timestamp
         }
         guard activity.timestamp > s.lastActivity || isNew else {
-            if !isNew, activity.pendingAction != nil { sessions[activity.sessionId] = s }
+            // Every write to `sessions` publishes and redraws the island; a stale line
+            // is written back only for what it changed.
+            if !isNew, (s.pendingActions, s.pendingActionAt) != pendingBefore {
+                sessions[activity.sessionId] = s
+            }
             return
         }
         guard s.status != .crashed else { return }
@@ -312,7 +317,7 @@ public final class SessionStore: ObservableObject {
             }
             // The turn is over: there is nothing left pending, and any wait message
             // described a question that is now moot.
-            s.pendingAction = nil
+            s.pendingActions = []
             s.waitMessage = nil
             sessions[activity.sessionId] = s
             return
@@ -601,6 +606,25 @@ private func nonEmpty(_ s: String?) -> String? {
 }
 
 private extension Session {
+    /// A call replaces an entry with the same id (the same line read twice) and
+    /// otherwise joins the end; a result removes its own call, or — without an id to
+    /// match — every call.
+    mutating func applyPending(_ change: PendingActionChange) {
+        switch change {
+        case .set(let id, let action):
+            let entry = PendingEntry(id: id, action: action)
+            if let id, let index = pendingActions.firstIndex(where: { $0.id == id }) {
+                pendingActions[index] = entry
+            } else {
+                pendingActions.append(entry)
+            }
+        case .resolve(let id?):
+            pendingActions.removeAll { $0.id == id }
+        case .resolve(nil), .clearAll:
+            pendingActions = []
+        }
+    }
+
     mutating func apply(_ update: StepsUpdate) {
         switch update {
         case .replaceAll(let list):
