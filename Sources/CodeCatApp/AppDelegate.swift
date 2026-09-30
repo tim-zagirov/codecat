@@ -24,9 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--demo") {
             let arguments = CommandLine.arguments
             appState.demoLidOn = arguments.contains("--demo-lid")
-            appState.startDemo(pin: Self.demoPin(),
+            let peek = arguments.first(where: { $0.hasPrefix("--demo-peek=") })
+                .flatMap { DemoFeed.PeekDemo(rawValue: String($0.dropFirst("--demo-peek=".count))) }
+            // A peek is a change, so it is played on a scene: the working phase unless
+            // `--demo-phase=` names another.
+            let pin = Self.demoPin() ?? (peek == nil ? nil : .phase(.working))
+            appState.startDemo(pin: pin,
                                hooksInstalled: !arguments.contains("--demo-phase=firstrun"),
-                               unroutable: arguments.contains("--demo-noroute") ? [DemoFeed.sessionIDs[1]] : [])
+                               unroutable: arguments.contains("--demo-noroute") ? [DemoFeed.sessionIDs[1]] : [],
+                               peek: peek)
             // `--demo-expanded` (and the older `--demo-open-menu`) open the island or
             // the floating panel for a capture: the app is hidden from every
             // screen-control tool, so there is no other way to open them.
@@ -100,9 +106,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// `--demo-phase=idle|working|waiting|done|problem|one-working|one-waiting|`
     /// `one-done|many|showcase|empty|firstrun`, for a capture that must not race the
-    /// four-second loop. An unrecognised name means "loop", not "crash": this flag
-    /// exists for a script, and a typo in it should cost a retake, not a launch
-    /// failure.
+    /// four-second loop. `--demo-peek=waiting|crashed|done|merged|away` pins `working`
+    /// when no phase is named, and plays its peek on it 1.5 s after launch. An
+    /// unrecognised name means "loop", not "crash": this flag exists for a script,
+    /// and a typo in it should cost a retake, not a launch failure.
     private static func demoPin() -> DemoFeed.Pin? {
         guard let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--demo-phase=") })
         else { return nil }

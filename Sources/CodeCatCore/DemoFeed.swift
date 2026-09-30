@@ -286,4 +286,48 @@ public enum DemoFeed {
             description: L10n.f("activity.editing.file", "editing %@", "IslandLayout.swift"),
             timestamp: later.addingTimeInterval(1), isSubagent: false, endsTurn: false))
     }
+
+    /// `--demo-peek=`: the transition each peek reacts to, played on top of the working
+    /// phase. Figma 03 draws one of each.
+    public enum PeekDemo: String, CaseIterable, Sendable {
+        case waiting, crashed, done, merged, away
+    }
+
+    /// The events behind `demo`'s peek, for a store already in `.phase(.working)`.
+    /// `away` makes the same kind of change as `merged` and `done` together; the app
+    /// plays it with the screen marked locked, so it comes back as the summary.
+    public static func apply(_ demo: PeekDemo, to store: SessionStore, now: Date) {
+        func hook(_ name: String, _ index: Int, message: String? = nil) {
+            store.apply(hook: HookEvent(hookEventName: name, sessionId: sessionIDs[index], cwd: projects[index],
+                                        message: message), now: now)
+        }
+        let permission = "Claude needs your permission to use Bash"
+        switch demo {
+        case .waiting:
+            // The transcript first, then the hook: a line written after the wait would
+            // put the session back to work.
+            store.apply(activity: TranscriptActivity(
+                sessionId: sessionIDs[0], projectPath: projects[0], description: L10n.t("activity.running", "running a command"),
+                timestamp: now, pendingActions: [.set(id: "toolu_demo", PendingAction(tool: "Bash", kind: .run(command: "npm test")))]))
+            hook("Notification", 0, message: permission)
+        case .crashed:
+            // `applyProblem`'s rule: the first session speaks, the second has been
+            // silent past the 120 s threshold with no process left.
+            let later = now.addingTimeInterval(121)
+            store.apply(hook: HookEvent(hookEventName: "UserPromptSubmit", sessionId: sessionIDs[0], cwd: projects[0],
+                                        message: nil), now: later)
+            store.reconcile(claudeProcessCount: 0, now: later, isAgentAlive: { _ in false })
+        case .done:
+            hook("Stop", 0)
+            store.apply(activity: TranscriptActivity(
+                sessionId: sessionIDs[0], projectPath: projects[0], description: L10n.t("activity.done", "finished the task"),
+                timestamp: now.addingTimeInterval(0.1), endsTurn: true, finalText: handoffText))
+        case .merged:
+            hook("Notification", 0, message: permission)
+            hook("Notification", 1, message: "Claude is asking a question")
+        case .away:
+            hook("Stop", 0)
+            hook("Notification", 1, message: permission)
+        }
+    }
 }

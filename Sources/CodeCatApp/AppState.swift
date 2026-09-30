@@ -375,7 +375,7 @@ final class AppState: ObservableObject {
     /// - Parameter unroutable: session ids to draw with no route, for the "no
     ///   route" capture.
     func startDemo(interval: TimeInterval = 4, pin: DemoFeed.Pin? = nil,
-                   hooksInstalled: Bool = true, unroutable: Set<String> = []) {
+                   hooksInstalled: Bool = true, unroutable: Set<String> = [], peek: DemoFeed.PeekDemo? = nil) {
         log.write("demo mode — no socket, no watcher, no power assertion, no route cache"
             + (pin.map { ", pinned to \($0)" } ?? ""))
         isDemo = true
@@ -404,6 +404,15 @@ final class AppState: ObservableObject {
             }
             advance()
             timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in advance() }
+        }
+        if let peek {
+            // After the island has been built on the pinned scene: the peek is the
+            // change, and the controller's first session list is its baseline.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self else { return }
+                DemoFeed.apply(peek, to: self.store, now: Date())
+                self.refresh()
+            }
         }
         store.objectWillChange
             .receive(on: DispatchQueue.main)

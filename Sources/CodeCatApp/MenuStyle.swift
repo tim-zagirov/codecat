@@ -132,6 +132,8 @@ enum IslandPalette {
 
     /// Project names.
     static let nameFont = Font.system(size: 15, weight: .semibold)
+    /// A peek's project name (Figma 03): one line, so smaller than a card's 15.
+    static let peekTitleFont = Font.system(size: 13, weight: .semibold)
     /// Task, reason, summary.
     static let bodyFont = Font.system(size: 13)
     /// Code tokens inside a line of body text.

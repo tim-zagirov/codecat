@@ -9,6 +9,8 @@ import CodeCatCore
 final class IslandModel: ObservableObject {
     @Published var presentation: IslandPresentation = .compact
     @Published var metrics = IslandMetrics.zero
+    /// The peek's countdown, for its hairline; nil while no peek is up.
+    @Published var peekHold: IslandPresenter.PeekHold?
     /// The open body's height as the view laid it out; the controller's hover and
     /// click outline for the open island.
     var onExpandedHeight: (CGFloat) -> Void = { _ in }
@@ -18,6 +20,8 @@ final class IslandModel: ObservableObject {
     var onSettings: () -> Void = {}
     /// Connect… on the first-run card was pressed.
     var onConnect: () -> Void = {}
+    /// Show on a merged or away peek was pressed.
+    var onShow: () -> Void = {}
 }
 
 /// The notched screen's numbers, as the view needs them.

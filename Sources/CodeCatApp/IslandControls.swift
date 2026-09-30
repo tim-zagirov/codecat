@@ -3,10 +3,14 @@ import CodeCatCore
 
 /// A 22 pt pill button — the island's only button shape. `Open ↗` in a waiting tone
 /// is the one coloured button on the island: it is the one that needs you (§5.4).
+/// The peek's pill is 24 pt tall with 12 pt padding (Figma 03, decision 11): the peek
+/// has one line, and a bigger target reads better at a glance.
 struct PillButton: View {
     let title: String
     var fill: Color = IslandPalette.pill
     var textColor: Color = IslandPalette.primary
+    var height: CGFloat = 22
+    var horizontalPadding: CGFloat = 10
     let action: () -> Void
 
     var body: some View {
@@ -14,8 +18,8 @@ struct PillButton: View {
             Text(title)
                 .font(IslandPalette.numberFont)
                 .foregroundStyle(textColor)
-                .padding(.horizontal, 10)
-                .frame(height: 22)
+                .padding(.horizontal, horizontalPadding)
+                .frame(height: height)
                 .background(Capsule().fill(fill))
         }
         .buttonStyle(.plain)

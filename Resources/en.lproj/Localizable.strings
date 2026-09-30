@@ -187,6 +187,8 @@
 "peek.away.done" = "%d done";
 "peek.away.waiting" = "%d waiting";
 "peek.away.crashed" = "%d crashed";
+/* The pill on a merged or away peek: opens the list. */
+"peek.show" = "Show";
 
 /* MARK: - "While you were away" entries */
 

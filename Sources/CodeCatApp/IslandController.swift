@@ -10,10 +10,12 @@ import CodeCatCore
 /// nothing: control stays in the status-bar icon, from which the floating cat can
 /// be brought back.
 ///
-/// What the island does — inhale, open, close — is decided by `IslandPresenter` in
-/// CodeCatCore, which is pure and tested. This class feeds it the pointer and the
-/// clock and carries out what it decided: the window's size, where hover and clicks
-/// count, and the `IslandModel` the view draws from.
+/// What the island does — inhale, open, close, peek — is decided by `IslandFlow` in
+/// CodeCatCore, which is pure and tested and keeps `IslandPresenter` and
+/// `PeekScheduler` together, so the island and the floating cat peek by one protocol.
+/// This class feeds it the pointer, the session list and the clock and carries out
+/// what it decided: the window's size, where hover and clicks count, and the
+/// `IslandModel` the view draws from.
 final class IslandController: NSObject, MascotPresenting {
 
     /// The menu bar sits at level 24 and other apps' status icons at 25; open system
@@ -27,7 +29,7 @@ final class IslandController: NSObject, MascotPresenting {
     private let pointer = PointerTracker()
     private var panel: OverlayPanel?
     private var hosting: IslandHostingView?
-    private var presenter: IslandPresenter
+    private var flow: IslandFlow
     private var geometry: Geometry?
     /// The last requested visibility; `screensChanged()` re-applies it.
     private var isVisible = false
@@ -37,10 +39,11 @@ final class IslandController: NSObject, MascotPresenting {
     /// never lands in a large invisible window.
     private var canvasIsOpen = false
     private var shrink: DispatchWorkItem?
-    /// One timer, at the presenter's next deadline (dwell, close delay), re-armed
-    /// after every event: `tick` handles one deadline per call (handover contract 4).
+    /// One timer, at the flow's next deadline (dwell, close delay, peek hold, the gap
+    /// before a queued peek), re-armed after every event: `tick` handles one deadline
+    /// per call (handover contract 4).
     private var deadlineTimer: Timer?
-    /// What the presenter was last told about the pointer. Changes are fed only while
+    /// What the flow was last told about the pointer. Changes are fed only while
     /// no mouse button is down, so a drag across the notch never opens the island and
     /// a chip dragged out of it does not close it mid-drag (contract 5); a change seen
     /// with a button down waits for the button to come up.
@@ -61,16 +64,25 @@ final class IslandController: NSObject, MascotPresenting {
 
     init(appState: AppState) {
         self.appState = appState
-        presenter = IslandPresenter(hoverDelay: appState.hoverDelay)
+        flow = IslandFlow(hoverDelay: appState.hoverDelay, settings: appState.peekSettings,
+                          sessions: Array(appState.store.sessions.values), now: Date())
         super.init()
         model.onExpandedHeight = { [weak self] in self?.expandedHeightChanged($0) }
         model.onJump = { [weak self] in self?.jumped() }
         model.onSettings = { [weak self] in self?.openSettings() }
         model.onConnect = { [weak self] in self?.connect() }
+        model.onShow = { [weak self] in self?.showList() }
 
         appState.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.handleStateChange() }
+            .store(in: &cancellables)
+        // Straight from the store's `$sessions` value, never through
+        // `objectWillChange`: `@Published` sends that before the new value is stored,
+        // and a peek is a diff between consecutive snapshots (Part 1 handover,
+        // contract 1).
+        appState.store.$sessions
+            .sink { [weak self] sessions in self?.sessionsChanged(Array(sessions.values)) }
             .store(in: &cancellables)
         // The built-in display can be disconnected and reconnected — the notch
         // appears and disappears with it, and so does the room for the island.
@@ -105,7 +117,8 @@ final class IslandController: NSObject, MascotPresenting {
             return
         }
         self.geometry = geometry
-        if !holdsInhale { presenter.hoverDelay = appState.hoverDelay }
+        if !holdsInhale { flow.hoverDelay = appState.hoverDelay }
+        flow.settings = appState.peekSettings
         let metrics = IslandMetrics(
             notchWidth: geometry.notch.width,
             wingWidth: IslandLayout.wingWidth,
@@ -125,7 +138,18 @@ final class IslandController: NSObject, MascotPresenting {
 
     /// See `MascotPresenting.openMenuForCapture()`.
     func openMenuForCapture() {
-        presenter.open(now: Date())
+        flow.open(now: Date())
+        presenterChanged()
+    }
+
+    private func sessionsChanged(_ sessions: [Session]) {
+        flow.sessionsChanged(sessions, now: Date())
+        presenterChanged()
+    }
+
+    /// Show on a merged or away peek: the list, now, without a dwell (spec §6.2).
+    private func showList() {
+        flow.open(now: Date())
         presenterChanged()
     }
 
@@ -157,9 +181,9 @@ final class IslandController: NSObject, MascotPresenting {
         }
         toldInside = inside
         if inside {
-            presenter.pointerEntered(now: Date())
+            flow.pointerEntered(now: Date())
         } else {
-            presenter.pointerLeft(now: Date())
+            flow.pointerLeft(now: Date())
         }
         presenterChanged()
     }
@@ -193,7 +217,7 @@ final class IslandController: NSObject, MascotPresenting {
 
     /// Where the cursor really is, fed as if it had moved there — after the window
     /// changed size under a still cursor, or a button came up. Without it the
-    /// presenter could go on believing the pointer is inside a shape that shrank away
+    /// flow could go on believing the pointer is inside a shape that shrank away
     /// from it, and the island would never inhale again.
     private func resyncPointer() {
         reconcile(inside: cursorIsOnSilhouette())
@@ -222,22 +246,27 @@ final class IslandController: NSObject, MascotPresenting {
     /// the drag to its mouse-up, and `mouseReleased` settles it afterwards.
     private func updateClickTarget() {
         guard let panel, NSEvent.pressedMouseButtons == 0 else { return }
-        let ignores = !(presenter.presentation.isOpen && cursorIsOnSilhouette())
+        let ignores = !(flow.presentation.isOpen && cursorIsOnSilhouette())
         if panel.ignoresMouseEvents != ignores { panel.ignoresMouseEvents = ignores }
     }
 
     // MARK: - Presenter
 
-    /// Carries out whatever the presenter decided. Opening sizes the window before
-    /// the view hears of it, so the spring starts in a window that already fits;
-    /// closing keeps the window open until the close spring has settled.
+    /// Carries out whatever the flow decided. Opening sizes the window before the
+    /// view hears of it, so the spring starts in a window that already fits; closing
+    /// keeps the window open until the close spring has settled.
     private func presenterChanged() {
         let old = model.presentation
-        let new = presenter.presentation
+        let new = flow.presentation
         if new.isOpen, !old.isOpen { beginOpening() }
         if !new.isOpen, old.isOpen { beginClosing() }
         if model.presentation != new { model.presentation = new }
+        if model.peekHold != flow.peekHold { model.peekHold = flow.peekHold }
         updateSilhouette()
+        // Tim, 2026-09-30: a peek that grows under a resting cursor counts as hover.
+        // The tracking area reports nothing for a cursor that did not move, so the
+        // cursor is read once the peek's outline exists (Part 2 handover, contract 7).
+        if case .peek = new, !old.isOpen { resyncPointer() }
         armTimer()
     }
 
@@ -275,7 +304,7 @@ final class IslandController: NSObject, MascotPresenting {
     private func armTimer() {
         deadlineTimer?.invalidate()
         deadlineTimer = nil
-        guard let deadline = presenter.nextDeadline else { return }
+        guard let deadline = flow.nextDeadline else { return }
         let timer = Timer(fire: max(deadline, Date()), interval: 0, repeats: false) { [weak self] _ in
             self?.deadlineReached()
         }
@@ -287,24 +316,24 @@ final class IslandController: NSObject, MascotPresenting {
         // A button pressed during the dwell — a drag starting at the island's edge, a
         // click on the menu title under a wing — must not end in an open island. It
         // counts as the pointer leaving; the mouse-up feeds it back in.
-        if presenter.presentation == .inhaled, NSEvent.pressedMouseButtons != 0 {
+        if flow.presentation == .inhaled, NSEvent.pressedMouseButtons != 0 {
             toldInside = false
-            presenter.pointerLeft(now: Date())
+            flow.pointerLeft(now: Date())
             waitForMouseUp()
             presenterChanged()
             return
         }
-        presenter.tick(now: Date())
+        flow.tick(now: Date())
         presenterChanged()
     }
 
     private func jumped() {
-        presenter.jumped()
+        flow.jumped(now: Date())
         presenterChanged()
     }
 
     private func escape() {
-        presenter.escape()
+        flow.escape(now: Date())
         presenterChanged()
     }
 
@@ -326,9 +355,9 @@ final class IslandController: NSObject, MascotPresenting {
 
     private func holdInhaleForCapture() {
         holdsInhale = true
-        presenter.hoverDelay = 3600
+        flow.hoverDelay = 3600
         toldInside = true
-        presenter.pointerEntered(now: Date())
+        flow.pointerEntered(now: Date())
         presenterChanged()
     }
 
@@ -337,14 +366,15 @@ final class IslandController: NSObject, MascotPresenting {
     private func closeImmediately() {
         giveUpKeyboard()
         if toldInside {
-            presenter.pointerLeft(now: Date())
+            flow.pointerLeft(now: Date())
             toldInside = false
         }
-        presenter.escape()
+        flow.escape(now: Date())
         shrink?.cancel()
         shrink = nil
         canvasIsOpen = false
-        if model.presentation != presenter.presentation { model.presentation = presenter.presentation }
+        if model.presentation != flow.presentation { model.presentation = flow.presentation }
+        if model.peekHold != flow.peekHold { model.peekHold = flow.peekHold }
         armTimer()
     }
 
@@ -382,7 +412,7 @@ final class IslandController: NSObject, MascotPresenting {
     /// against the window, and the closed island takes no clicks at all.
     private func updateSilhouette() {
         guard let panel, let hosting, let geometry else { return }
-        let presentation = presenter.presentation
+        let presentation = flow.presentation
         // Until the view has measured the list, the open outline is at least the
         // inhaled one, so the cursor that opened the island is still inside it.
         let openHeight = max(expandedHeight, geometry.island.height + IslandLayout.inhaleGrowth.height)

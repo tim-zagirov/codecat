@@ -75,17 +75,49 @@ struct IslandView: View {
     /// showed the rows cut off at ≈ 375 × 200 pt inside the full-size faded outline.
     /// Only the clip loses the animation: `ContentReveal` sets its own, so the list
     /// still cross-fades.
+    ///
+    /// During a peek the list stays mounted under it, invisible and not hit-testable,
+    /// so it is measured: a peek that becomes the list springs straight to the list's
+    /// height, never to a guess that is corrected a frame later (spec §6.2, "the peek
+    /// is its first card's preview, so no content jumps").
     private func content(canvas: CGSize) -> some View {
         let width = IslandLayout.expandedWidth
-        return IslandExpandedView(appState: appState, visible: contentVisible,
-                                  maxHeight: max(0, metrics.expandedMaxHeight - IslandLayout.headerHeight
-                                                 - IslandLayout.listBottomPadding),
-                                  onJump: model.onJump, onConnect: model.onConnect)
-            .padding(.leading, (canvas.width - width) / 2)
-            .padding(.top, IslandLayout.headerHeight)
-            .frame(width: canvas.width, height: canvas.height, alignment: .topLeading)
-            .clipShape(IslandShape(bodyShape: bodyShape))
-            .transaction { if reduced { $0.animation = nil } }
+        let peek = peekItem
+        return ZStack(alignment: .topLeading) {
+            IslandExpandedView(appState: appState, visible: contentVisible && peek == nil,
+                               maxHeight: max(0, metrics.expandedMaxHeight - IslandLayout.headerHeight
+                                              - IslandLayout.listBottomPadding),
+                               onJump: model.onJump, onConnect: model.onConnect)
+                .allowsHitTesting(peek == nil)
+            if let peek, let content = PeekContent.make(for: peek, sessions: appState.store.ordered,
+                                                        showsTaskText: appState.showsTaskText) {
+                PeekView(content: content, hold: model.peekHold,
+                         onJump: { jump(to: content.sessionID) }, onShow: model.onShow)
+                    .modifier(ContentReveal(visible: contentVisible))
+                    .transition(.opacity)
+            }
+        }
+        .padding(.leading, (canvas.width - width) / 2)
+        .padding(.top, IslandLayout.headerHeight)
+        .frame(width: canvas.width, height: canvas.height, alignment: .topLeading)
+        .clipShape(IslandShape(bodyShape: bodyShape))
+        .transaction { if reduced { $0.animation = nil } }
+    }
+
+    /// Read from `shown`, not `model.presentation`: when a peek ends the presentation
+    /// is compact one render before `presentationChanged` hides the content, and in
+    /// that render the header's dots and "•••" flashed in over the closing peek while
+    /// its line vanished without a fade (captured: `t6-peek-close`, frame 13). `shown`
+    /// stays on the peek until its line has faded out.
+    private var peekItem: PeekItem? {
+        if case .peek(let item) = shown { return item }
+        return nil
+    }
+
+    private func jump(to id: String?) {
+        guard let id, let session = appState.store.sessions[id] else { return }
+        appState.jump(to: session)
+        model.onJump()
     }
 
     /// The cat in the left wing and the live data in the right, both centred on their
@@ -109,12 +141,14 @@ struct IslandView: View {
                 .allowsHitTesting(false)
             IslandWingView(content: RightWing.content(for: appState.store.ordered, aggregate: tone, now: Date()))
                 .frame(width: metrics.wingWidth, height: metrics.bandHeight)
-                // Open, the wing's live data gives way to the header's dots (§5.3).
-                .opacity(contentVisible ? 0 : 1)
-                .animation(Motion.contentOut, value: contentVisible)
+                // Open, the wing's live data gives way to the header's dots (§5.3);
+                // during a peek the compact band stays (§6.2: "cat and dots do not
+                // move").
+                .opacity(contentVisible && peekItem == nil ? 0 : 1)
+                .animation(Motion.contentOut, value: contentVisible && peekItem == nil)
                 .position(x: centre + side, y: y)
                 .allowsHitTesting(false)
-            if contentMounted {
+            if contentMounted && peekItem == nil {
                 // The dots form of the wing (`RightWing.header`, kept clear of the
                 // notch) and Settings, 20 pt in from the body's right edge (Figma 04,
                 // "Header right").
@@ -140,9 +174,9 @@ struct IslandView: View {
         switch (old.isOpen, new.isOpen) {
         case (false, true):
             contentMounted = true
-            // The height is known from the last time the list was open; otherwise it
-            // arrives with the first layout pass (`listMeasured`).
-            if listHeight > 0 { beginOpen() }
+            // A peek's height is fixed; the list's is known from the last time it was
+            // open, or arrives with the first layout pass (`listMeasured`).
+            if case .peek = new { beginOpen() } else if listHeight > 0 { beginOpen() }
         case (true, false):
             contentVisible = false
             closing = Task { @MainActor in
@@ -153,6 +187,10 @@ struct IslandView: View {
                 guard !Task.isCancelled else { return }
                 contentMounted = false
             }
+        case (true, true):
+            // A peek turning into the list, or one peek replacing another: the shape
+            // springs on the open spring, never back through the inhale.
+            withAnimation(Motion.open(reduced: reduced)) { shown = new }
         default:
             // Compact ↔ inhaled. A close interrupted by the cursor coming back takes
             // the list down at once: invisible rows must not answer hover.

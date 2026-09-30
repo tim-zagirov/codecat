@@ -244,5 +244,47 @@ final class DemoFeedTests: XCTestCase {
         XCTAssertEqual(store.aggregate, .waiting(1))
         XCTAssertEqual(store.sessions[DemoFeed.sessionIDs[0]]?.taskText, DemoFeed.tasks[0])
     }
-}
 
+    // MARK: - Peeks (Part 3)
+
+    /// A peek needs a change, not a state: each scene is played on top of the working
+    /// phase, the way the app plays it 1.5 s after launch.
+    private func peekScene(_ demo: DemoFeed.PeekDemo) -> SessionStore {
+        let store = SessionStore()
+        let now = Date()
+        DemoFeed.apply(.phase(.working), to: store, now: now)
+        DemoFeed.apply(demo, to: store, now: now.addingTimeInterval(1.5))
+        return store
+    }
+
+    private func status(_ store: SessionStore, _ index: Int) -> SessionStatus? {
+        store.sessions[DemoFeed.sessionIDs[index]]?.status
+    }
+
+    func testTheWaitingPeekAsksToRunACommand() {
+        let store = peekScene(.waiting)
+        XCTAssertEqual(status(store, 0), .waitingForYou(.permission))
+        XCTAssertEqual(store.sessions[DemoFeed.sessionIDs[0]]?.pendingAction?.kind, .run(command: "npm test"))
+    }
+
+    func testTheCrashedPeekLosesOneSession() {
+        let store = peekScene(.crashed)
+        XCTAssertEqual([status(store, 0), status(store, 1), status(store, 2)], [.working, .crashed, .idle])
+    }
+
+    func testTheDonePeekHandsOverTheLinks() {
+        let store = peekScene(.done)
+        XCTAssertEqual(status(store, 0), .done)
+        XCTAssertEqual(store.sessions[DemoFeed.sessionIDs[0]]?.handoff?.links.count, 3)
+    }
+
+    func testTheMergedPeekIsTwoWaitsAtOnce() {
+        let store = peekScene(.merged)
+        XCTAssertEqual([status(store, 0), status(store, 1)], [.waitingForYou(.permission), .waitingForYou(.question)])
+    }
+
+    func testTheAwayScenePairsAFinishedTurnWithAWait() {
+        let store = peekScene(.away)
+        XCTAssertEqual([status(store, 0), status(store, 1)], [.done, .waitingForYou(.permission)])
+    }
+}
