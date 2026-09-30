@@ -23,9 +23,13 @@ public protocol SleepAssertionHolding: AnyObject {
 /// disabled, or while below the battery floor).
 public final class PowerManager {
     private let assertion: SleepAssertionHolding
-    private let gracePeriod: TimeInterval
+    public let gracePeriod: TimeInterval
     private let batteryFloor: Int
     private let batteryLevel: () -> Int?
+
+    /// The battery level below which the assertion is never held — the Power pane
+    /// states it rather than a copy of the number.
+    public var batteryFloorPercent: Int { batteryFloor }
 
     private var pendingReleaseAt: Date?
     private var anyWorking = false

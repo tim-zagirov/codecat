@@ -48,6 +48,8 @@
 "settings.window.title" = "CodeCat Settings";
 "settings.pane.general" = "General";
 "settings.pane.alerts" = "Alerts";
+"settings.pane.power" = "Power";
+"settings.pane.claude" = "Claude Code";
 "settings.show.as" = "Show CodeCat as";
 "settings.show.as.help" = "The island needs a built-in display with a notch; elsewhere the floating cat takes over.";
 "settings.section.island" = "Island";
@@ -65,6 +67,47 @@
 "setting.peek.done.help" = "A softer 1.5 s peek with the first line of the result.";
 "settings.section.sound" = "Sound";
 "settings.alerts.footer" = "CodeCat never sends a system notification on top of a peek.";
+
+/* MARK: - Settings window: Power pane */
+
+"settings.power.awake.one" = "Awake — 1 agent working";
+/* %d is the number of agents working (2 or more; 1 has its own key above). */
+"settings.power.awake" = "Awake — %d agents working";
+"settings.power.sleep.now" = "Can sleep now";
+/* %d is minutes until sleep is allowed again. */
+"settings.power.sleep" = "Can sleep in %d min";
+"settings.power.allowed" = "Sleep is allowed";
+"settings.power.off" = "CodeCat does not keep the Mac awake.";
+/* %d is the grace period in minutes. */
+"settings.power.grace" = "Sleep comes back %d min after the last one stops.";
+"settings.power.floor" = "Stop below";
+"settings.power.floor.help" = "Never holds the Mac awake on a nearly empty battery.";
+/* %d is the battery floor percentage. */
+"settings.power.floor.value" = "%d %% battery";
+"settings.section.lid" = "Closed lid";
+"settings.power.lid.installed" = "Installed: a sudoers rule for two pmset commands and a watchdog that restores sleep if CodeCat ever quits.";
+"settings.power.lid.footer" = "To remove the helper, run scripts/uninstall-lid-mode.sh.";
+
+/* MARK: - Settings window: Claude Code pane */
+
+"settings.claude.connected" = "Connected";
+"settings.claude.disconnected" = "Not connected";
+"settings.claude.disconnected.detail" = "CodeCat learns about sessions late — from their transcripts.";
+"settings.claude.events" = "What CodeCat listens to";
+"settings.claude.events.footer" = "Merged next to your own hooks; nothing else in the file is touched.";
+"settings.claude.show.file" = "Show settings.json";
+"settings.claude.remove" = "Remove hooks…";
+"settings.section.diagnostics" = "Diagnostics";
+"settings.claude.open.log" = "Open log";
+"settings.claude.log" = "Log";
+/* %d is the hook count, %@ the settings.json path. */
+"settings.claude.hooks" = "%d hooks in %@";
+"settings.claude.no.events" = "no events yet";
+/* %@ is an age like "4 s" or "3 min". */
+"settings.claude.last" = "last event %@ ago";
+"settings.claude.age.seconds" = "%d s";
+"settings.claude.age.minutes" = "%d min";
+"settings.claude.age.hours" = "%d h";
 
 /* MARK: - Session list */
 

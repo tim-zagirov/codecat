@@ -44,15 +44,18 @@ final class LocalizationCatalogTests: XCTestCase {
 
     /// The catalog is loaded by `String(format:)` at runtime, so a stray `%` that
     /// is not a real placeholder formats garbage rather than failing to build.
-    /// Every specifier has to be one the call sites actually pass.
+    /// Every specifier has to be one the call sites actually pass. Stripping every
+    /// recognised token and checking what is left, rather than comparing counts,
+    /// is what makes this correct for `%%` (a literal percent sign, escaped as a
+    /// two-character token that is still only one recognised match — a count
+    /// comparison flags it as unsupported even though it is exactly what
+    /// `String(format:)` expects).
     func testEveryFormatSpecifierIsOneTheCodeCanSupply() throws {
         let allowed = try NSRegularExpression(pattern: "%(?:(?:\\d+\\$)?[@d]|%)")
-        let anyPercent = try NSRegularExpression(pattern: "%")
         for (key, text) in try catalog() {
             let range = NSRange(text.startIndex..., in: text)
-            let valid = allowed.numberOfMatches(in: text, range: range)
-            let total = anyPercent.numberOfMatches(in: text, range: range)
-            XCTAssertEqual(valid, total, "\(key): contains a % that is not a supported placeholder")
+            let stripped = allowed.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+            XCTAssertFalse(stripped.contains("%"), "\(key): contains a % that is not a supported placeholder")
         }
     }
 

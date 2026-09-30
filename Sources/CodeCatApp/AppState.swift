@@ -52,6 +52,10 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(showMascot, forKey: "showMascot") }
     }
     @Published var hooksInstalled = false
+    /// When the last hook event arrived: the Claude Code pane's "last event 4 s ago",
+    /// the one sign that the hooks really reach the app. Not published — every event
+    /// ends in `refresh()` anyway, and the pane redraws the age once a second.
+    private(set) var lastHookEventAt: Date?
     /// Running the scripted `--demo` feed instead of real sessions (`startDemo`).
     private(set) var isDemo = false
     /// Demo sessions drawn as having no route, for the "no route" capture.
@@ -318,6 +322,7 @@ final class AppState: ObservableObject {
             // the outside both failures look identical — the cat simply does not move.
             self.log.write("event \(event.hookEventName) session=\(event.sessionId.prefix(8)) "
                 + "cwd=\(event.cwd ?? "—") tty=\(event.tty ?? "—")")
+            self.lastHookEventAt = Date()
             self.store.apply(hook: event, now: Date())
             self.refresh()
         }
@@ -391,6 +396,7 @@ final class AppState: ObservableObject {
             + (pin.map { ", pinned to \($0)" } ?? ""))
         isDemo = true
         self.hooksInstalled = hooksInstalled
+        lastHookEventAt = Date().addingTimeInterval(-4)
         demoUnroutable = unroutable
         // The demo must leave no trace in the user's state — see
         // `SessionStore.detachRouteCache`.
@@ -501,6 +507,10 @@ final class AppState: ObservableObject {
     }
 
     func installHooksIfNeeded() {
+        // Each dialog below activates CodeCat; when the flow ends, the user is put back
+        // where they were — unless they are in the Settings window (`FocusReturn`).
+        FocusReturn.remember()
+        defer { FocusReturn.handBack() }
         guard !isDemo else { return presentDemoHooksAlert() }
         // This edits the user's own settings file, so it asks first — the mirror of
         // `removeHooks`. On Cancel nothing is read, merged or written.
@@ -587,6 +597,10 @@ final class AppState: ObservableObject {
     ///
     /// It asks for confirmation: this edits the user's settings file, not our own state.
     func removeHooks() {
+        // Each dialog below activates CodeCat; when the flow ends, the user is put back
+        // where they were — unless they are in the Settings window (`FocusReturn`).
+        FocusReturn.remember()
+        defer { FocusReturn.handBack() }
         guard !isDemo else { return presentDemoHooksAlert() }
         let existing: Data?
         switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
@@ -729,7 +743,7 @@ final class AppState: ObservableObject {
             + "Both are removed by scripts/uninstall-lid-mode.sh.")
         confirm.addButton(withTitle: L10n.t("lid.install.confirm.button", "Show me the password prompt"))
         confirm.addButton(withTitle: L10n.t("button.cancel", "Cancel"))
-        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+        guard runInFront(confirm) == .alertFirstButtonReturn else { return }
         lidHelperInstallInFlight = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let (status, output) = Self.runLidInstallScript(at: scriptURL)
@@ -780,7 +794,7 @@ final class AppState: ObservableObject {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
-        alert.runModal()
+        runInFront(alert)
     }
 
     /// Runs the installer via `osascript ... with administrator privileges` and returns its

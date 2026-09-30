@@ -4,13 +4,15 @@ import CodeCatCore
 /// The Settings window's panes, in sidebar order (spec §8). Tasks 3 and 4 add Power,
 /// Cat and Claude Code in their places.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, alerts
+    case general, alerts, power, claude
     var id: Self { self }
 
     var title: String {
         switch self {
         case .general: return L10n.t("settings.pane.general", "General")
         case .alerts: return L10n.t("settings.pane.alerts", "Alerts")
+        case .power: return L10n.t("settings.pane.power", "Power")
+        case .claude: return L10n.t("settings.pane.claude", "Claude Code")
         }
     }
 
@@ -18,6 +20,8 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "slider.horizontal.3"
         case .alerts: return "bell.badge"
+        case .power: return "bolt"
+        case .claude: return "terminal"
         }
     }
 
@@ -62,6 +66,8 @@ struct SettingsView: View {
         switch pane {
         case .general: GeneralPane(appState: appState)
         case .alerts: AlertsPane(appState: appState)
+        case .power: PowerPane(appState: appState)
+        case .claude: ClaudeCodePane(appState: appState)
         }
     }
 }
