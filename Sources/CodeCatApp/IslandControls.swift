@@ -51,7 +51,7 @@ struct SettingsButton: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(IslandPalette.primary)
-                .frame(width: 22, height: 22)
+                .frame(width: IslandLayout.settingsButtonSize, height: IslandLayout.settingsButtonSize)
                 .background(Circle().fill(hovered ? IslandPalette.pillHover : IslandPalette.pill))
         }
         .buttonStyle(.plain)

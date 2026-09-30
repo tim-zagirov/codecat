@@ -93,6 +93,19 @@ public enum IslandLayout {
     /// The band the cat and the dots sit in when the island is open; the list starts
     /// below it. Four points more than the strip, so the first card clears the cat.
     public static let headerHeight: CGFloat = 36
+    /// The open header's right side (§5.3, Figma 04 "Header right"): the 22 pt "•••"
+    /// 20 pt in from the body's right edge, 10 pt after the dots.
+    public static let headerTrailingInset: CGFloat = 20
+    public static let settingsButtonSize: CGFloat = 22
+    public static let headerButtonSpacing: CGFloat = 10
+
+    /// How wide the header's dots may run: from the notch's right edge to the gap
+    /// before "•••". Anything wider starts under the physical notch, where it cannot
+    /// be seen (`RightWing.header`). 65.5 pt on a 185 pt notch.
+    public static func headerDotsRoom(notchWidth: CGFloat) -> CGFloat {
+        expandedWidth / 2 - headerTrailingInset - settingsButtonSize - headerButtonSpacing - notchWidth / 2
+    }
+
     /// Air under the list, inside the body.
     public static let listBottomPadding: CGFloat = 12
     /// Room around the body for the bloom and the hover shadow (§4.1, §4.3), so

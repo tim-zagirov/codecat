@@ -26,7 +26,7 @@ struct IslandWingView: View {
         case .dots(let dots):
             // Keyed by session, so a dot that changes tone recolours and slides to
             // its new place instead of another dot fading in where it was.
-            HStack(spacing: 5) {
+            HStack(spacing: RightWing.dotSpacing) {
                 ForEach(dots) { SessionDotView(tone: $0.tone) }
             }
             .animation(reduced ? nil : Motion.reposition, value: dots)
@@ -83,7 +83,7 @@ struct SessionDotView: View {
             }
         }
         .animation(Motion.toneCrossfade) { $0.modifier(ToneTint(ToneColor.island(tone))) }
-        .frame(width: waiting ? 13 : 7, height: 13)
+        .frame(width: RightWing.dotWidth(tone), height: 13)
         // Keeps the halo and the dot one rigid unit, so the wing's `.animation(_:value:
         // dots)` moves them together and the pair stays concentric (without it, the dot
         // was once laid out apart from its halo, up to a notch's width away).
