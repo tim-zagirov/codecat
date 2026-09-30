@@ -16,7 +16,7 @@ struct CatPane: View {
                     HStack {
                         Text(appState.skin.name).font(.system(size: 13, weight: .semibold))
                         Spacer()
-                        Text(appState.skin.author).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(Self.byline(appState.skin)).font(.system(size: 11)).foregroundStyle(.secondary)
                     }
                     CatStage(skin: appState.skin)
                 }
@@ -47,6 +47,17 @@ struct CatPane: View {
         // `rescanPets` publishes `registry`; publishing from inside `onAppear`'s own
         // update pass is what SwiftUI warns about, so it waits for the next turn.
         .onAppear { DispatchQueue.main.async { appState.rescanPets() } }
+    }
+
+    /// The stage's corner: the artist and the licence's short name, as Figma 05 draws
+    /// it ("LuizMelo · CC0"). An author's own terms have no short name, so those
+    /// skins show the author alone; the full terms are in the credits below.
+    static func byline(_ skin: MascotSkin) -> String {
+        switch skin.license {
+        case .cc0: return "\(skin.author) · CC0"
+        case .ccBy4: return "\(skin.author) · CC BY 4.0"
+        case .authorTerms: return skin.author
+        }
     }
 }
 
