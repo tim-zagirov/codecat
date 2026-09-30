@@ -42,8 +42,7 @@ final class PeekSchedulerTests: XCTestCase {
     }
 
     func testNudgesGuessesAndRoutineChangesNeverPeek() {
-        for (from, to) in [(SessionStatus.done, SessionStatus.waitingForYou(.input)),
-                           (.working, .waitingForYou(.idle)),
+        for (from, to) in [(SessionStatus.working, SessionStatus.waitingForYou(.idle)),
                            (.idle, .working),
                            (.idle, .done)] {
             let p = seeded([s("a", from)])

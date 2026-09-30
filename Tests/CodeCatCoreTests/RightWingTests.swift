@@ -70,19 +70,29 @@ final class RightWingTests: XCTestCase {
     }
 
     func testHeaderShowsTwoToFourAsADotEachWhileTheyFit() {
-        // Three waiting and one working: 3 × 13 + 7 + 3 × 5 = 61 ≤ 65.5.
+        // Three waiting and one working: 4 × 7 + 3 × 5 = 43, plus the first halo's 3.
         let ordered = [session("w1", .waitingForYou(.question)), session("w2", .waitingForYou(.permission)),
                        session("w3", .waitingForYou(.question)), session("a", .working)]
-        XCTAssertEqual(RightWing.rowWidth(RightWing.header(for: ordered, aggregate: .waiting, room: room).dots), 61)
+        XCTAssertEqual(RightWing.rowWidth(RightWing.header(for: ordered, aggregate: .waiting, room: room).dots), 46)
         XCTAssertEqual(RightWing.header(for: ordered, aggregate: .waiting, room: room),
                        .dots([SessionDot(id: "w1", tone: .waiting), SessionDot(id: "w2", tone: .waiting),
                               SessionDot(id: "w3", tone: .waiting), SessionDot(id: "a", tone: .working)]))
     }
 
-    func testHeaderFallsBackToTheCountWhenFourDotsWouldReachUnderTheNotch() {
-        // Four halos: 4 × 13 + 3 × 5 = 67 > 65.5.
+    /// Tim, 2026-09-30: the halos overlap their neighbours, so four waiting sessions
+    /// are four dots — 43 + 3 + 3 = 49 pt, well inside the room.
+    func testFourWaitingSessionsAreFourDots() {
         let ordered = (0..<4).map { session("w\($0)", .waitingForYou(.question)) }
-        XCTAssertEqual(RightWing.header(for: ordered, aggregate: .waiting, room: room), .count(.waiting, 4))
+        XCTAssertEqual(RightWing.header(for: ordered, aggregate: .waiting, room: room),
+                       .dots((0..<4).map { SessionDot(id: "w\($0)", tone: .waiting) }))
+    }
+
+    /// A wider notch leaves less room; a row that would reach under it becomes the count.
+    func testHeaderFallsBackToTheCountWhenTheRowIsWiderThanTheRoom() {
+        let ordered = (0..<4).map { session("w\($0)", .waitingForYou(.question)) }
+        XCTAssertEqual(RightWing.header(for: ordered, aggregate: .waiting, room: 48), .count(.waiting, 4))
+        XCTAssertEqual(RightWing.header(for: ordered, aggregate: .waiting, room: 49),
+                       .dots((0..<4).map { SessionDot(id: "w\($0)", tone: .waiting) }))
     }
 
     func testHeaderCountsFiveOrMoreHoweverFewWait() {
@@ -96,7 +106,12 @@ final class RightWingTests: XCTestCase {
     func testRowWidthMatchesTheDotsLayout() {
         XCTAssertEqual(RightWing.rowWidth([]), 0)
         XCTAssertEqual(RightWing.rowWidth([SessionDot(id: "a", tone: .working)]), 7)
+        // A lone waiting dot: its halo, 3 pt past each side.
+        XCTAssertEqual(RightWing.rowWidth([SessionDot(id: "a", tone: .waiting)]), 13)
         XCTAssertEqual(RightWing.rowWidth((0..<6).map { SessionDot(id: "\($0)", tone: .working) }), 67)
+        // 3 × 7 + 2 × 5 = 31, plus a halo at each end.
+        XCTAssertEqual(RightWing.rowWidth([SessionDot(id: "a", tone: .waiting), SessionDot(id: "b", tone: .working),
+                                           SessionDot(id: "c", tone: .waiting)]), 37)
     }
 
     func testElapsedTextIsMinutesThenHours() {

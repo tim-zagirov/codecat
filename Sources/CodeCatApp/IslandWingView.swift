@@ -47,8 +47,8 @@ struct IslandWingView: View {
     }
 }
 
-/// A session's dot: 7 pt in its tone. The waiting one pulses inside a 13 pt halo —
-/// with Reduce Motion it sits still in a ring instead (§11).
+/// A session's dot: 7 pt in its tone; the waiting one pulses with a 13 pt halo drawn
+/// over its neighbours. With Reduce Motion it sits still in a ring instead (§11).
 ///
 /// One view whatever the tone: the halo and the ring are always there, shown only
 /// while waiting, and the pulse is computed from the clock rather than switched on
@@ -56,8 +56,7 @@ struct IslandWingView: View {
 /// started waiting was a *new* view: captures showed the old green dot fading out
 /// 3–4 pt left of the new amber one for 0.2 s, and under Reduce Motion the amber
 /// dot slid into place. Now a change of tone animates colour only
-/// (`Motion.toneCrossfade`); the step from 7 to 13 pt wide is the row's business —
-/// `Motion.reposition` in the wing, nothing with Reduce Motion.
+/// (`Motion.toneCrossfade`).
 struct SessionDotView: View {
     let tone: MascotTone
     @Environment(\.islandReduceMotion) private var reduced
@@ -65,28 +64,28 @@ struct SessionDotView: View {
     var body: some View {
         let waiting = tone == .waiting
         let pulsing = waiting && !reduced
-        // The two `animation(_:body:)` scopes animate only what is inside them — the
-        // colour and the halo's and ring's opacity. A value-keyed `.animation` here
-        // also moved the dot: captures showed it sliding 3 pt with Reduce Motion.
-        ZStack {
+        // Paused unless pulsing, so the loop stops the moment no session waits.
+        TimelineView(.animation(paused: !pulsing)) { context in
+            Circle()
+                .frame(width: RightWing.dotWidth, height: RightWing.dotWidth)
+                .scaleEffect(pulsing ? Self.pulseScale(at: context.date) : 1)
+        }
+        // The halo and the ring overflow the 7 pt frame into the gaps (Tim,
+        // 2026-09-30): the row lays out every dot at 7 pt. The two
+        // `animation(_:body:)` scopes animate only their opacity — a value-keyed
+        // `.animation` here once slid the dot 3 pt with Reduce Motion.
+        .background {
             Circle()
                 .frame(width: 13, height: 13)
                 .animation(Motion.toneCrossfade) { $0.opacity(pulsing ? 0.3 : 0) }
             Circle().strokeBorder(lineWidth: 1.5)
                 .frame(width: 13, height: 13)
                 .animation(Motion.toneCrossfade) { $0.opacity(waiting && reduced ? 1 : 0) }
-            // Paused unless pulsing, so the loop stops the moment no session waits.
-            TimelineView(.animation(paused: !pulsing)) { context in
-                Circle()
-                    .frame(width: 7, height: 7)
-                    .scaleEffect(pulsing ? Self.pulseScale(at: context.date) : 1)
-            }
         }
         .animation(Motion.toneCrossfade) { $0.modifier(ToneTint(ToneColor.island(tone))) }
-        .frame(width: RightWing.dotWidth(tone), height: 13)
+        .frame(width: RightWing.dotWidth, height: RightWing.dotWidth)
         // Keeps the halo and the dot one rigid unit, so the wing's `.animation(_:value:
-        // dots)` moves them together and the pair stays concentric (without it, the dot
-        // was once laid out apart from its halo, up to a notch's width away).
+        // dots)` moves them together and the pair stays concentric.
         .geometryGroup()
     }
 

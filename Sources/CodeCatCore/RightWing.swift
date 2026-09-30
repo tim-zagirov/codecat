@@ -48,11 +48,9 @@ public enum RightWing: Equatable, Sendable {
     /// four a dot each, five or more one dot in the aggregate tone and the count.
     ///
     /// Four dots give way to the count too when their row is wider than `room`
-    /// (`IslandLayout.headerDotsRoom`). The row is laid out from "•••" leftwards, and
-    /// four waiting sessions — four 13 pt halos, 67 pt — started 1.5 pt under the
-    /// physical notch, where nothing can be seen. The header used `store.dots` as is
-    /// before this: six sessions put the first dot 1.5 pt under the notch, and seven
-    /// or more ran further under it.
+    /// (`IslandLayout.headerDotsRoom`). The row is laid out from "•••" leftwards. The
+    /// header used `store.dots` as is before this: six sessions put the first dot
+    /// 1.5 pt under the notch, and seven or more ran further under it.
     public static func header(for ordered: [Session], aggregate: MascotTone, room: CGFloat) -> RightWing {
         let dots = ordered.compactMap { $0.status == .idle ? nil : SessionDot(id: $0.id, tone: $0.status.tone) }
         switch dots.count {
@@ -65,15 +63,21 @@ public enum RightWing: Equatable, Sendable {
         }
     }
 
-    /// A dot's width in a row, as `SessionDotView` lays it out: 7 pt, or its 13 pt
-    /// halo while it waits (§4.2).
-    public static func dotWidth(_ tone: MascotTone) -> CGFloat { tone == .waiting ? 13 : 7 }
+    /// A dot's width in a row, whatever its tone. A waiting dot's 13 pt halo is drawn
+    /// over the gaps around it rather than beside it (Tim, 2026-09-30): laid out at
+    /// 13 pt, four waiting sessions were 67 pt and fell back to a count.
+    public static let dotWidth: CGFloat = 7
     /// The gap between dots in a row (§4.2).
     public static let dotSpacing: CGFloat = 5
+    /// How far a waiting dot's halo reaches past its dot on each side: (13 − 7) / 2.
+    public static let haloOverhang: CGFloat = 3
 
-    /// How wide a row of `dots` is.
+    /// How wide a row of `dots` is on screen: the dots, the gaps, and a halo sticking
+    /// out at either end — the one at the start is what could reach under the notch.
     public static func rowWidth(_ dots: [SessionDot]) -> CGFloat {
-        dots.reduce(0) { $0 + dotWidth($1.tone) } + dotSpacing * CGFloat(max(0, dots.count - 1))
+        guard let first = dots.first, let last = dots.last else { return 0 }
+        let row = dotWidth * CGFloat(dots.count) + dotSpacing * CGFloat(dots.count - 1)
+        return row + (first.tone == .waiting ? haloOverhang : 0) + (last.tone == .waiting ? haloOverhang : 0)
     }
 
     /// "4m", "1h": the wing has room for three characters, not for "4 min".

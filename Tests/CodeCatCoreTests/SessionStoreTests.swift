@@ -93,16 +93,36 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.aggregate, .waiting(1))
     }
 
-    /// Claude Code's nudge after a finished turn ("Claude is waiting for your input")
-    /// is not a question: nothing new was asked. It gets its own reason so the peek
-    /// can skip it — the done peek already happened.
-    func testIdleNudgeSetsWaitingInput() {
+    /// Claude Code's nudge ~60 s after a finished turn ("Claude is waiting for your
+    /// input") asks nothing new: the turn is over and stays over (Tim, 2026-09-30).
+    func testTheInputNudgeAfterAFinishedTurnKeepsItDone() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.apply(hook: hook("Stop"), now: t0.addingTimeInterval(30))
+        store.apply(hook: hook("Notification", message: "Claude is waiting for your input"),
+                    now: t0.addingTimeInterval(90))
+        XCTAssertEqual(store.ordered[0].status, .done)
+        XCTAssertEqual(store.aggregate, .done)
+    }
+
+    /// An open session nobody has asked anything yet gets the nudge too; it stays open.
+    func testTheInputNudgeOnAnOpenSessionLeavesItOpen() {
         let store = SessionStore()
         store.apply(hook: hook("SessionStart"), now: t0)
         store.apply(hook: hook("Notification", message: "Claude is waiting for your input"),
-                    now: t0.addingTimeInterval(10))
-        XCTAssertEqual(store.ordered[0].status, .waitingForYou(.input))
-        XCTAssertEqual(store.aggregate, .waiting(1), "still waiting as far as the cat is concerned")
+                    now: t0.addingTimeInterval(60))
+        XCTAssertEqual(store.ordered[0].status, .idle)
+    }
+
+    /// A working session that hears the nudge lost its `Stop`: the nudge only comes
+    /// once the turn has ended, so it finishes the turn — and the Mac may sleep.
+    func testTheInputNudgeOnAWorkingSessionFinishesTheTurn() {
+        let store = SessionStore()
+        startWorking(store, at: t0)
+        store.apply(hook: hook("Notification", message: "Claude is waiting for your input"),
+                    now: t0.addingTimeInterval(60))
+        XCTAssertEqual(store.ordered[0].status, .done)
+        XCTAssertFalse(store.anyWorking)
     }
 
     func testAnyOtherNotificationIsAQuestion() {
@@ -113,15 +133,8 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(store.ordered[0].status, .waitingForYou(.question))
     }
 
-    /// `.input` must not keep the Mac awake: the turn is over. `.idle` (the hook-less
-    /// guess) still does — see `anyWorking`.
-    func testInputWaitIsNotWorkButTheIdleGuessStillIs() {
-        let store = SessionStore()
-        startWorking(store, at: t0)
-        store.apply(hook: hook("Notification", message: "Claude is waiting for your input"),
-                    now: t0.addingTimeInterval(10))
-        XCTAssertFalse(store.anyWorking)
-
+    /// `.idle` (the hook-less guess) still keeps the Mac awake — see `anyWorking`.
+    func testTheIdleGuessStillCountsAsWork() {
         let guessed = SessionStore()
         startWorking(guessed, at: t0)
         guessed.applyIdleHeuristic(now: t0.addingTimeInterval(6 * 60))

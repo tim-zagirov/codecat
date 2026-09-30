@@ -17,8 +17,6 @@ public enum PeekReason {
             return [.text(session.status.title)]
         case .waitingForYou(.question):
             return [.text(L10n.t("peek.reason.question", "has a question for you"))]
-        case .waitingForYou(.input):
-            return [.text(L10n.t("peek.reason.input", "waiting for your next message"))]
         case .waitingForYou(.idle):
             return [.text(L10n.t("activity.waiting.maybe", "looks like it is waiting for you"))]
         case .crashed:

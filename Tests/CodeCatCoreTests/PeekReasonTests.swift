@@ -39,9 +39,8 @@ final class PeekReasonTests: XCTestCase {
         XCTAssertEqual(PeekReason.segments(for: session(.waitingForYou(.permission))), [.text("waiting for you")])
     }
 
-    func testQuestionInputAndGuess() {
+    func testQuestionAndGuess() {
         XCTAssertEqual(PeekReason.segments(for: session(.waitingForYou(.question))), [.text("has a question for you")])
-        XCTAssertEqual(PeekReason.segments(for: session(.waitingForYou(.input))), [.text("waiting for your next message")])
         XCTAssertEqual(PeekReason.segments(for: session(.waitingForYou(.idle))), [.text("looks like it is waiting for you")])
     }
 

@@ -192,7 +192,7 @@ public final class PeekScheduler {
             case .working, .waitingForYou(.idle): return .done
             default: return nil
             }
-        case .idle, .working, .waitingForYou(.input), .waitingForYou(.idle):
+        case .idle, .working, .waitingForYou(.idle):
             return nil
         }
     }

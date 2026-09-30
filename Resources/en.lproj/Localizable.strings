@@ -99,7 +99,6 @@
 /* MARK: - Peek reason: the one-line reason: what a session wants */
 
 "peek.reason.question" = "has a question for you";
-"peek.reason.input" = "waiting for your next message";
 "peek.reason.crashed" = "the session ended unexpectedly";
 "peek.reason.run" = "wants to run";
 "peek.reason.edit" = "wants to edit";

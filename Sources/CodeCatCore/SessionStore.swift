@@ -157,8 +157,8 @@ public final class SessionStore: ObservableObject {
     /// `.waitingForYou(.idle)` counts as working: it is a heuristic guess (no activity
     /// for a while in fallback mode without hooks installed), not a real signal that the
     /// user's input is needed — a long single tool call looks identical. Real
-    /// `.waitingForYou(.permission)` / `.waitingForYou(.question)` / `.waitingForYou(.input)`
-    /// come from an actual `Notification` hook firing and do not count as working.
+    /// `.waitingForYou(.permission)` / `.waitingForYou(.question)` come from an actual
+    /// `Notification` hook firing and do not count as working.
     public var anyWorking: Bool { sessions.values.contains(where: Self.keepsTheMacAwake) }
 
     /// How many sessions `anyWorking` sees — the number in the power footer.
@@ -236,14 +236,24 @@ public final class SessionStore: ObservableObject {
             }
         case "Notification":
             let text = (event.message ?? "").lowercased()
-            let reason: WaitReason
-            if text.contains("permission") {
-                reason = .permission
-            } else if text.contains("waiting for your input") {
-                reason = .input
-            } else {
-                reason = .question
+            // Claude Code's nudge ~60 s after a turn ended ("Claude is waiting for your
+            // input") asks nothing new. Treated as a wait it turned every finished
+            // session orange a minute later, played the waiting sound and sorted it
+            // first, and a done check never lived its 600 s (Tim, 2026-09-30). Only a
+            // session still working — its `Stop` lost — is moved: the nudge comes
+            // once a turn is over.
+            if text.contains("waiting for your input") {
+                upsert(event: event, now: now) { s in
+                    guard s.status == .working else { return }
+                    s.status = .done
+                    s.activityDescription = L10n.t("activity.done", "finished the task")
+                    s.pendingActions = []
+                    s.pendingActionAt = now
+                    s.waitMessage = nil
+                }
+                return
             }
+            let reason: WaitReason = text.contains("permission") ? .permission : .question
             upsert(event: event, now: now) { s in
                 s.status = .waitingForYou(reason)
                 s.activityDescription = L10n.t("activity.waiting", "waiting for you")
