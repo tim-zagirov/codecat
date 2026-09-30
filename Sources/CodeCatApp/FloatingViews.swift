@@ -66,8 +66,8 @@ struct CapsuleSurface: View {
 }
 
 /// The cat window: the cat standing on its capsule, the right wing's live data on the
-/// capsule's right half (Figma 06 "At rest"). While the peek or the list is open the
-/// capsule makes way for them and the cat stands on theirs.
+/// capsule's right half (Figma 06 "At rest"). While the peek or a list below is open
+/// the capsule makes way for them and the cat stands on theirs.
 @MainActor
 struct FloatingCatView: View {
     @ObservedObject var appState: AppState
@@ -77,7 +77,10 @@ struct FloatingCatView: View {
     var body: some View {
         let tone = appState.store.aggregate.tone
         ZStack(alignment: .topLeading) {
-            if !model.presentation.isOpen {
+            // Open below, the cat stands on the panel's edge and the capsule makes
+            // way; open above (the default corner, decision 9), the panel is over the
+            // cat and the capsule stays under its feet.
+            if !model.presentation.isOpen || model.panelIsAbove {
                 CapsuleSurface(size: FloatingLayout.capsule, radius: FloatingLayout.capsuleRadius, tone: tone)
                     .overlay(alignment: .trailing) {
                         IslandWingView(content: RightWing.content(for: appState.store.ordered, aggregate: tone,

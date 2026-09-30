@@ -55,6 +55,9 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         hosting.onTap = { [weak self] in self?.catClicked() }
         hosting.onHover = { [weak self] _ in self?.pointerMoved() }
         hosting.onDragStart = { [weak self] in self?.dragStarted() }
+        // Pointer changes are not fed while a button is down; the mouse-up reads the
+        // cursor again, after the click or the drag has been handled.
+        hosting.onMouseUp = { [weak self] in DispatchQueue.main.async { self?.pointerMoved() } }
         panel.contentView = hosting
         catPanel = panel
 
@@ -214,7 +217,15 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
     /// the 0.4 details panel was — its previews and timelines must not run on.
     private func placeOpenPanel() {
         guard flow.presentation == .expanded, catPanel.isVisible, let screen = catPanel.screen ?? NSScreen.main else {
-            closeOpenPanel()
+            if openPanel != nil {
+                closeOpenPanel()
+                // The list closed under a cursor that may not move again (a jump,
+                // Escape): without a fresh read the flow went on believing the pointer
+                // was inside, held the next peek open, and after the hover delay the
+                // dwell opened the list by itself. With `openPanel` gone this read
+                // cannot come back here to close it again.
+                pointerMoved()
+            }
             return
         }
         let panel = openPanel ?? makeOpenPanel()
@@ -228,13 +239,18 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         if model.panelHeight != placement.rect.height { model.panelHeight = placement.rect.height }
         if model.panelIsAbove != placement.isAbove { model.panelIsAbove = placement.isAbove }
         let frame = placement.rect.insetBy(dx: -FloatingLayout.margin, dy: -FloatingLayout.margin)
-        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        let moved = panel.frame != frame
+        if moved { panel.setFrame(frame, display: true) }
         // The first opening lays the list out before anyone has measured it: the
         // panel stays transparent at its guessed height until the real one arrives,
         // rather than showing a 120 pt panel that jumps a frame later.
         panel.alphaValue = listHeight > 0 ? 1 : 0
         if !panel.isVisible { panel.orderFrontRegardless() }
         startPointerMonitor()
+        // The shape moved under a still cursor: where clicks go (`ignoresMouseEvents`)
+        // and "inside" are read again, as the island does after a resize
+        // (`resyncPointer`). A second pass finds the frame unchanged and stops.
+        if moved { pointerMoved() }
     }
 
     private func makeOpenPanel() -> OverlayPanel {
@@ -307,12 +323,26 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         deadlineTimer = nil
         guard let deadline = flow.nextDeadline else { return }
         let timer = Timer(fire: max(deadline, Date()), interval: 0, repeats: false) { [weak self] _ in
-            guard let self else { return }
-            self.flow.tick(now: Date())
-            self.presenterChanged()
+            self?.deadlineReached()
         }
         RunLoop.main.add(timer, forMode: .common)
         deadlineTimer = timer
+    }
+
+    /// As on the island: a button held when the hover dwell ends — a click on the
+    /// cat that began just before the deadline, or a drag — must not end in an open
+    /// list. Opened at the deadline, the click's own mouse-up closed it again (`onTap`
+    /// on an open list), a flash. It counts as the pointer leaving; the mouse-up then
+    /// opens the list on the click, or the cursor is read again after a drag.
+    private func deadlineReached() {
+        if flow.presentation == .inhaled, NSEvent.pressedMouseButtons != 0 {
+            toldInside = false
+            flow.pointerLeft(now: Date())
+            presenterChanged()
+            return
+        }
+        flow.tick(now: Date())
+        presenterChanged()
     }
 
     // MARK: - Position
@@ -365,6 +395,8 @@ private final class CatHostingView: NSHostingView<FloatingCatView> {
     var onHover: ((Bool) -> Void)?
     /// The moment a press became a drag: the list closes, the cat moves.
     var onDragStart: (() -> Void)?
+    /// Every mouse-up, after `onTap`.
+    var onMouseUp: (() -> Void)?
     /// Only this view's own area is replaced on update: `NSHostingView` registers
     /// tracking areas of its own for SwiftUI, and those are not ours to remove.
     private var hoverArea: NSTrackingArea?
@@ -433,5 +465,6 @@ private final class CatHostingView: NSHostingView<FloatingCatView> {
     override func mouseUp(with event: NSEvent) {
         if !didDrag { onTap?() }
         didDrag = false
+        onMouseUp?()
     }
 }
