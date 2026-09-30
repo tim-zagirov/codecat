@@ -144,7 +144,7 @@ extension MascotSkinsTests {
 
     /// mxmaze ships under CC BY 4.0, where attribution is an obligation rather than
     /// a courtesy — the credited name has to actually be there. `author` is what
-    /// the credits row in `SkinPickerView` actually prints, so that is what this
+    /// the credits row in `CreditsList` actually prints, so that is what this
     /// test guards, not an unread payload on the licence case.
     func testAttributionIsSpelledOutWhereTheLicenceDemandsIt() {
         let demanding = MascotSkins.all.filter { $0.license.requiresAttribution }

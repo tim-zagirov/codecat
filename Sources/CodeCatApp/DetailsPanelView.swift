@@ -2,9 +2,9 @@ import AppKit
 import SwiftUI
 import CodeCatCore
 
-/// The floating mode's panel. All of its content moved to `SessionListView` and
-/// `SettingsSectionView`; what is left here is the heading, the background and the
-/// size — the things that distinguish this panel from the island menu.
+/// The floating mode's panel. Skins and settings moved to the Settings window
+/// (Task 4); what is left here is the title, the session list, the background and
+/// the size — the things that distinguish this panel from an ordinary window.
 struct DetailsPanelView: View {
     @ObservedObject var appState: AppState
 
@@ -29,8 +29,6 @@ struct DetailsPanelView: View {
             VStack(alignment: .leading, spacing: 10) {
                 title
                 SessionListView(appState: appState, onJump: onJump)
-                Divider()
-                SettingsSectionView(appState: appState)
             }
             .padding(14)
             .frame(width: 290, alignment: .leading)

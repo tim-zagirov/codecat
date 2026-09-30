@@ -4,7 +4,7 @@ import CodeCatCore
 /// Renders the current sprite skin, falling back to the hand-drawn `CatView` when it
 /// cannot be loaded.
 ///
-/// The hand-drawn cat is no longer something the user can choose in `SkinPickerView`
+/// The hand-drawn cat is no longer something the user can choose in the Cat pane's `SkinGrid`
 /// — every `MascotSkin` in `MascotSkins.all` is sprite-backed. `CatView` survives
 /// only as this fallback, so the mascot is never missing even if a sprite sheet goes
 /// missing from the bundle; the user is told about it separately, once, by
@@ -86,7 +86,7 @@ struct MascotView: View {
     /// where `MascotView` already knows about `showsBadge`, rather than by changing
     /// `CatView`'s contract (the floating cat's badge has to stay). `MascotBadge`
     /// draws nothing for the `.sleeping` tone (see its body), so passing a sleeping
-    /// indicator reliably switches it off — the same technique `SkinPickerView` uses
+    /// indicator reliably switches it off — the same technique `SkinGrid` uses
     /// for its 34pt previews.
     @ViewBuilder
     private var fallback: some View {
@@ -96,7 +96,7 @@ struct MascotView: View {
         if let canvasSize {
             // `CatView` draws itself on a square `MascotLayout.canvasSize` canvas
             // (128pt) — without shrinking, it would look like a cropped fragment in a
-            // 32pt island wing. The same technique as `SkinPickerView`'s
+            // 32pt island wing. The same technique as `SkinGrid`'s
             // (`.scaleEffect(previewSize / MascotLayout.canvasSize)`), only the size
             // comes from the `canvasSize` already passed in. Scaled by the smaller
             // side, not by height: the fallback `spriteSize` from `geometry()` (24×24)

@@ -1,10 +1,9 @@
 import SwiftUI
 import CodeCatCore
 
-/// The Settings window's panes, in sidebar order (spec §8). Tasks 3 and 4 add Power,
-/// Cat and Claude Code in their places.
+/// The Settings window's panes, in sidebar order (spec §8).
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, alerts, power, claude
+    case general, alerts, power, cat, claude
     var id: Self { self }
 
     var title: String {
@@ -12,6 +11,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return L10n.t("settings.pane.general", "General")
         case .alerts: return L10n.t("settings.pane.alerts", "Alerts")
         case .power: return L10n.t("settings.pane.power", "Power")
+        case .cat: return L10n.t("settings.pane.cat", "Cat")
         case .claude: return L10n.t("settings.pane.claude", "Claude Code")
         }
     }
@@ -21,6 +21,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: return "slider.horizontal.3"
         case .alerts: return "bell.badge"
         case .power: return "bolt"
+        case .cat: return "cat"
         case .claude: return "terminal"
         }
     }
@@ -67,6 +68,7 @@ struct SettingsView: View {
         case .general: GeneralPane(appState: appState)
         case .alerts: AlertsPane(appState: appState)
         case .power: PowerPane(appState: appState)
+        case .cat: CatPane(appState: appState)
         case .claude: ClaudeCodePane(appState: appState)
         }
     }
@@ -110,8 +112,7 @@ struct SettingsLabel: View {
     }
 }
 
-/// A switch row. Named apart from `SettingsSectionView`'s private `SettingToggle`,
-/// which lives until Task 4 deletes that file.
+/// A switch row.
 struct SettingsToggle: View {
     let title: String
     var help: String?

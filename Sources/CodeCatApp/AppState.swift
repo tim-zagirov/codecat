@@ -176,22 +176,6 @@ final class AppState: ObservableObject {
         return !store.hasSessions
     }
 
-    /// Whether the "About the assets" credits disclosure in `SkinPickerView` is expanded.
-    /// Lives here rather than as local `@State` on that view so toggling it
-    /// publishes through `objectWillChange` like every other piece of visible
-    /// state: `OverlayController.handleStateChange()` resizes the details panel to
-    /// fit its SwiftUI content on that notification, and the credits list — the one
-    /// attribution that is a licence obligation (mxmaze, CC BY 4.0) — must never
-    /// open clipped inside a panel whose AppKit content rect didn't grow with it.
-    @Published var creditsExpanded = false
-
-    /// Whether `SettingsSectionView.islandSections`' "Skins" and "Settings"
-    /// disclosures are open. The 0.4 island menu drew them; the 0.5 island has no menu
-    /// and nothing shows them any more. They go with `islandSections` when Part 3's
-    /// Settings window replaces it.
-    @Published var islandSkinsExpanded = false
-    @Published var islandSettingsExpanded = false
-
     var skin: MascotSkin { registry.skin(withID: skinID) }
 
     /// The skins the picker may offer: everything in the registry whose sheets are
@@ -266,7 +250,7 @@ final class AppState: ObservableObject {
         // migrate to the default skin here, at read time, so `skinID` and `skin.id`
         // never disagree. Assigning the raw value directly would leave a stale id
         // sitting in `skinID` — rendering the default skin correctly, but with no
-        // tile selected in `SkinPickerView` (it compares `skin.id == skinID`) until
+        // tile selected in `SkinGrid` (it compares `skin.id == skinID`) until
         // the user happens to tap one, since `didSet` does not fire on `init`.
         //
         // A stored skin whose sheets are not on this machine gets that same silent
@@ -936,12 +920,12 @@ final class AppState: ObservableObject {
         runInFront(alert)
     }
 
-    /// Re-reads the pet folders. Cheap, so it runs whenever the picker appears; the
-    /// registry is only republished when something actually changed, so an
-    /// unchanged rescan does not redraw the panel.
-    /// `@MainActor`: only caller is `SkinPickerView`'s `onAppear`, and this now
-    /// touches `SpriteSheetStore.shared` directly (see `forgetImported()` below),
-    /// which is itself `@MainActor`.
+    /// Re-reads the pet folders. Cheap, so it runs whenever the Cat pane appears;
+    /// the registry is only republished when something actually changed, so an
+    /// unchanged rescan does not redraw the pane.
+    /// `@MainActor`: only caller is `CatPane`'s `onAppear`, and this now touches
+    /// `SpriteSheetStore.shared` directly (see `forgetImported()` below), which is
+    /// itself `@MainActor`.
     @MainActor
     func rescanPets() {
         // Unconditional, before the registry comparison below: a pet's sheet can

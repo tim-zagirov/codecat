@@ -30,8 +30,6 @@
 
 /* MARK: - Settings (shared by the menu bar and the panel) */
 
-"settings.title" = "Settings";
-"settings.view" = "View";
 "setting.keep.awake" = "Keep the Mac awake while agents work";
 "setting.lid.mode" = "Keep agents running with the lid closed";
 "setting.sounds" = "Play a sound when an agent needs you";
@@ -39,7 +37,6 @@
 "setting.show.task.help" = "The task in your words, the agent's current step, and the final message with its links. Off for a demo or a shared screen.";
 "setting.hide.when.idle" = "Hide when nothing is running";
 "settings.no.notch" = "Island needs a display with a notch. This Mac doesn't have one, so the cat stays floating.";
-"settings.island.menubar" = "The island covers a little of the menu bar on each side of the notch.";
 "settings.lid.password.hint" = "Turning this on the first time asks for an administrator password. One-time setup.";
 "settings.hooks.install" = "Set up Claude Code…";
 
@@ -49,6 +46,7 @@
 "settings.pane.general" = "General";
 "settings.pane.alerts" = "Alerts";
 "settings.pane.power" = "Power";
+"settings.pane.cat" = "Cat";
 "settings.pane.claude" = "Claude Code";
 "settings.show.as" = "Show CodeCat as";
 "settings.show.as.help" = "The island needs a built-in display with a notch; elsewhere the floating cat takes over.";
@@ -87,6 +85,17 @@
 "settings.section.lid" = "Closed lid";
 "settings.power.lid.installed" = "Installed: a sudoers rule for two pmset commands and a watchdog that restores sleep if CodeCat ever quits.";
 "settings.power.lid.footer" = "To remove the helper, run scripts/uninstall-lid-mode.sh.";
+
+/* MARK: - Settings window: Cat pane */
+
+"settings.cat.state.asleep" = "Asleep";
+"settings.cat.state.working" = "Working";
+"settings.cat.state.waiting" = "Waiting";
+"settings.cat.state.done" = "Done";
+"settings.cat.state.crashed" = "Crashed";
+"settings.cat.pets" = "Codex pets";
+"settings.cat.pets.help" = "Drop a pet folder here or into ~/.codex/pets and it appears in the grid.";
+"settings.cat.pets.open" = "Open folder";
 
 /* MARK: - Settings window: Claude Code pane */
 
@@ -180,7 +189,7 @@
 
 /* MARK: - Skins */
 
-"skins.title" = "Skin";
+"skins.title" = "Skins";
 "skins.credits" = "Artists and licences";
 "skins.imported.from" = "From %@";
 "license.cc0" = "CC0 1.0 — public domain";
@@ -198,11 +207,6 @@
 /* %@ is the skin's name. */
 "skin.load.failed.title" = "Couldn't load the %@ skin";
 "skin.load.failed.body" = "Its files couldn't be read. Switched to another skin.";
-
-/* MARK: - Island menu */
-
-/* Header of the collapsible skins disclosure in the island menu. */
-"island.section.skins" = "Skins";
 
 /* MARK: - Hooks */
 

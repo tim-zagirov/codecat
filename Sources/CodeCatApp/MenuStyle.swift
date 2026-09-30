@@ -1,25 +1,15 @@
 import SwiftUI
 
-/// How the menu looks. The same session list, the same grid of skins and the same
-/// toggles are drawn on two completely different surfaces, and their legibility
-/// rules are opposites.
+/// How the floating panel's menu looks: the session list and its rows, colours and
+/// spacing.
 ///
-/// The floating panel sits on `.regularMaterial` — a system background — where
-/// system semantic colours (`.secondary`, `.tertiary`, `Color.primary`, the accent
-/// blue) are exactly right: they adapt to light and dark on their own.
-///
-/// `.island` is for **pure black** — not a system background but a colour matched
-/// to the display's physical notch. System semantics lie there: `.secondary`
-/// believes it knows the background and, in light mode, produces near-black text on
-/// black. So the island states its whites as numbers, colour lives only in the
-/// status dots, and selection is a white border — the system blue is already spoken
-/// for by the "done" status. The 0.4 island menu drew with it; the 0.5 island draws
-/// with `IslandPalette` and has no menu, so nothing sets `.island` any more, and it
-/// leaves with `SettingsSectionView`'s island branch in Part 3.
+/// The panel sits on `.regularMaterial` — a system background — where system
+/// semantic colours (`.secondary`, `.tertiary`, `Color.primary`, the accent blue)
+/// are exactly right: they adapt to light and dark on their own.
 ///
 /// The style travels through `Environment` rather than as a parameter on every
-/// view: it is needed all the way down, to the session row and the skin cell, and
-/// threading it by hand through every level means forgetting it somewhere.
+/// view: it is needed all the way down, to the session row, and threading it by
+/// hand through every level means forgetting it somewhere.
 struct MenuStyle {
 
     /// How a session row is laid out.
@@ -120,34 +110,6 @@ struct MenuStyle {
         padding: 14,
         blockSpacing: 10,
         lineSpacing: 2)
-
-    /// The 0.4 island menu's style (see the type's comment). Its whites are stated as
-    /// numbers: the background here is not a system one, and system semantics know
-    /// nothing about it.
-    static let island = MenuStyle(
-        rowLayout: .twoLine,
-        primary: .white,
-        secondary: Color.white.opacity(0.62),
-        tertiary: Color.white.opacity(0.55),
-        rowHover: Color.white.opacity(0.13),
-        rowRadius: 6,
-        cellFill: Color.white.opacity(0.06),
-        cellHover: Color.white.opacity(0.16),
-        cellSelected: Color.white.opacity(0.16),
-        cellRadius: 8,
-        cellSize: CGSize(width: 60, height: 40),
-        cellSpacing: 6,
-        chipFill: Color.white.opacity(0.10),
-        chipHover: Color.white.opacity(0.20),
-        barTrack: Color.white.opacity(0.10),
-        selectionBorder: .white,
-        selectionBorderWidth: 1,
-        separator: Color.white.opacity(0.22),
-        toggleTint: .white,
-        togglesFillWidth: true,
-        padding: 12,
-        blockSpacing: 8,
-        lineSpacing: 4)
 }
 
 /// The island's whites and type — spec §7. Stated as numbers for the same reason
