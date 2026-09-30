@@ -61,10 +61,15 @@ public enum IslandLayout {
     /// itself is unchanged — the wings stay 72 pt.
     public static let edgeRadius: CGFloat = 10
 
+    /// The rim light's line width (spec §4.1). One number for the stroke and for the
+    /// island's height: the compact body is this much taller than the notch so the
+    /// rim's bottom run lies below the hardware cutout (`islandFrame`).
+    public static let rimWidth: CGFloat = 1.5
+
     /// Rounding on the island's and the menu's bottom corners. The island's top
     /// corners are square — they run into the screen's edge.
     ///
-    /// 16 pt against an island height of 32 pt is half the height, meaning the bottom
+    /// 16 pt against a notch 32 pt tall is half its height, meaning the bottom
     /// edge is rounded end to end with no straight run between the two arcs. That
     /// reads as a shape rather than a rectangle with softened corners; the physical
     /// notch beside it is curved to roughly the same degree, and a smaller radius
@@ -93,7 +98,7 @@ public enum IslandLayout {
     // MARK: Bodies and canvases (spec §4.3, §5.2)
 
     /// The band the cat and the dots sit in when the island is open; the list starts
-    /// below it. Four points more than the strip, so the first card clears the cat.
+    /// below it. Four points more than the notch, so the first card clears the cat.
     public static let headerHeight: CGFloat = 36
     /// The open header's right side (§5.3, Figma 04 "Header right"): the 22 pt "•••"
     /// 20 pt in from the body's right edge, 10 pt after the dots.
@@ -192,14 +197,15 @@ public enum IslandLayout {
     /// The rim light's path — spec §4.1. Open: it runs down the left wall from the
     /// fillet, around the bottom and up the right wall, and never along the top, which
     /// is the screen's edge. Inset so a centred stroke stays inside the silhouette.
-    /// Same coordinates and clamping as `silhouettePath`.
+    /// Same coordinates and clamping as `silhouettePath`. The inset is half the
+    /// stroke, so the line's outer edge runs along the silhouette's.
     ///
     /// The bottom corners are concentric with the silhouette's: the same centres, the
     /// radius smaller by the inset. Drawn with the silhouette's own radius from the
     /// inset walls, the corner ran up to a third of a point closer to the edge than the
     /// walls did, and a 1.5 pt stroke showed it as a pinch at each corner.
     public static func rimPath(in rect: CGRect, bottomRadius: CGFloat, edgeRadius: CGFloat,
-                               inset: CGFloat = 0.75) -> CGPath {
+                               inset: CGFloat = rimWidth / 2) -> CGPath {
         let k: CGFloat = 0.5523
         let e = max(0, min(edgeRadius, min(rect.width / 2, rect.height)))
         let bodyWidth = rect.width - 2 * e
@@ -238,19 +244,23 @@ public enum IslandLayout {
         return CGRect(x: auxLeft.maxX, y: auxLeft.minY, width: width, height: auxLeft.height)
     }
 
-    /// The whole slab: the notch plus two equal wings. Its height equals the notch's —
-    /// the island does not extend past the menu bar.
+    /// The whole slab: the notch plus two equal wings, and a rim's width below the
+    /// notch. The rim is stroked inside the silhouette, so at the notch's own height
+    /// its bottom run lay in the notch's last rows, and under the notch's width the
+    /// hardware cutout hid it. One `rimWidth` more puts the whole run below the
+    /// cutout. The content is still laid out on the notch's band, so the cat does not
+    /// move; only the black and the rim reach that far past the menu bar.
     public static func islandFrame(notch: CGRect) -> CGRect {
         CGRect(x: notch.minX - wingWidth,
-               y: notch.minY,
+               y: notch.minY - rimWidth,
                width: 2 * wingWidth + notch.width,
-               height: notch.height)
+               height: notch.height + rimWidth)
     }
 
     /// The island window's rectangle: the body plus room for a fillet on each side.
     /// Kept apart from `islandFrame` because they are different quantities:
-    /// `islandFrame` is what the content is laid out against (wing, notch, wing), and
-    /// this is what has to be painted.
+    /// `islandFrame` is the body (wing, notch, wing, and the rim's row under them),
+    /// and this is what has to be painted.
     ///
     /// `edgeRadius` is the fillet the shape is drawn with: the expanded island and the
     /// peek use `expandedEdgeRadius`, and a window sized for the compact 10 pt would

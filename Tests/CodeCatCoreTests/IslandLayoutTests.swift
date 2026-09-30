@@ -58,8 +58,24 @@ final class IslandLayoutTests: XCTestCase {
         let notch = CGRect(x: 771, y: 1085, width: 185, height: 32)
         let island = IslandLayout.islandFrame(notch: notch)
         let wing = IslandLayout.wingWidth
-        XCTAssertEqual(island, CGRect(x: 771 - wing, y: 1085, width: 2 * wing + 185, height: 32))
-        XCTAssertEqual(island.height, notch.height, accuracy: 0.001)
+        XCTAssertEqual(island, CGRect(x: 771 - wing, y: 1085 - 1.5, width: 2 * wing + 185, height: 32 + 1.5))
+        XCTAssertEqual(island.maxY, notch.maxY, "the top stays at the screen edge")
+    }
+
+    /// The rim is stroked inside the silhouette; at the notch's height its bottom run
+    /// lay in the notch's last rows, hidden by the cutout. The island is exactly one
+    /// rim's width taller, so the whole stroke starts at the notch's bottom: the run's
+    /// centre is 33.5 − 0.75 = 32.75, its upper edge 32.75 − 0.75 = 32 = the notch.
+    func testTheIslandIsARimsWidthTallerThanTheNotchSoTheRimShowsBelowIt() {
+        XCTAssertEqual(IslandLayout.rimWidth, 1.5)
+        let notch = CGRect(x: 771, y: 1085, width: 185, height: 32)
+        let island = IslandLayout.islandFrame(notch: notch)
+        XCTAssertEqual(island.height - notch.height, IslandLayout.rimWidth, accuracy: 0.001)
+        XCTAssertEqual(island.maxY, notch.maxY, accuracy: 0.001)
+        let body = IslandLayout.body(for: .compact, compact: island.size, expandedHeight: 0)
+        let rim = IslandLayout.rimPath(canvasWidth: 411, body: body)
+        let strokeTop = rim.boundingBoxOfPath.maxY - IslandLayout.rimWidth / 2
+        XCTAssertEqual(strokeTop, notch.height, accuracy: 0.001, "the bottom run's upper edge is the notch's bottom")
     }
 
     /// The wing is sized for the widest skin — LuizMelo `cat-4`, 28×16 px, which at the
@@ -210,7 +226,7 @@ final class IslandLayoutTests: XCTestCase {
 
     func testBodyFrameAtTheCompactSizeIsTheIslandFrame() {
         let notch = CGRect(x: 663.5, y: 950, width: 185, height: 32)
-        XCTAssertEqual(IslandLayout.bodyFrame(notch: notch, size: CGSize(width: 329, height: 32)),
+        XCTAssertEqual(IslandLayout.bodyFrame(notch: notch, size: CGSize(width: 329, height: 33.5)),
                        IslandLayout.islandFrame(notch: notch))
     }
 
@@ -317,13 +333,13 @@ final class IslandLayoutTests: XCTestCase {
 
     // MARK: - 0.5 bodies and canvases (Part 2)
 
-    private let compactSize = CGSize(width: 329, height: 32)   // 2 × 72 + 185
+    private let compactSize = CGSize(width: 329, height: 33.5)   // 2 × 72 + 185, 32 + 1.5
 
     func testTheBodyForEachPresentation() {
         XCTAssertEqual(IslandLayout.body(for: .compact, compact: compactSize, expandedHeight: 487),
-                       IslandBody(width: 329, height: 32, edgeRadius: 10, bottomRadius: 16))
+                       IslandBody(width: 329, height: 33.5, edgeRadius: 10, bottomRadius: 16))
         XCTAssertEqual(IslandLayout.body(for: .inhaled, compact: compactSize, expandedHeight: 487),
-                       IslandBody(width: 335, height: 36, edgeRadius: 10, bottomRadius: 16))
+                       IslandBody(width: 335, height: 37.5, edgeRadius: 10, bottomRadius: 16))
         XCTAssertEqual(IslandLayout.body(for: .expanded, compact: compactSize, expandedHeight: 487),
                        IslandBody(width: 420, height: 487, edgeRadius: 14, bottomRadius: 24))
         let peek = PeekItem(kind: .waiting, sessionIDs: ["a"], createdAt: Date())
@@ -339,14 +355,14 @@ final class IslandLayoutTests: XCTestCase {
     }
 
     /// Closed, the window is the inhaled body plus its fillets and the shadow margins:
-    /// 335 + 2 × 10 + 2 × 28 = 411 wide, 36 + 40 = 76 tall, centred on the notch
-    /// (x = 863.5 − 205.5), top at the screen's top edge (y = 1117 − 76).
+    /// 335 + 2 × 10 + 2 × 28 = 411 wide, 33.5 + 4 + 40 = 77.5 tall, centred on the
+    /// notch (x = 863.5 − 205.5), top at the screen's top edge (y = 1117 − 77.5).
     func testTheClosedCanvasHasRoomToInhaleAndCastShadows() {
         let notch = IslandLayout.notchRect(auxLeft: auxLeft, auxRight: auxRight)!
         let island = IslandLayout.islandFrame(notch: notch)
         let largest = IslandLayout.body(for: .inhaled, compact: island.size, expandedHeight: 0)
         XCTAssertEqual(IslandLayout.canvasFrame(island: island, largest: largest),
-                       CGRect(x: 658, y: 1041, width: 411, height: 76))
+                       CGRect(x: 658, y: 1039.5, width: 411, height: 77.5))
     }
 
     /// Open: 420 + 2 × 14 + 2 × 28 = 504 wide, 1029 + 40 = 1069 tall, x = 863.5 − 252,
@@ -363,8 +379,8 @@ final class IslandLayoutTests: XCTestCase {
                                                    body: IslandBody(width: 420, height: 487, edgeRadius: 14, bottomRadius: 24)),
                        CGRect(x: 20, y: 0, width: 448, height: 487))
         XCTAssertEqual(IslandLayout.silhouetteRect(canvasWidth: 395,
-                                                   body: IslandBody(width: 329, height: 32, edgeRadius: 10, bottomRadius: 16)),
-                       CGRect(x: 23, y: 0, width: 349, height: 32))
+                                                   body: IslandBody(width: 329, height: 33.5, edgeRadius: 10, bottomRadius: 16)),
+                       CGRect(x: 23, y: 0, width: 349, height: 33.5))
     }
 
     /// Spec §14: the 420 × 487 silhouette with fillet 14 and bottom 24. The body runs

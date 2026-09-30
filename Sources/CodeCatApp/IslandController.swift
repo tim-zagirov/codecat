@@ -110,6 +110,7 @@ final class IslandController: NSObject, MascotPresenting {
             notchWidth: geometry.notch.width,
             wingWidth: IslandLayout.wingWidth,
             stripHeight: geometry.island.height,
+            bandHeight: geometry.notch.height,
             spriteSize: geometry.spriteSize,
             expandedMaxHeight: IslandLayout.expandedMaxHeight(visibleHeight: geometry.visibleFrame.height))
         if model.metrics != metrics { model.metrics = metrics }
@@ -366,9 +367,15 @@ final class IslandController: NSObject, MascotPresenting {
     /// MacBook whose notch is centred at x 863.5 the open canvas asked for x 611.5, and
     /// the island and the cat stood half a point left of the compact ones — a jump
     /// each time the window grew and shrank (1 px in the captures).
+    ///
+    /// The height is rounded up for the same reason, from the top: the island is a
+    /// rim's width (1.5 pt) taller than the notch, so the closed canvas is 77.5 pt
+    /// tall, and an origin moved onto a whole point would pull the shape's top half
+    /// a point off the screen's edge.
     private static func onWholePoints(_ frame: CGRect, centreX: CGFloat) -> CGRect {
         let minX = frame.minX.rounded(.down)
-        return CGRect(x: minX, y: frame.minY, width: 2 * (centreX - minX), height: frame.height)
+        let height = frame.height.rounded(.up)
+        return CGRect(x: minX, y: frame.maxY - height, width: 2 * (centreX - minX), height: height)
     }
 
     /// Hover and clicks are judged against the shape the island is heading to, never

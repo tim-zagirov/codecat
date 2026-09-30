@@ -57,7 +57,7 @@ struct RimStroke: View, Animatable {
                 .stroke(LinearGradient(stops: stops,
                                        startPoint: UnitPoint(x: silhouette.minX / width, y: 0.5),
                                        endPoint: UnitPoint(x: silhouette.maxX / width, y: 0.5)),
-                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                        style: StrokeStyle(lineWidth: IslandLayout.rimWidth, lineCap: .round))
         }
     }
 

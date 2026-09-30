@@ -24,8 +24,12 @@ final class IslandModel: ObservableObject {
 struct IslandMetrics: Equatable {
     var notchWidth: CGFloat
     var wingWidth: CGFloat
-    /// The compact island's height — the notch's.
+    /// The compact island's height — the notch's plus the rim's width
+    /// (`IslandLayout.islandFrame`).
     var stripHeight: CGFloat
+    /// The notch's height: the band the cat, the wing and the open header sit in.
+    /// Centred on the taller strip they would drop by half a rim's width.
+    var bandHeight: CGFloat
     var spriteSize: CGSize
     /// The tallest the open body may be on this screen (§5.2).
     var expandedMaxHeight: CGFloat
@@ -33,6 +37,6 @@ struct IslandMetrics: Equatable {
     /// Both wings and the notch.
     var compactBody: CGSize { CGSize(width: 2 * wingWidth + notchWidth, height: stripHeight) }
 
-    static let zero = IslandMetrics(notchWidth: 0, wingWidth: 0, stripHeight: 0, spriteSize: .zero,
+    static let zero = IslandMetrics(notchWidth: 0, wingWidth: 0, stripHeight: 0, bandHeight: 0, spriteSize: .zero,
                                     expandedMaxHeight: 0)
 }

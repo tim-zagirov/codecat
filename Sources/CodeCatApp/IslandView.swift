@@ -89,25 +89,26 @@ struct IslandView: View {
     }
 
     /// The cat in the left wing and the live data in the right, both centred on their
-    /// wings, measured from the notch's centre.
+    /// wings, measured from the notch's centre, and on the notch's band rather than
+    /// the strip, which runs a rim's width lower.
     private func header(canvasWidth: CGFloat) -> some View {
         let centre = canvasWidth / 2
         let side = metrics.notchWidth / 2 + metrics.wingWidth / 2
-        let y = metrics.stripHeight / 2
+        let y = metrics.bandHeight / 2
         return ZStack(alignment: .topLeading) {
             MascotView(skin: appState.skin,
                        status: appState.store.aggregate,
                        indicator: appState.store.indicator,
                        drawingSize: metrics.spriteSize,
-                       canvasSize: CGSize(width: metrics.spriteSize.width, height: metrics.stripHeight),
+                       canvasSize: CGSize(width: metrics.spriteSize.width, height: metrics.bandHeight),
                        showsBadge: false,
                        since: appState.statusSince,
                        onLoadFailure: { [appState] skin in appState.reportSkinLoadFailure(skin) })
-                .frame(width: metrics.wingWidth, height: metrics.stripHeight)
+                .frame(width: metrics.wingWidth, height: metrics.bandHeight)
                 .position(x: centre - side, y: y)
                 .allowsHitTesting(false)
             IslandWingView(content: RightWing.content(for: appState.store.ordered, aggregate: tone, now: Date()))
-                .frame(width: metrics.wingWidth, height: metrics.stripHeight)
+                .frame(width: metrics.wingWidth, height: metrics.bandHeight)
                 // Open, the wing's live data gives way to the header's dots (§5.3).
                 .opacity(contentVisible ? 0 : 1)
                 .animation(Motion.contentOut, value: contentVisible)
@@ -124,7 +125,7 @@ struct IslandView: View {
                     SettingsButton(action: model.onSettings)
                 }
                 .frame(width: IslandLayout.expandedWidth - 2 * IslandLayout.headerTrailingInset,
-                       height: metrics.stripHeight, alignment: .trailing)
+                       height: metrics.bandHeight, alignment: .trailing)
                 .modifier(ContentReveal(visible: contentVisible))
                 .position(x: centre, y: y)
             }
