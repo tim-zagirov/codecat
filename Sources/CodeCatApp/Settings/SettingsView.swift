@@ -41,6 +41,14 @@ struct SettingsView: View {
                 get: { selection.pane }, set: { if let pane = $0 { selection.pane = pane } })) { pane in
                 Label(pane.title, systemImage: pane.symbol).tag(pane)
             }
+            // `.navigationSplitViewColumnWidth` is only an ideal, and inside this
+            // window's `NSHostingView` (`sizingOptions = []`, a fixed-size window —
+            // see `SettingsWindowController.makeWindow()`) it was never honoured at
+            // all: measured on a capture, the sidebar came out ~139 pt wide against
+            // Figma's 196 pt regardless of what was asked for here. A `.frame`
+            // directly on the column's content is what the split view actually
+            // measures against in that situation.
+            .frame(width: 196)
             .navigationSplitViewColumnWidth(196)
             .toolbar(removing: .sidebarToggle)
         } detail: {

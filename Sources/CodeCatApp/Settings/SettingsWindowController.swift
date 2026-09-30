@@ -19,13 +19,21 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         let window = self.window ?? makeWindow()
         self.window = window
         FocusReturn.remember()
-        // `NSApp.activate()` alone leaves the window behind the frontmost app's own
-        // windows — the same reason `AppState.runInFront` orders its alerts with
-        // `orderFrontRegardless()` rather than trusting activation to reorder them.
-        // CodeCat is an accessory app with no recent user event of its own to point
-        // to (the "•••" click lands on the island's window, not this one), so
-        // activation is a request the window server is free to defer.
-        NSApp.activate()
+        // Plain `activate()` only *asks* macOS to make CodeCat the active app; the
+        // system decides per app whether to grant that and can simply sit on the
+        // request, which is what happened here — measured twice, directly: with
+        // `activate()` alone the window existed at its intended frame but never
+        // became key (a ⌘W right after opening it did nothing, in a before/after
+        // capture pair that showed the same open window in both shots), and even
+        // ordering it front with `orderFrontRegardless()` only fixed the *drawing*,
+        // not which app owned the keyboard. `activate(ignoringOtherApps:)` is
+        // deprecated in favour of plain `activate()`, but unlike it, still forces
+        // the app active outright — needed here since CodeCat is an accessory app
+        // with no recent user event of its own to point to (the "•••" click lands on
+        // the island's window, not this one; `--demo-settings` opens this window
+        // from a bare timer callback, with no event at all). `AppState.runInFront`
+        // hits the same wall for its alerts and works around it the same way.
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
     }
