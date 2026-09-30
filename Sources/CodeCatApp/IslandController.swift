@@ -313,12 +313,15 @@ final class IslandController: NSObject, MascotPresenting {
         if !new.isOpen, old.isOpen { beginClosing() }
         syncModel()
         updateSilhouette()
+        // Before the cursor is read below: a peek arriving while the island steps
+        // aside for a full-screen app orders the window in here, and the cursor is
+        // never on the silhouette of a window that is off screen.
+        applyVisibility()
         // Tim, 2026-09-30: a peek that grows under a resting cursor counts as hover.
         // The tracking area reports nothing for a cursor that did not move, so the
         // cursor is read once the peek's outline exists (Part 2 handover, contract 7).
         if case .peek = new, !old.isOpen { resyncPointer() }
         armTimer()
-        applyVisibility()
     }
 
     /// What the view draws from, copied from the flow.

@@ -74,16 +74,17 @@ public final class IslandFlow {
     public func escape(now: Date) { ended(presenter.escape(), now: now) }
     public func jumped(now: Date) { ended(presenter.jumped(), now: now) }
 
-    /// The screen locked: nobody is there to read a peek, so the one on screen ends and
-    /// what happens until the unlock is counted for one summary (spec §6.2). The queue
-    /// goes into the count first (`PeekScheduler.lock`), so ending the peek cannot
-    /// bring the next one up.
+    /// The screen locked: nobody is there to read the island, so whatever is up closes
+    /// and what happens until the unlock is counted for one summary (spec §6.2). The
+    /// queue goes into the count first (`PeekScheduler.lock`), so ending a peek cannot
+    /// bring the next one up. An open list or an inhale closes too: left open, the
+    /// unlock would find the list up, and opening it clears the queue — the summary
+    /// with it.
     public func lock(now: Date) {
         guard !isLocked else { return }
         isLocked = true
         scheduler.lock()
-        if case .peek = presenter.presentation {
-            presenter.escape()
+        if presenter.presentation != .compact, presenter.escape() != nil {
             scheduler.peekEnded(now: now)
         }
     }

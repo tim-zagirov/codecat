@@ -40,8 +40,11 @@ final class FullScreenWatcher {
                   let rect = CGRect(dictionaryRepresentation: bounds) else { return nil }
             return FullScreen.Window(ownerPID: pid, layer: layer, bounds: rect)
         }
-        let full = FullScreen.covers(screen: rect, windows: windows,
-                                     frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier)
+        let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        // A click in the open island activates CodeCat itself; its windows say nothing
+        // about the app underneath, so the last answer stands until that app is back.
+        guard front != ProcessInfo.processInfo.processIdentifier else { return }
+        let full = FullScreen.covers(screen: rect, windows: windows, frontmostPID: front)
         let first = !hasChecked
         hasChecked = true
         guard full != isFullScreen || first else { return }

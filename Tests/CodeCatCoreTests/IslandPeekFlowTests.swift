@@ -166,7 +166,11 @@ final class IslandPeekFlowTests: XCTestCase {
     /// (h) Spec §6.2: nothing peeks on a locked screen; one summary on unlock.
     func testWhatHappensWhileLockedComesBackAsOneSummary() {
         let f = Fixture(t0: t0, sessions: ["a", "b"])
+        f.flow.pointerEntered(now: at(0))
+        f.flow.tick(now: at(0.31))
+        XCTAssertEqual(f.flow.presentation, .expanded)
         f.flow.lock(now: at(1))
+        XCTAssertEqual(f.flow.presentation, .compact, "the lock closes the open list, or the unlock would lose the summary")
         f.set("a", .done, now: at(2))
         f.set("b", .waitingForYou(.permission), now: at(3))
         XCTAssertEqual(f.flow.presentation, .compact, "nothing peeks on a locked screen")
