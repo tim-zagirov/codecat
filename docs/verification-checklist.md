@@ -59,20 +59,21 @@ Run this on a fresh build before tagging a release.
     blurred), and it is not clipped top or bottom. The tallest skins (mxmaze,
     cat-4, cat-5) fill the menu bar completely — if that reads as cramped, the
     fallback is in the spec: raise the island to `safeAreaInsets.top + 4`.
-20. The counter on the right: a dot at rest, a number when sessions exist, a red
-    number when an agent is waiting.
-21. Hovering opens the short menu; moving the mouse from the island onto the menu
-    does not close it; moving away closes it after roughly a third of a second.
-    Rows, skin tiles and the credits row highlight under the cursor in the short
-    menu even though the window is not key (no pointing hand there — macOS ignores
-    a non-key window's cursor).
-22. Clicking opens the full menu; its toggles, skin grid and hooks button all
-    work; clicking outside closes it; clicking the island again closes it.
+20. The right wing shows live data: nothing with no sessions; one working session's
+    plan (`2/5` and a ring) or its age (`4m`); a check when it is done; a dot per
+    session for two to four; one dot and the count for five or more.
+21. Resting on the island opens it after the hover delay (0.3 s); moving about
+    inside keeps it open; moving away closes it about 0.15 s later. Cards highlight
+    under the cursor even though the window is not key; the cursor stays an arrow
+    (macOS ignores a non-key window's cursor).
+22. The open island has no switches and no skins: "•••" opens the status-bar menu,
+    which holds every switch, until the Settings window arrives in Part 3; skins
+    are chosen in the floating panel.
 23. Turn on "Hide the cat when nothing is running" with zero sessions → the
     mascot disappears; start a session → it comes back on its own, without
     touching the menu. Check this in **both** display modes: before 0.2.0 only
     the island read this setting and the toggle was dead in floating mode.
-24. Clicking a session row jumps to the terminal and closes the menu.
+24. Clicking a card jumps to the terminal and closes the island.
 25. Switch display mode both ways: the floating cat returns to its saved
     position, the island disappears completely, and the floating panel looks and
     behaves as it did before the two were split apart.
@@ -126,50 +127,41 @@ Run this on a fresh build before tagging a release.
     entitlement; ad-hoc builds have no hardened runtime, so the failure it guards
     against cannot be reproduced there.
 
-## Island live state (0.5.0)
-
-Demo: `dist/CodeCat.app/Contents/MacOS/CodeCat --demo`, island mode.
-
-- [ ] Working phase, strip: green glow behind the cat; a cluster of two green dots.
-- [ ] Waiting phase, strip: the orange dot pulses on a 3 s cycle; glow orange.
-- [ ] Done phase, strip: glow blue; one blue dot among the others.
-- [ ] Idle phase: no glow, one grey dot.
-- [ ] Five live sessions: the capsule with a count returns.
-- [ ] Working phase, menu: "codecat" row shows "Чиню курсор пагинации  2/5" and a bar two-fifths full.
-- [ ] Done phase, menu: "orbit-api" row shows the summary and chips localhost:4321, PR #12, Figma.
-- [ ] Chip click opens the browser; the menu stays open.
-- [ ] Chip drag onto a Safari window navigates there; a folder chip (live session) dragged to the Desktop copies.
-- [ ] Waiting phase, menu: orange wash at the top; none in the working phase; red with `--demo-phase=problem`.
-- [ ] Frame captures (`screencapture` every 50 ms, 8 frames) of: the glow bloom on a tone change, a dot appearing, the step title changing, the chips arriving. Compare frames 1, 5 and 8 with the spec's start/mid/end values.
-- [ ] System Settings → Accessibility → Reduce Motion on: no scale, no stagger; the waiting dot is a ring.
-- [ ] Panel mode: the step line replaces the status line; the handoff block under the done row.
-- [ ] Switch off "Show what each session is doing": rows are name, status, duration.
-
 ## The island (0.5)
 
 Captures from `scripts/dev/island-shot.sh` cover how it looks; these need a hand.
 
-- The rim: a waiting agent sends a white highlight along the island's edge, one lap
+- [ ] The rim: a waiting agent sends a white highlight along the island's edge, one lap
   every 2.4 s; it stops the moment nobody waits. No glow behind the cat.
-- Hover the island: it grows a little, the rim brightens, a shadow lifts it; leave
+- [ ] Hover the island: it grows a little, the rim brightens, a shadow lifts it; leave
   before 0.3 s and it settles back. Rest on it and it opens.
-- Hover near the notch but beside the island — nothing. Click the app menu under the
+- [ ] Hover near the notch but beside the island — nothing. Click the app menu under the
   left wing and a status icon under the right one: both open as if the island were
   not there.
-- Drag a window across the notch: the island does not open.
-- Open the island, click a card for a session in Terminal: you land in its tab and
-  the island closes. Over a card the pointer is a pointing hand.
-- Open the island, click an empty part of it, move away until it closes, then type:
+- [ ] Drag a window across the notch: the island does not open.
+- [ ] Open the island, click a card for a session in Terminal: you land in its tab and
+  the island closes. Over a card the cursor stays an arrow: the island's window is
+  not key while you hover, and macOS ignores a non-key window's cursor.
+- [ ] Open the island, click an empty part of it, move away until it closes, then type:
   the text goes to the app you were in, not nowhere.
-- Open the island, click inside it, press Escape: it closes. Known, parked: this is
+- [ ] Open the island, click inside it, press Escape: it closes. Known, parked: this is
   unreliable — the window server hands the keyboard back to the frontmost app about
   35 ms after the click, so Escape often goes to that app instead. Moving away closes
   it every time.
-- Drag a chip from a done card into a browser: the link arrives; the island stays
+- [ ] Click a chip on a done card: the link opens in the browser.
+- [ ] Drag a chip from a done card into a browser: the link arrives; the island stays
   open during the drag and closes after.
-- "•••" closes the island and opens the status-bar menu at the pointer, about 0.6 s
+- [ ] "•••" closes the island and opens the status-bar menu at the pointer, about 0.6 s
   later (interim, until the Settings window exists in Part 3).
-- System Settings → Accessibility → Display → Reduce motion on: no inhale, the island
+- [ ] System Settings → Accessibility → Display → Reduce motion on: no inhale, the island
   cross-fades open and closed, the waiting dot has a still ring, the rim does not travel.
-- Hooks removed: the open island shows only the "Connect Claude Code" card; "Not now"
+- [ ] Hooks removed: the open island shows only the "Connect Claude Code" card; "Not now"
   hides it until the next launch.
+- [ ] Connect… on that card shows the dialog in front of the app you were in, not behind
+  it. Cancel it with the pointer away from the island: the island closes without the
+  pointer having to move again.
+- [ ] Switch off "Show what each session is doing": the cards show no task, step,
+  summary or chips — a done card says "finished the task", a waiting one only its
+  status.
+- [ ] Floating panel: a working row's step line replaces its status line; a done row
+  shows the handoff block.
