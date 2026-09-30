@@ -49,41 +49,72 @@ struct IslandWingView: View {
 
 /// A session's dot: 7 pt in its tone. The waiting one pulses inside a 13 pt halo —
 /// with Reduce Motion it sits still in a ring instead (§11).
+///
+/// One view whatever the tone: the halo and the ring are always there, shown only
+/// while waiting, and the pulse is computed from the clock rather than switched on
+/// by a `phaseAnimator` branch. With an `if waiting { … } else { dot }` the dot that
+/// started waiting was a *new* view: captures showed the old green dot fading out
+/// 3–4 pt left of the new amber one for 0.2 s, and under Reduce Motion the amber
+/// dot slid into place. Now a change of tone animates colour only
+/// (`Motion.toneCrossfade`); the step from 7 to 13 pt wide is the row's business —
+/// `Motion.reposition` in the wing, nothing with Reduce Motion.
 struct SessionDotView: View {
     let tone: MascotTone
     @Environment(\.islandReduceMotion) private var reduced
 
     var body: some View {
-        let color = ToneColor.island(tone)
-        let dot = Circle().fill(color).frame(width: 7, height: 7)
+        let waiting = tone == .waiting
+        let pulsing = waiting && !reduced
+        // The two `animation(_:body:)` scopes animate only what is inside them — the
+        // colour and the halo's and ring's opacity. A value-keyed `.animation` here
+        // also moved the dot: captures showed it sliding 3 pt with Reduce Motion.
         ZStack {
-            if tone == .waiting {
-                if reduced {
-                    Circle().strokeBorder(color, lineWidth: 1.5).frame(width: 13, height: 13)
-                    dot
-                } else {
-                    Circle().fill(color.opacity(0.3)).frame(width: 13, height: 13)
-                    dot.phaseAnimator([false, true]) { content, pulse in
-                        content.scaleEffect(pulse ? 1.35 : 1)
-                    } animation: { _ in Motion.pulse }
-                }
-            } else {
-                dot
+            Circle()
+                .frame(width: 13, height: 13)
+                .animation(Motion.toneCrossfade) { $0.opacity(pulsing ? 0.3 : 0) }
+            Circle().strokeBorder(lineWidth: 1.5)
+                .frame(width: 13, height: 13)
+                .animation(Motion.toneCrossfade) { $0.opacity(waiting && reduced ? 1 : 0) }
+            // Paused unless pulsing, so the loop stops the moment no session waits.
+            TimelineView(.animation(paused: !pulsing)) { context in
+                Circle()
+                    .frame(width: 7, height: 7)
+                    .scaleEffect(pulsing ? Self.pulseScale(at: context.date) : 1)
             }
         }
-        .frame(width: tone == .waiting ? 13 : 7, height: 13)
-        // Isolates the halo-plus-dot pair as one rigid geometry unit. Without it,
-        // the ancestor animations that key off `dots`/`tone` (this view's own
-        // `.animation(_:value: tone)` below, and the wing's
-        // `.animation(_:value: dots)` around the `HStack`) leaked into
-        // `phaseAnimator`'s internal phase change, and the *animated* dot child
-        // was laid out independently of its static halo sibling — each render
-        // pass could place it anywhere up to the width of the notch away, not
-        // merely a few points off. `geometryGroup()` here, wrapping both circles
-        // together before either `.animation` modifier sees them, keeps the pair
-        // concentric no matter which ancestor value changes next.
+        .animation(Motion.toneCrossfade) { $0.modifier(ToneTint(ToneColor.island(tone))) }
+        .frame(width: waiting ? 13 : 7, height: 13)
+        // Keeps the halo and the dot one rigid unit, so the wing's `.animation(_:value:
+        // dots)` moves them together and the pair stays concentric (without it, the dot
+        // was once laid out apart from its halo, up to a notch's width away).
         .geometryGroup()
-        .animation(Motion.toneCrossfade, value: tone)
+    }
+
+    /// The pulse (§4.2, "the existing 3 s pulse"): 1 → 1.35 → 1, ease-in-out, 3 s each
+    /// way, from a timestamp like the rim's lap, so a rebuild does not restart it.
+    static func pulseScale(at date: Date) -> CGFloat {
+        let cycle = date.timeIntervalSinceReferenceDate / (2 * Motion.pulse)
+        let phase = 2 * (cycle - cycle.rounded(.down))
+        let rise = phase < 1 ? phase : 2 - phase
+        return 1 + 0.35 * CGFloat(UnitCurve.easeInOut.value(at: rise))
+    }
+}
+
+/// Paints its content in `color`, and animates a change of it channel by channel.
+/// `foregroundStyle` alone does not animate inside `animation(_:body:)`: the dot
+/// that started waiting turned amber in one frame while its ring faded in.
+private struct ToneTint: ViewModifier, Animatable {
+    var animatableData: AnimatablePair<AnimatablePair<Double, Double>, AnimatablePair<Double, Double>>
+
+    init(_ color: Color) {
+        let rgb = NSColor(color).usingColorSpace(.sRGB) ?? .black
+        animatableData = AnimatablePair(AnimatablePair(rgb.redComponent, rgb.greenComponent),
+                                        AnimatablePair(rgb.blueComponent, rgb.alphaComponent))
+    }
+
+    func body(content: Content) -> some View {
+        content.foregroundStyle(Color(.sRGB, red: animatableData.first.first, green: animatableData.first.second,
+                                      blue: animatableData.second.first, opacity: animatableData.second.second))
     }
 }
 

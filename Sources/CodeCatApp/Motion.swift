@@ -43,8 +43,8 @@ enum Motion {
     static let toneCrossfade = Animation.easeOut(duration: 0.25)
     /// Dots and bars moving, a list growing by a row.
     static let reposition = Animation.spring(response: 0.28, dampingFraction: 1.0)
-    /// The waiting dot's pulse.
-    static let pulse = Animation.easeInOut(duration: 3.0)
+    /// The waiting dot's pulse, each way, ease-in-out (`SessionDotView.pulseScale`).
+    static let pulse: TimeInterval = 3.0
     static let stepTitle = Animation.easeOut(duration: 0.20)
     static let chipAppear = Animation.easeOut(duration: 0.20)
     static let chipStagger: TimeInterval = 0.04
