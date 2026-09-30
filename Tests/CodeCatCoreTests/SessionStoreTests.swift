@@ -1688,5 +1688,22 @@ extension SessionStoreTests {
         store.dismiss(id: "b")
         XCTAssertEqual(store.ordered.map(\.id), ["a"], "a working session is not the user's to dismiss")
     }
+
+    /// The footer's "2 agents working" counts what keeps the Mac awake — the same
+    /// sessions as `anyWorking`.
+    func testWorkingCountCountsWhatKeepsTheMacAwake() {
+        let store = SessionStore()
+        let t0 = Date(timeIntervalSince1970: 1_759_000_000)
+        for id in ["a", "b", "c", "d"] {
+            store.apply(hook: HookEvent(hookEventName: "UserPromptSubmit", sessionId: id, cwd: "/p/\(id)",
+                                        message: nil, prompt: "go"), now: t0)
+        }
+        store.apply(hook: HookEvent(hookEventName: "Notification", sessionId: "c", cwd: "/p/c",
+                                    message: "Claude needs your permission to use Bash"), now: t0.addingTimeInterval(1))
+        store.apply(hook: HookEvent(hookEventName: "Stop", sessionId: "d", cwd: "/p/d", message: nil),
+                    now: t0.addingTimeInterval(1))
+        XCTAssertEqual(store.workingCount, 2)
+        XCTAssertTrue(store.anyWorking)
+    }
 }
 

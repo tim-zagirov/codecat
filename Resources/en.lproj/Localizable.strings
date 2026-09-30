@@ -219,3 +219,9 @@
 "wing.elapsed.fresh" = "<1m";
 "wing.elapsed.minutes" = "%dm";
 "wing.elapsed.hours" = "%dh";
+
+/* Footer of the open island: the power state. */
+"footer.power.awake.one" = "Mac stays awake — 1 agent working";
+"footer.power.awake" = "Mac stays awake — %d agents working";
+"footer.power.sleep.now" = "Mac can sleep now";
+"footer.power.sleep" = "Mac can sleep in %d min";

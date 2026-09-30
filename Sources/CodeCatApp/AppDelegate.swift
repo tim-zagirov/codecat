@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // replaces `start()` rather than adding to it — see `startDemo`.
         if CommandLine.arguments.contains("--demo") {
             let arguments = CommandLine.arguments
+            appState.demoLidOn = arguments.contains("--demo-lid")
             appState.startDemo(pin: Self.demoPin(),
                                hooksInstalled: !arguments.contains("--demo-phase=firstrun"),
                                unroutable: arguments.contains("--demo-noroute") ? [DemoFeed.sessionIDs[1]] : [])

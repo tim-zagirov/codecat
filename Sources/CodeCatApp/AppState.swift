@@ -57,6 +57,16 @@ final class AppState: ObservableObject {
     /// Demo sessions drawn as having no route, for the "no route" capture.
     private var demoUnroutable: Set<String> = []
 
+    /// The open island's footer (§5.5). `PowerManager` is not observable, so the
+    /// state is recomputed here on every `refresh()` — hook events and the 15 s
+    /// tick — and published.
+    @Published private(set) var powerFooter = PowerFooter.none
+    /// "Not now" on the first-run card: hidden until the next launch (§5.6).
+    @Published var firstRunDismissed = false
+    /// `--demo-lid`: the demo claims closed-lid mode is on, for the footer capture,
+    /// without writing the real setting.
+    var demoLidOn = false
+
     /// When the mascot entered the state it is showing now. A movement made of several
     /// phases ("stretch — lie down — sleep") has no way of knowing whether its one-shot
     /// part has already played without this reference point, and keeping a counter in
@@ -393,10 +403,29 @@ final class AppState: ObservableObject {
         // sessions that are still actively working.
         powerManager.update(anyWorking: store.anyWorking, now: Date())
         lidController.update(shouldPreventSleep: powerManager.isHolding)
+        updatePowerFooter(now: Date())
         notifyTransition(to: agg)
         if AggregateStatusKey(agg) != AggregateStatusKey(lastAggregate) { statusSince = Date() }
         lastAggregate = agg
         objectWillChange.send()
+    }
+
+    private func updatePowerFooter(now: Date) {
+        // The demo holds no assertion (a demo must not keep the Mac awake), so it
+        // shows what the real app would: awake while anything works.
+        let footer = PowerFooter.make(
+            isHolding: isDemo ? store.anyWorking : powerManager.isHolding,
+            releaseDeadline: isDemo ? nil : powerManager.releaseDeadline,
+            workingCount: store.workingCount,
+            lidModeOn: isDemo ? demoLidOn : lidModeEnabled,
+            now: now)
+        if footer != powerFooter { powerFooter = footer }
+    }
+
+    /// The crashed card's ×: the row goes, and the aggregate with it.
+    func dismiss(_ session: Session) {
+        store.dismiss(id: session.id)
+        refresh()
     }
 
     private func notifyTransition(to agg: AggregateStatus) {

@@ -159,17 +159,20 @@ public final class SessionStore: ObservableObject {
     /// user's input is needed — a long single tool call looks identical. Real
     /// `.waitingForYou(.permission)` / `.waitingForYou(.question)` / `.waitingForYou(.input)`
     /// come from an actual `Notification` hook firing and do not count as working.
-    public var anyWorking: Bool {
-        sessions.values.contains { session in
-            switch session.status {
-            case .working: return true
-            case .waitingForYou(.idle): return true
-            case .waitingForYou: return false
-            // An open session with no work is no reason to keep the Mac awake: holding
-            // an assertion for a tab nobody has started anything in drains the battery
-            // for the same reason the badge used to lie.
-            case .idle, .done, .crashed: return false
-            }
+    public var anyWorking: Bool { sessions.values.contains(where: Self.keepsTheMacAwake) }
+
+    /// How many sessions `anyWorking` sees — the number in the power footer.
+    public var workingCount: Int { sessions.values.filter(Self.keepsTheMacAwake).count }
+
+    private static func keepsTheMacAwake(_ session: Session) -> Bool {
+        switch session.status {
+        case .working: return true
+        case .waitingForYou(.idle): return true
+        case .waitingForYou: return false
+        // An open session with no work is no reason to keep the Mac awake: holding
+        // an assertion for a tab nobody has started anything in drains the battery
+        // for the same reason the badge used to lie.
+        case .idle, .done, .crashed: return false
         }
     }
 
