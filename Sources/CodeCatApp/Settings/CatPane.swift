@@ -132,8 +132,10 @@ struct SkinGrid: View {
             Text(skin.name).font(.system(size: 11)).lineLimit(1)
         }
         .frame(width: 106, height: 85)
+        // Every cell sits on a tile, as in Figma 05; the chosen and the hovered one on
+        // a brighter one.
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(selected || hovered == skin.id ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear)))
+            .fill(selected || hovered == skin.id ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.quinary)))
         // `primary`, not the spec's white: white is invisible on the light form
         // (decision 6); `primary` is white in dark mode, where Figma drew it.
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
