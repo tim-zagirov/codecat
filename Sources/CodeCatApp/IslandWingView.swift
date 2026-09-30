@@ -87,11 +87,15 @@ struct SessionDotView: View {
     }
 }
 
-/// Steps done of steps planned, as a 16 pt ring from 12 o'clock.
+/// Steps done of steps planned, as a 16 pt ring from 12 o'clock. A finished step
+/// sweeps the arc on `Motion.reposition`; with Reduce Motion the arc jumps to its new
+/// length, as the dots do (§11: no springs) — a capture with the flag forced showed
+/// the arc sweeping for 0.27 s.
 struct ProgressRing: View {
     let done: Int
     let total: Int
     let tone: MascotTone
+    @Environment(\.islandReduceMotion) private var reduced
 
     var body: some View {
         let fraction = CGFloat(min(done, total)) / CGFloat(max(total, 1))
@@ -103,7 +107,7 @@ struct ProgressRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: 16, height: 16)
-        .animation(Motion.reposition, value: fraction)
+        .animation(reduced ? nil : Motion.reposition, value: fraction)
     }
 }
 
