@@ -6,9 +6,11 @@ import CodeCatCore
 final class FloatingModel: ObservableObject {
     @Published var presentation: IslandPresentation = .compact
     @Published var peekHold: IslandPresenter.PeekHold?
-    /// The list panel's height as placed (`FloatingLayout.panelPlacement`), and
-    /// whether it opened above the cat.
-    @Published var panelHeight: CGFloat = 0
+    /// The open panel's shape — the peek capsule or the list's panel, as placed
+    /// (`FloatingLayout`) — and how it gets there.
+    @Published var panelShape = PanelShape(size: .zero, change: .none, revision: 0)
+    /// The list opened above the cat (decision 9). Never during a peek: its capsule is
+    /// always under the cat.
     @Published var panelIsAbove = false
     /// The tallest the panel may be on this screen: the larger of the rooms below and
     /// above the cat. The list reports its natural height up to this less the
@@ -25,6 +27,29 @@ final class FloatingModel: ObservableObject {
     var onConnect: () -> Void = {}
     /// The list's natural height, measured.
     var onListHeight: (CGFloat) -> Void = { _ in }
+}
+
+/// The open panel's shape, as the controller placed it, and how the view gets there
+/// (spec §9: "on the §5.2 springs"). The panel's window is `size` plus
+/// `FloatingLayout.margin` on every side; rectangles are in the shape's own space,
+/// top-left origin, the window's margin left out.
+struct PanelShape: Equatable {
+    enum Change: Equatable {
+        /// Takes the new size at once: a list that was measured again, a peek
+        /// replacing a peek, a panel that is not visible yet.
+        case none
+        /// Springs from where it is: a peek turning into a list below the cat, which
+        /// shares the peek's top edge and sides.
+        case spring
+        /// Starts at this rectangle and springs to its own: the resting capsule for
+        /// a shape that opens under the cat, a strip at the bottom centre for a list
+        /// above it, which the resting capsule is not inside.
+        case grow(from: CGRect)
+    }
+    let size: CGSize
+    let change: Change
+    /// Counts the grows, so two alike in a row are still two changes.
+    let revision: Int
 }
 
 /// A black capsule with the island's rim along its whole edge and its bloom (spec
@@ -109,9 +134,13 @@ struct FloatingCatView: View {
     }
 }
 
-/// The panel next to the cat: the list, in a 300 pt black panel with the rim (spec
-/// §9). Task 9 adds the peek capsule to it. It fills its window, which the controller
-/// sizes to the panel plus `FloatingLayout.margin` for the bloom.
+/// The panel next to the cat: the peek capsule (300 × 44, Figma 06 "Peek") or the
+/// list in a 300 pt panel, both black with the rim (spec §9). It fills its window,
+/// which the controller sizes to the shape plus `FloatingLayout.margin` for the bloom.
+///
+/// The shape is drawn at `drawn`, which trails the controller's `panelShape`: a
+/// new shape starts at the resting capsule's rectangle and springs to its own, as the
+/// island's does from its strip.
 struct FloatingPanelView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var model: FloatingModel
@@ -121,28 +150,123 @@ struct FloatingPanelView: View {
     /// Above the first card, and in all: 14 above, 10 below.
     static let topPadding: CGFloat = 14
     static let padding: CGFloat = 24
+    /// The peek's line, 18 pt in from the capsule's left and 10 from its right
+    /// (Figma 06 "Peek").
+    static let peekLeading: CGFloat = 18
+    static let peekTrailing: CGFloat = 10
+
+    @State private var drawn: CGRect = .zero
+    /// Drives `ContentReveal`: false until the shape starts growing.
+    @State private var contentVisible = false
+
+    private var reduced: Bool { systemReduceMotion || Motion.reduceMotionForced }
 
     var body: some View {
-        let reduced = systemReduceMotion || Motion.reduceMotionForced
-        let tone = appState.store.aggregate.tone
-        let size = CGSize(width: FloatingLayout.panelWidth, height: model.panelHeight)
-        ZStack(alignment: .top) {
-            CapsuleSurface(size: size, radius: FloatingLayout.panelRadius, tone: tone,
-                           bloom: RimLight.bloom(for: .expanded))
+        let size = model.panelShape.size
+        let peek = peekItem
+        ZStack(alignment: .topLeading) {
+            surface
+            content(size: size, peek: peek)
+                .mask(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: Self.radius(for: drawn.size), style: .continuous)
+                        .frame(width: drawn.width, height: drawn.height)
+                        .offset(x: drawn.minX, y: drawn.minY)
+                        // As on the island: under Reduce Motion the clip takes the
+                        // final shape at once rather than growing through
+                        // intermediate sizes over content that is already fading in.
+                        .transaction { if reduced { $0.animation = nil } }
+                }
+        }
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .onPreferenceChange(IslandContentHeightKey.self) { model.onListHeight($0 + Self.padding) }
+        .onChange(of: model.panelShape, initial: true) { _, shape in apply(shape) }
+        .padding(FloatingLayout.margin)
+        // Top-left, not centred: the window and the view do not change size in the
+        // same render, and a centred root would jump by half the difference.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .environmentObject(pointer)
+        .environment(\.islandReduceMotion, reduced)
+        .environment(\.colorScheme, .dark)
+    }
+
+    /// With Reduce Motion a change of shape is a 0.2 s cross-fade between the old and
+    /// the new outline (§11), as on the island: the `id` swaps the surface, the
+    /// transition fades it.
+    private var surface: some View {
+        CapsuleSurface(size: drawn.size, radius: Self.radius(for: drawn.size),
+                       tone: appState.store.aggregate.tone,
+                       bloom: RimLight.bloom(for: model.presentation))
+            .offset(x: drawn.minX, y: drawn.minY)
+            .id(reduced ? AnyHashable([drawn.minX, drawn.minY, drawn.width, drawn.height]) : AnyHashable(0))
+            .transition(.opacity)
+    }
+
+    /// The resting capsule's 13 pt at its size, 22 pt for the peek and the list.
+    private static func radius(for size: CGSize) -> CGFloat {
+        min(FloatingLayout.panelRadius, size.height / 2)
+    }
+
+    /// The list stays mounted under a peek, invisible and not hit-testable, so it is
+    /// measured: a peek that becomes the list opens straight at the list's height,
+    /// as on the island.
+    private func content(size: CGSize, peek: PeekItem?) -> some View {
+        ZStack(alignment: .topLeading) {
             // The list's own maximum is the room on screen, so it reports its natural
             // height (`listMaxHeight`); the scroll view never outgrows the panel.
-            IslandExpandedView(appState: appState, visible: model.presentation == .expanded,
+            IslandExpandedView(appState: appState, visible: contentVisible && model.presentation == .expanded,
                                maxHeight: max(0, model.listMaxHeight - Self.padding),
                                width: FloatingLayout.panelWidth,
                                onJump: model.onJump, onConnect: model.onConnect)
                 .padding(.top, Self.topPadding)
                 .frame(width: size.width, height: size.height, alignment: .top)
-                .clipShape(RoundedRectangle(cornerRadius: FloatingLayout.panelRadius, style: .continuous))
+                .allowsHitTesting(peek == nil)
+            if let peek, let line = PeekContent.make(for: peek, sessions: appState.store.ordered,
+                                                     showsTaskText: appState.showsTaskText) {
+                PeekLine(content: line, pillHeight: 22, compact: true,
+                         leading: Self.peekLeading, trailing: Self.peekTrailing,
+                         onJump: { jump(to: line.sessionID) }, onShow: model.onShow)
+                    .frame(width: FloatingLayout.peekCapsule.width, height: FloatingLayout.peekCapsule.height)
+                    .overlay(alignment: .bottom) {
+                        PeekHairline(tone: line.tone, hold: model.peekHold, inset: FloatingLayout.peekRadius)
+                            .allowsHitTesting(false)
+                    }
+                    .modifier(ContentReveal(visible: contentVisible))
+                    .transition(.opacity)
+            }
         }
-        .onPreferenceChange(IslandContentHeightKey.self) { model.onListHeight($0 + Self.padding) }
-        .padding(FloatingLayout.margin)
-        .environmentObject(pointer)
-        .environment(\.islandReduceMotion, reduced)
-        .environment(\.colorScheme, .dark)
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+    }
+
+    private var peekItem: PeekItem? {
+        if case .peek(let item) = model.presentation { return item }
+        return nil
+    }
+
+    private func jump(to id: String?) {
+        guard let id, let session = appState.store.sessions[id] else { return }
+        appState.jump(to: session)
+        model.onJump()
+    }
+
+    private func apply(_ shape: PanelShape) {
+        let target = CGRect(origin: .zero, size: shape.size)
+        switch shape.change {
+        case .none:
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) { drawn = target }
+        case .spring:
+            withAnimation(Motion.open(reduced: reduced)) { drawn = target }
+        case .grow(let from):
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) { drawn = from }
+            // The start has to be drawn once before the spring can leave it: set in
+            // the same update, SwiftUI animates only from what was on screen.
+            DispatchQueue.main.async {
+                withAnimation(Motion.open(reduced: reduced)) { drawn = target }
+                contentVisible = true
+            }
+        }
     }
 }
