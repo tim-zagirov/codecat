@@ -107,7 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `--demo-phase=idle|working|waiting|done|problem|one-working|one-waiting|`
     /// `one-done|many|showcase|empty|firstrun`, for a capture that must not race the
     /// four-second loop. `--demo-peek=waiting|crashed|done|merged|away` pins `working`
-    /// when no phase is named, and plays its peek on it 1.5 s after launch. An
+    /// when no phase is named, and plays its peek on it 1.5 s after launch; `away`
+    /// plays its change behind a pretend screen lock (`AppState.demoAway()`). An
     /// unrecognised name means "loop", not "crash": this flag exists for a script,
     /// and a typo in it should cost a retake, not a launch failure.
     private static func demoPin() -> DemoFeed.Pin? {

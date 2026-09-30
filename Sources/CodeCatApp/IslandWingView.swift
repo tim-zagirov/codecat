@@ -60,12 +60,14 @@ struct IslandWingView: View {
 struct SessionDotView: View {
     let tone: MascotTone
     @Environment(\.islandReduceMotion) private var reduced
+    @Environment(\.islandIsOnScreen) private var onScreen
 
     var body: some View {
         let waiting = tone == .waiting
         let pulsing = waiting && !reduced
-        // Paused unless pulsing, so the loop stops the moment no session waits.
-        TimelineView(.animation(paused: !pulsing)) { context in
+        // Paused unless pulsing, so the loop stops the moment no session waits — and
+        // while the island is off screen.
+        TimelineView(.animation(paused: !pulsing || !onScreen)) { context in
             Circle()
                 .frame(width: RightWing.dotWidth, height: RightWing.dotWidth)
                 .scaleEffect(pulsing ? Self.pulseScale(at: context.date) : 1)

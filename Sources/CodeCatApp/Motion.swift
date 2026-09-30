@@ -79,6 +79,18 @@ extension EnvironmentValues {
         get { self[IslandReduceMotionKey.self] }
         set { self[IslandReduceMotionKey.self] = newValue }
     }
+
+    /// Whether the island's window is on screen (`IslandModel.isOnScreen`). While it
+    /// steps aside for a full-screen app, the rim's lap and the waiting dot's pulse
+    /// would otherwise go on ticking in a window nobody sees (Part 2 handover).
+    var islandIsOnScreen: Bool {
+        get { self[IslandOnScreenKey.self] }
+        set { self[IslandOnScreenKey.self] = newValue }
+    }
+}
+
+private struct IslandOnScreenKey: EnvironmentKey {
+    static let defaultValue = true
 }
 
 /// How the open island's content arrives and leaves (§5.2): each item from a 20 pt

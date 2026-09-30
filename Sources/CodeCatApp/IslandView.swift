@@ -55,6 +55,7 @@ struct IslandView: View {
         .onChange(of: expandedHeight, initial: true) { _, height in model.onExpandedHeight(height) }
         .environmentObject(pointer)
         .environment(\.islandReduceMotion, reduced)
+        .environment(\.islandIsOnScreen, model.isOnScreen)
         .environment(\.colorScheme, .dark)
     }
 
@@ -107,8 +108,8 @@ struct IslandView: View {
     /// Read from `shown`, not `model.presentation`: when a peek ends the presentation
     /// is compact one render before `presentationChanged` hides the content, and in
     /// that render the header's dots and "•••" flashed in over the closing peek while
-    /// its line vanished without a fade (captured: `t6-peek-close`, frame 13). `shown`
-    /// stays on the peek until its line has faded out.
+    /// its line vanished without a fade (captured). `shown` stays on the peek until
+    /// its line has faded out.
     private var peekItem: PeekItem? {
         if case .peek(let item) = shown { return item }
         return nil

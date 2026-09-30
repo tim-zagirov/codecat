@@ -5,7 +5,10 @@ import CodeCatCore
 
 /// A borderless, non-activating floating panel used for both the cat mascot and its
 /// details popup. `.nonactivatingPanel` lets it accept mouse/keyboard input without
-/// ever bringing CodeCat to the front, so the user's current app never loses focus.
+/// ever bringing CodeCat to the front by itself: hover and the panel's own key status
+/// never take focus from the user's app. The island's owner is the one exception, by
+/// choice — it activates CodeCat on a click inside (`onActivatingClick`) and hands
+/// activation back when the island closes.
 ///
 /// `allowsKey` is per-instance rather than hardcoded because the cat and the details
 /// panel need different answers: the cat must NEVER take key status (it can be tapped
@@ -42,12 +45,33 @@ class OverlayPanel: NSPanel {
     /// changes: AppKit was about to make this panel key with that click anyway. Panels
     /// that may never become key (the cat) are untouched.
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown, allowsKey, !isKeyWindow {
-            clickGrantsKey = true
-            makeKey()
+        if event.type == .leftMouseDown, allowsKey {
+            activatesOnMouseUp = onActivatingClick != nil && !NSApp.isActive
+            if !isKeyWindow {
+                clickGrantsKey = true
+                makeKey()
+            }
         }
         super.sendEvent(event)
+        if event.type == .leftMouseUp, activatesOnMouseUp {
+            activatesOnMouseUp = false
+            DispatchQueue.main.async { [weak self] in self?.onActivatingClick?() }
+        }
     }
+
+    /// Tim, 2026-09-30: a click activates CodeCat, so Escape and the keyboard reach
+    /// the panel. Key status alone did not hold: the window server handed it back to
+    /// the frontmost app ~35 ms after the click (Escape failed 5 of 5 with Finder in
+    /// front). The owner remembers where the user came from and activates.
+    ///
+    /// Called once the click is over — after its mouse-up has been handled — and
+    /// only for a click that began while CodeCat was inactive, so the frontmost app
+    /// can still be read. Activating during the mouse-down lost the keyboard in 5 of
+    /// 8 runs (logged: AppKit reported CodeCat active with the panel key, and the
+    /// Escape that followed never reached the app), and with
+    /// `activate(ignoringOtherApps:)` in 3 of 4; after the mouse-up it held in 4 of 4.
+    var onActivatingClick: (() -> Void)?
+    private var activatesOnMouseUp = false
 
     /// The island's panel may become key only from a click in it (spec §2: the
     /// island never takes focus from the terminal). Without this, AppKit made it key
@@ -164,7 +188,7 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
 
     private func handleStateChange() {
         setVisible(shouldShowMascot)
-        // Keep the open details panel's session list, away log, and size in sync
+        // Keep the open details panel's session list and size in sync
         // with live state instead of only refreshing when it is next opened.
         if let panel = detailsPanel, panel.isVisible {
             resizeDetailsToFitContent()
@@ -244,9 +268,8 @@ final class OverlayController: NSObject, NSWindowDelegate, MascotPresenting {
         return panel
     }
 
-    /// The details panel's content is a variable-length list (sessions + away log
-    /// entries), so a fixed contentRect either clips a long list or leaves dead
-    /// space for a short one. Resize the panel to the SwiftUI content's own ideal
+    /// The details panel's content is a variable-length list of sessions, so a fixed
+    /// contentRect either clips a long list or leaves dead space for a short one. Resize the panel to the SwiftUI content's own ideal
     /// size instead of guessing a constant.
     private func resizeDetailsToFitContent() {
         guard let panel = detailsPanel,

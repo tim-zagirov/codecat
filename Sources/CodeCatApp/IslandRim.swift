@@ -13,11 +13,12 @@ struct IslandRim: View {
     let tone: MascotTone
     var boost: Double = 1
     @Environment(\.islandReduceMotion) private var reduced
+    @Environment(\.islandIsOnScreen) private var onScreen
 
     var body: some View {
         ZStack {
             if tone != .sleeping {
-                TimelineView(.animation(paused: tone != .waiting || reduced)) { context in
+                TimelineView(.animation(paused: tone != .waiting || reduced || !onScreen)) { context in
                     RimStroke(bodyShape: bodyShape, tone: tone,
                               highlight: RimLight.highlight(tone: tone, at: context.date, reduceMotion: reduced),
                               boost: boost)

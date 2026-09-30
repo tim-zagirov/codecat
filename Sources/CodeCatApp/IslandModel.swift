@@ -11,6 +11,9 @@ final class IslandModel: ObservableObject {
     @Published var metrics = IslandMetrics.zero
     /// The peek's countdown, for its hairline; nil while no peek is up.
     @Published var peekHold: IslandPresenter.PeekHold?
+    /// False while the window is off screen — stepping aside for a full-screen app,
+    /// or hidden — so the view's loops stop ticking.
+    @Published var isOnScreen = true
     /// The open body's height as the view laid it out; the controller's hover and
     /// click outline for the open island.
     var onExpandedHeight: (CGFloat) -> Void = { _ in }

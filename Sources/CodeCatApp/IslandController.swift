@@ -33,6 +33,10 @@ final class IslandController: NSObject, MascotPresenting {
     private var geometry: Geometry?
     /// The last requested visibility; `screensChanged()` re-applies it.
     private var isVisible = false
+    /// Whether the last `setVisible` put the island up: requested, not hidden by "hide
+    /// when nothing is running", and with a notch to live on. A peek arriving while
+    /// the island is hidden must not bring it back.
+    private var isShown = false
     /// The window is sized for the open island from the moment it starts opening
     /// until the close spring has settled (§5.2); otherwise it is the inhaled island
     /// plus the shadow margins, so a cursor near the notch but outside the island
@@ -54,12 +58,19 @@ final class IslandController: NSObject, MascotPresenting {
     /// `--demo-inhale`: the dwell never completes, for a capture of the inhaled island.
     private var holdsInhale = false
     private var cancellables: Set<AnyCancellable> = []
+    /// Spec §6.2: whether a full-screen app covers the notch screen. A change
+    /// re-runs `setVisible`, which re-reads the rule.
+    private lazy var fullScreen = FullScreenWatcher(log: appState.log) { [weak self] _ in
+        self?.setVisible(self?.isVisible ?? false)
+    }
+    private var fullScreenChecked = false
 
     struct Geometry: Equatable {
         let visibleFrame: CGRect
         let notch: CGRect
         let island: CGRect
         let spriteSize: CGSize
+        let screen: NSScreen
     }
 
     init(appState: AppState) {
@@ -83,6 +94,15 @@ final class IslandController: NSObject, MascotPresenting {
         // contract 1).
         appState.store.$sessions
             .sink { [weak self] sessions in self?.sessionsChanged(Array(sessions.values)) }
+            .store(in: &cancellables)
+        // Spec §6.2: no peeks while the screen is locked, one summary after it.
+        appState.$screenIsLocked
+            .removeDuplicates()
+            .sink { [weak self] locked in
+                guard let self else { return }
+                if locked { self.flow.lock(now: Date()) } else { self.flow.unlock(now: Date()) }
+                self.presenterChanged()
+            }
             .store(in: &cancellables)
         // The built-in display can be disconnected and reconnected — the notch
         // appears and disappears with it, and so does the room for the island.
@@ -110,15 +130,29 @@ final class IslandController: NSObject, MascotPresenting {
 
     func setVisible(_ visible: Bool) {
         isVisible = visible
+        // The flow's inputs never depend on whether the island is visible.
+        if !holdsInhale { flow.hoverDelay = appState.hoverDelay }
+        // Spec §6.2: while a full-screen app covers the notch screen the island steps
+        // aside — only a waiting or crashed peek still appears — and a done peek would
+        // open for nobody, so it is not asked for.
+        var settings = appState.peekSettings
+        if isSteppingAside { settings.onDone = false }
+        flow.settings = settings
         // `mascotShouldHideNow` is the "hide when nothing is running" setting.
         guard visible, !appState.mascotShouldHideNow, let geometry = computeGeometry() else {
+            isShown = false
             closeImmediately()
             panel?.orderOut(nil)
+            syncOnScreen(false)
             return
         }
+        isShown = true
         self.geometry = geometry
-        if !holdsInhale { flow.hoverDelay = appState.hoverDelay }
-        flow.settings = appState.peekSettings
+        fullScreen.screen = geometry.screen
+        if !fullScreenChecked {
+            fullScreenChecked = true
+            fullScreen.check()
+        }
         let metrics = IslandMetrics(
             notchWidth: geometry.notch.width,
             wingWidth: IslandLayout.wingWidth,
@@ -129,7 +163,24 @@ final class IslandController: NSObject, MascotPresenting {
         if model.metrics != metrics { model.metrics = metrics }
         if panel == nil { makePanel() }
         applyFrame()
-        panel?.orderFrontRegardless()
+        applyVisibility()
+    }
+
+    private var isSteppingAside: Bool { appState.hidesInFullScreen && fullScreen.isFullScreen }
+
+    /// On screen unless stepping aside for a full-screen app; an open island (a peek
+    /// that asked for attention, or the list it turned into) comes back over it.
+    private func applyVisibility() {
+        guard let panel, isShown else { return }
+        let onScreen = !isSteppingAside || flow.presentation.isOpen
+        if onScreen, !panel.isVisible { panel.orderFrontRegardless() }
+        if !onScreen, panel.isVisible { panel.orderOut(nil) }
+        syncOnScreen(onScreen)
+    }
+
+    /// The rim's lap and the waiting dot's pulse stop in a window that is off screen.
+    private func syncOnScreen(_ onScreen: Bool) {
+        if model.isOnScreen != onScreen { model.isOnScreen = onScreen }
     }
 
     private func handleStateChange() {
@@ -260,14 +311,20 @@ final class IslandController: NSObject, MascotPresenting {
         let new = flow.presentation
         if new.isOpen, !old.isOpen { beginOpening() }
         if !new.isOpen, old.isOpen { beginClosing() }
-        if model.presentation != new { model.presentation = new }
-        if model.peekHold != flow.peekHold { model.peekHold = flow.peekHold }
+        syncModel()
         updateSilhouette()
         // Tim, 2026-09-30: a peek that grows under a resting cursor counts as hover.
         // The tracking area reports nothing for a cursor that did not move, so the
         // cursor is read once the peek's outline exists (Part 2 handover, contract 7).
         if case .peek = new, !old.isOpen { resyncPointer() }
         armTimer()
+        applyVisibility()
+    }
+
+    /// What the view draws from, copied from the flow.
+    private func syncModel() {
+        if model.presentation != flow.presentation { model.presentation = flow.presentation }
+        if model.peekHold != flow.peekHold { model.peekHold = flow.peekHold }
     }
 
     private func beginOpening() {
@@ -296,6 +353,9 @@ final class IslandController: NSObject, MascotPresenting {
     /// typing in; ordering the panel out and straight back in returns key status to
     /// the active app's window.
     private func giveUpKeyboard() {
+        // Decision 1: activation goes back to the app the user was in, which also takes
+        // key status from the panel.
+        FocusReturn.handBack()
         guard let panel, panel.isKeyWindow else { return }
         panel.orderOut(nil)
         panel.orderFrontRegardless()
@@ -328,6 +388,9 @@ final class IslandController: NSObject, MascotPresenting {
     }
 
     private func jumped() {
+        // The jump activates its target; handing back afterwards would take the user
+        // away from it.
+        FocusReturn.forget()
         flow.jumped(now: Date())
         presenterChanged()
     }
@@ -373,8 +436,7 @@ final class IslandController: NSObject, MascotPresenting {
         shrink?.cancel()
         shrink = nil
         canvasIsOpen = false
-        if model.presentation != flow.presentation { model.presentation = flow.presentation }
-        if model.peekHold != flow.peekHold { model.peekHold = flow.peekHold }
+        syncModel()
         armTimer()
     }
 
@@ -441,6 +503,15 @@ final class IslandController: NSObject, MascotPresenting {
         // at the start of every close (captured: frames 2-5 of the close burst) before
         // `orderFrontRegardless` snapped it back.
         panel.animationBehavior = .none
+        // Decision 1: a click inside activates CodeCat, so Escape reaches the panel;
+        // `giveUpKeyboard()` hands activation back when the island closes. A click
+        // that jumped, or opened Settings, has closed the island by now: the jump's
+        // target or the Settings window takes activation, not CodeCat's island.
+        panel.onActivatingClick = { [weak self] in
+            guard let self, self.flow.presentation.isOpen else { return }
+            FocusReturn.remember()
+            NSApp.activate()
+        }
         let hosting = IslandHostingView(rootView: IslandView(appState: appState, model: model, pointer: pointer))
         // The window's size is the controller's decision; without this the hosting
         // view would push its own idea of a fitting size onto it.
@@ -523,6 +594,7 @@ final class IslandController: NSObject, MascotPresenting {
         return Geometry(visibleFrame: screen.visibleFrame,
                         notch: notch,
                         island: IslandLayout.islandFrame(notch: notch),
-                        spriteSize: spriteSize)
+                        spriteSize: spriteSize,
+                        screen: screen)
     }
 }

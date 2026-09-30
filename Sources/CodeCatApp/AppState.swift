@@ -10,7 +10,6 @@ import CodeCatCore
 /// on the main run loop.
 final class AppState: ObservableObject {
     let store: SessionStore
-    let awayLog = AwayLog()
     /// The only way to learn what happened inside: this is an `LSUIElement` app with
     /// no window and no console, and screen-control tools cannot see it. Before this
     /// file existed, investigating anything meant building an external stand-in on
@@ -157,6 +156,9 @@ final class AppState: ObservableObject {
     @Published var hidesInFullScreen: Bool {
         didSet { UserDefaults.standard.set(hidesInFullScreen, forKey: "hideInFullScreen") }
     }
+    /// Spec §6.2: no peeks while the screen is locked, one summary after. The
+    /// controllers read it; `AwayLog` and its "While you were away" section are gone.
+    @Published private(set) var screenIsLocked = false
 
     var peekSettings: PeekSettings {
         PeekSettings(onWaiting: peekOnWaiting, onCrash: peekOnCrash, onDone: peekOnDone)
@@ -410,6 +412,7 @@ final class AppState: ObservableObject {
             // change, and the controller's first session list is its baseline.
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 guard let self else { return }
+                if peek == .away { return self.demoAway() }
                 DemoFeed.apply(peek, to: self.store, now: Date())
                 self.refresh()
             }
@@ -462,13 +465,9 @@ final class AppState: ObservableObject {
         log.write("state: \(lastAggregate) → \(agg), sessions: \(store.ordered.count)")
         switch agg {
         case .waiting:
-            awayLog.record(L10n.t("away.waiting", "an agent is waiting for you"), at: Date())
             if soundsEnabled { NSSound(named: "Purr")?.play() }
         case .done:
-            awayLog.record(L10n.t("away.done", "an agent finished its work"), at: Date())
             if soundsEnabled { NSSound(named: "Glass")?.play() }
-        case .problem:
-            awayLog.record(L10n.t("away.crashed", "a session ended"), at: Date())
         default:
             break
         }
@@ -478,13 +477,21 @@ final class AppState: ObservableObject {
         let center = DistributedNotificationCenter.default()
         center.addObserver(forName: .init("com.apple.screenIsLocked"),
                            object: nil, queue: .main) { [weak self] _ in
-            self?.awayLog.lock()
+            self?.screenIsLocked = true
         }
         center.addObserver(forName: .init("com.apple.screenIsUnlocked"),
                            object: nil, queue: .main) { [weak self] _ in
-            self?.awayLog.unlock()
-            self?.objectWillChange.send()
+            self?.screenIsLocked = false
         }
+    }
+
+    /// `--demo-peek=away`: the screen "locks", two sessions change, it "unlocks" — the
+    /// summary peek, without locking the real screen.
+    func demoAway() {
+        screenIsLocked = true
+        DemoFeed.apply(.away, to: store, now: Date())
+        refresh()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.screenIsLocked = false }
     }
 
     /// Resolves the path to the `codecat-hook` binary next to the currently

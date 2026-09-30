@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import CodeCatCore
 
-/// The list of active sessions plus the "while you were away" summary. Split out of
+/// The list of active sessions. Split out of
 /// `DetailsPanelView` so the same content can be drawn in the island menu too — on a
 /// different background, but with the same hover, cursor and jump behaviour.
 ///
@@ -10,8 +10,7 @@ import CodeCatCore
 /// non-obvious workaround for AppKit's behaviour, not a matter of code style.
 ///
 /// Everything here is computed straight from `appState` while `body` runs, so it
-/// reflects live state on its own — no separate subscription to `store`/`awayLog` is
-/// needed.
+/// reflects live state on its own — no separate subscription to `store` is needed.
 struct SessionListView: View {
     @ObservedObject var appState: AppState
     var onJump: () -> Void = {}
@@ -69,14 +68,6 @@ struct SessionListView: View {
         return shared
     }
 
-    private static var awayTitle: String { L10n.t("panel.away.title", "While you were away") }
-
-    /// The summary's heading, drawn by the shared section-heading style so the panel
-    /// and the island match.
-    private var awayLogHeader: some View {
-        MenuSectionHeader(title: Self.awayTitle)
-    }
-
     var body: some View {
         // Computed once per body evaluation and shared by every row:
         //  - `nameCounts` tells a row whether its project name is ambiguous (S22).
@@ -131,18 +122,6 @@ struct SessionListView: View {
                     Text(JumpMessages.rowHint(for: reason))
                         .font(.system(size: 11))
                         .foregroundStyle(style.tertiary)
-                }
-            }
-
-            if !appState.awayLog.lastSummary.isEmpty {
-                MenuSeparator()
-                awayLogHeader
-                ForEach(appState.awayLog.lastSummary) { entry in
-                    // The "• " marker was needed while the summary ran flush against
-                    // the session list; with a section heading and padding it is surplus.
-                    Text(style.separator == nil ? "• \(entry.text)" : entry.text)
-                        .font(.system(size: 11))
-                        .foregroundStyle(style.secondary)
                 }
             }
         }
