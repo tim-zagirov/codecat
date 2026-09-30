@@ -146,8 +146,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (symbol, description) = ("exclamationmark.triangle.fill",
                                      L10n.t("menubar.problem", "problem"))
         }
-        statusItem.button?.image = NSImage(
-            systemSymbolName: symbol, accessibilityDescription: description)
+        // The SF Symbol is only the fallback for a bundle missing `menubar.pdf`; the
+        // mark itself says nothing aloud, so the state is spoken from the label.
+        statusItem.button?.image = BrandMark.statusImage(for: appState.store.aggregate)
+            ?? NSImage(systemSymbolName: symbol, accessibilityDescription: description)
+        statusItem.button?.setAccessibilityLabel(description)
         statusItem.menu = buildMenu()
     }
 

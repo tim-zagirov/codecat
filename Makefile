@@ -42,10 +42,12 @@ bundle: assets
 	cp .build/release/codecat-hook $(APP)/Contents/MacOS/codecat-hook
 	cp Resources/Info.plist $(APP)/Contents/Info.plist
 	# The icon. It sits in Contents/Resources under the name CFBundleIconFile gives;
-	# it is redrawn by `swift scripts/make-icon.swift` rather than by the build — the
-	# generator redraws the cat from `CatView`, and running that on every build moves
-	# 350 KB around for a file that does not change.
+	# it is drawn by `swift scripts/make-icon.swift` from the committed Figma SVGs
+	# rather than by the build — rendering it on every build moves half a megabyte
+	# around for a file that does not change.
 	cp Resources/CodeCat.icns $(APP)/Contents/Resources/
+	# The menu-bar symbol, drawn by `scripts/make-icon.swift`; `BrandMark` loads it.
+	cp Resources/Brand/menubar.pdf $(APP)/Contents/Resources/
 	/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(BUILD)" $(APP)/Contents/Info.plist
 	cp scripts/install-lid-mode.sh scripts/uninstall-lid-mode.sh $(APP)/Contents/Resources/
 	# Localisation. `.strings`, not `.xcstrings`: a string catalog is compiled by
@@ -165,6 +167,8 @@ verify-skins:
 		|| (echo "ERROR: the localisation did not reach the bundle"; exit 1)
 	@test -f "$(APP)/Contents/Resources/CodeCat.icns" \
 		|| (echo "ERROR: the icon did not reach the bundle"; exit 1)
+	@test -f "$(APP)/Contents/Resources/menubar.pdf" \
+		|| (echo "ERROR: the menu-bar symbol did not reach the bundle"; exit 1)
 	@out=$$(CODECAT_SKINS_DIR="$(CURDIR)/$(APP)/Contents/Resources/Skins" swift test --filter SkinAssetsTests 2>&1); \
 		echo "$$out" | grep -qE "Executed [1-9][0-9]* tests?, with 0 failures" \
 		&& echo "$$out" | grep -q "SKINS DIR: .*Contents/Resources/Skins" \
