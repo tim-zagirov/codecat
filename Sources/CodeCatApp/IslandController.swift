@@ -452,7 +452,16 @@ final class IslandController: NSObject, MascotPresenting {
             : IslandLayout.body(for: .inhaled, compact: geometry.island.size, expandedHeight: 0)
         let frame = Self.onWholePoints(IslandLayout.canvasFrame(island: geometry.island, largest: largest),
                                        centreX: geometry.island.midX)
-        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        if panel.frame != frame {
+            panel.setFrame(frame, display: true)
+            // The view lays out for the new canvas now, before the presentation that
+            // grew it is published. Otherwise both reach SwiftUI in one update, inside
+            // the open spring's transaction, and the canvas's width is animated too:
+            // everything centred on it slid in from the old centre, and a peek grew
+            // from its final left edge with the wing's dots 45 pt left of their place
+            // for the first ~200 ms (a 60 fps recording).
+            hosting?.layoutSubtreeIfNeeded()
+        }
         updateSilhouette()
     }
 
