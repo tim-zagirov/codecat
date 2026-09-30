@@ -31,6 +31,9 @@ enum Motion {
     static let contentStagger: TimeInterval = 0.03
     static let contentOutDuration: TimeInterval = 0.12
     static let contentOut = Animation.easeOut(duration: contentOutDuration)
+    /// The content's blur returning to 20 pt after it has faded out: a step, once the
+    /// fade is over, so the way out is opacity only.
+    static let blurReset = Animation.linear(duration: 0.01).delay(contentOutDuration)
     /// From "close" to a settled compact shape: the content fades, then the spring.
     static var closeSettle: TimeInterval { contentOutDuration + closeSpringSettle }
 
@@ -81,16 +84,22 @@ extension EnvironmentValues {
 /// How the open island's content arrives and leaves (§5.2): each item from a 20 pt
 /// blur and zero opacity on the open spring's tail, 30 ms after the one above it;
 /// everything together and faster on the way out, before the shape closes.
+///
+/// The way out is opacity only (§11 `contentOut`): the blur goes back to 20 pt in
+/// one step once the content is invisible, ready for the next opening. Animated
+/// together with the fade, the list visibly blurred as it left.
 struct ContentReveal: ViewModifier {
     let visible: Bool
     var index: Int = 0
     @Environment(\.islandReduceMotion) private var reduced
 
     func body(content: Content) -> some View {
+        let arrive = Motion.contentIn(index: index, reduced: reduced)
         content
-            .blur(radius: visible || reduced ? 0 : 20)
+            .animation(visible ? arrive : Motion.blurReset) {
+                $0.blur(radius: visible || reduced ? 0 : 20)
+            }
             .opacity(visible ? 1 : 0)
-            .animation(visible ? Motion.contentIn(index: index, reduced: reduced) : Motion.contentOut,
-                       value: visible)
+            .animation(visible ? arrive : Motion.contentOut, value: visible)
     }
 }
