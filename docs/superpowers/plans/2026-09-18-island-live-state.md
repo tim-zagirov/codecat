@@ -57,7 +57,7 @@ Modified:
 - [ ] **Step 1: Create the branch**
 
 ```bash
-cd /Users/timzagirov/Projects/vibe-coding-utility
+# from the repository root
 git checkout -b claude/island-live-state 36bb310
 swift test 2>&1 | grep "Executed" | tail -1
 ```
