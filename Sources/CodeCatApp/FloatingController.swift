@@ -481,9 +481,19 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         return MascotLayout.isOnScreen(origin: anchor, screens: NSScreen.screens.map(\.visibleFrame)) ? anchor : nil
     }
 
+    /// The 0.4 corner, 24 pt in, raised until the peek clears the screen's edge by
+    /// `FloatingLayout.screenInset`: the peek hangs 18 pt below the resting capsule,
+    /// and from the old corner it ended 2 pt above the visible frame's bottom, its
+    /// bloom cut off (captured). The lift comes to 6 pt; the cat stays as far in from
+    /// the right edge as before.
     private static func defaultAnchor() -> NSPoint {
         guard let screen = NSScreen.main else { return NSPoint(x: 100, y: 100) }
-        return MascotLayout.defaultOrigin(visibleFrame: screen.visibleFrame, inset: 24)
+        let visible = screen.visibleFrame
+        let corner = MascotLayout.defaultOrigin(visibleFrame: visible, inset: 24)
+        let window = CGRect(origin: FloatingLayout.catWindowOrigin(anchor: corner), size: FloatingLayout.catWindowSize)
+        let peekBottom = FloatingLayout.capsuleOnScreen(catWindow: window).maxY - FloatingLayout.peekCapsule.height
+        let lift = max(0, visible.minY + FloatingLayout.screenInset - peekBottom)
+        return NSPoint(x: corner.x, y: corner.y + lift)
     }
 }
 

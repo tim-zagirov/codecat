@@ -70,11 +70,15 @@ public enum FloatingLayout {
     }
 
     /// The peek capsule: its top at the resting capsule's top, so the cat stands on
-    /// it, and one side on the resting capsule's side.
+    /// it, and one side on the resting capsule's side. It hangs 18 pt below the
+    /// resting capsule, so a cat dragged low would push it past the screen's edge
+    /// (spec §9: it never leaves the screen); it rises instead to `screenInset`
+    /// above the visible frame's bottom, and the cat overlaps it by the shortfall.
     public static func peekRect(catWindow: CGRect, visibleFrame: CGRect) -> CGRect {
         let rest = capsuleOnScreen(catWindow: catWindow)
         return CGRect(x: panelX(width: peekCapsule.width, rest: rest, catWindow: catWindow, visibleFrame: visibleFrame),
-                      y: rest.maxY - peekCapsule.height, width: peekCapsule.width, height: peekCapsule.height)
+                      y: max(rest.maxY - peekCapsule.height, visibleFrame.minY + screenInset),
+                      width: peekCapsule.width, height: peekCapsule.height)
     }
 
     public struct PanelPlacement: Equatable, Sendable {

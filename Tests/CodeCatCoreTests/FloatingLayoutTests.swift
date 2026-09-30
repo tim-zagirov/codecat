@@ -40,6 +40,13 @@ final class FloatingLayoutTests: XCTestCase {
         XCTAssertFalse(FloatingLayout.growsLeft(catWindow: upperLeft, visibleFrame: visible))
         XCTAssertEqual(FloatingLayout.peekRect(catWindow: upperLeft, visibleFrame: visible),
                        CGRect(x: 150, y: 510, width: 300, height: 44))
+        // A cat dragged low, its resting capsule 10 pt above the visible frame's
+        // bottom (window top 122 − 112): hung 18 pt below that capsule the peek would
+        // end at −8, so it rises to the screen inset, 8.
+        let low = CGRect(x: 1300, y: -18, width: 176, height: 140)
+        XCTAssertEqual(FloatingLayout.capsuleOnScreen(catWindow: low), CGRect(x: 1350, y: 10, width: 96, height: 26))
+        XCTAssertEqual(FloatingLayout.peekRect(catWindow: low, visibleFrame: visible),
+                       CGRect(x: 1146, y: 8, width: 300, height: 44))
     }
 
     /// Decision 9: below the cat when the list fits below, otherwise above it, its

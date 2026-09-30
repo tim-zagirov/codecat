@@ -131,6 +131,9 @@ struct FloatingCatView: View {
         .environment(\.islandIsOnScreen, model.isOnScreen)
         .environment(\.colorScheme, .dark)
         .animation(Motion.contentOut, value: model.presentation.isOpen)
+        // A peek turning into a list above the cat brings the capsule back while the
+        // presentation stays open: without this key it popped in.
+        .animation(Motion.contentOut, value: model.panelIsAbove)
     }
 }
 
@@ -139,8 +142,10 @@ struct FloatingCatView: View {
 /// which the controller sizes to the shape plus `FloatingLayout.margin` for the bloom.
 ///
 /// The shape is drawn at `drawn`, which trails the controller's `panelShape`: a
-/// new shape starts at the resting capsule's rectangle and springs to its own, as the
-/// island's does from its strip.
+/// new shape starts at the resting capsule's rectangle — or, for a list above the
+/// cat, which the resting capsule is not inside, at a capsule-sized strip at the
+/// panel's bottom centre — and springs to its own, as the island's does from its
+/// strip.
 struct FloatingPanelView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var model: FloatingModel
