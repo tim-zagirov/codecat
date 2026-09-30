@@ -95,8 +95,10 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     /// from one entry point, so the two never disagree.
     ///
     /// The window is a rectangle much larger than the island — room to inhale, to
-    /// open, to cast shadows — and without this test that whole rectangle would take
-    /// clicks meant for the menu bar, the status items and the windows under it.
+    /// open, to cast shadows. The controller tests the cursor against this outline to
+    /// decide hover and whether the window takes clicks at all
+    /// (`IslandController.updateClickTarget`); here it only keeps the views inside
+    /// the window from answering a click outside the shape.
     var silhouette: CGPath?
 
     /// S15: the closed island passes every click straight through to the menu bar
@@ -104,9 +106,9 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     /// click there is meant for them. Hover still works: it rides the tracking area,
     /// which AppKit drives from the cursor's position, not from `hitTest`.
     ///
-    /// This alone does not hand the click on — the window has already received it;
-    /// the controller also sets the panel's `ignoresMouseEvents` together with this
-    /// flag. Kept here so no view inside the closed island ever answers a click.
+    /// This alone does not hand the click on — the window has already received it.
+    /// What lets it through is the panel's `ignoresMouseEvents`, which the controller
+    /// sets; this flag only keeps every view inside the closed island from answering.
     var clickThrough = true
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -131,7 +133,9 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     }
 
     /// `nil` for every point the island does not paint, and for every point while it
-    /// is closed, so the event goes where it belongs.
+    /// is closed, so no view inside answers there. That only picks the view: the
+    /// window has the click already, and passing it on to what lies under the window
+    /// is `ignoresMouseEvents`' job (`IslandController.updateClickTarget`).
     override func hitTest(_ point: NSPoint) -> NSView? {
         // `hitTest` is handed a point in the SUPERVIEW's coordinates.
         let local = superview.map { convert(point, from: $0) } ?? point

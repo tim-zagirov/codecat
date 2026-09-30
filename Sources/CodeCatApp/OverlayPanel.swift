@@ -42,11 +42,29 @@ class OverlayPanel: NSPanel {
     /// changes: AppKit was about to make this panel key with that click anyway. Panels
     /// that may never become key (the cat) are untouched.
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown, allowsKey, !isKeyWindow { makeKey() }
+        if event.type == .leftMouseDown, allowsKey, !isKeyWindow {
+            clickGrantsKey = true
+            makeKey()
+        }
         super.sendEvent(event)
     }
 
-    override var canBecomeKey: Bool { allowsKey }
+    /// The island's panel may become key only from a click in it (spec §2: the
+    /// island never takes focus from the terminal). Without this, AppKit made it key
+    /// by itself at launch — `-[NSApplication _sendFinishLaunchingNotification]`
+    /// picks the first window that can be key — and keystrokes went to the island
+    /// until the user clicked somewhere else. The click that grants key status is
+    /// the mouse-down in `sendEvent` above; resigning takes it back.
+    var becomesKeyOnlyOnClick = false
+    private var clickGrantsKey = false
+
+    override var canBecomeKey: Bool { allowsKey && (!becomesKeyOnlyOnClick || clickGrantsKey) }
+
+    override func resignKey() {
+        super.resignKey()
+        clickGrantsKey = false
+    }
+
     override var canBecomeMain: Bool { false }
 
     init(contentRect: NSRect, allowsKey: Bool) {

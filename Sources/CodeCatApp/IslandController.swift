@@ -129,8 +129,18 @@ final class IslandController: NSObject, MascotPresenting {
 
     // MARK: - Pointer
 
+    /// Fed by the tracking area on every move, also while the window ignores the
+    /// mouse: an `.activeAlways` tracking area keeps reporting `mouseMoved` to an
+    /// ignoring window (logged; captured as a cursor entering through the margin
+    /// below the wing, then inhaling on the wing).
     private func pointerMoved(_ point: CGPoint?) {
-        reconcile(inside: point.map(isInsideSilhouette) ?? false)
+        // A `nil` (the tracking area's exit) is checked against where the cursor
+        // really is. `giveUpKeyboard()` orders the window out and back in, and the
+        // tracking area answers with an exit and a fresh entry under a cursor that
+        // never moved; taken at its word, that entry inhaled the island Escape had
+        // just closed, and 0.3 s later it was open again (logged, captured).
+        reconcile(inside: point.map(isInsideSilhouette) ?? cursorIsOnSilhouette())
+        updateClickTarget()
     }
 
     private func isInsideSilhouette(_ point: CGPoint) -> Bool {
@@ -176,6 +186,7 @@ final class IslandController: NSObject, MascotPresenting {
         mouseUpMonitors.forEach(NSEvent.removeMonitor)
         mouseUpMonitors = []
         resyncPointer()
+        updateClickTarget()
     }
 
     /// Where the cursor really is, fed as if it had moved there — after the window
@@ -183,12 +194,34 @@ final class IslandController: NSObject, MascotPresenting {
     /// presenter could go on believing the pointer is inside a shape that shrank away
     /// from it, and the island would never inhale again.
     private func resyncPointer() {
-        guard let panel, let hosting, panel.isVisible else {
-            reconcile(inside: false)
-            return
-        }
+        reconcile(inside: cursorIsOnSilhouette())
+    }
+
+    /// Asked of the cursor's real position rather than the last reported one: the
+    /// window may have changed size under it since.
+    private func cursorIsOnSilhouette() -> Bool {
+        guard let panel, let hosting, panel.isVisible else { return false }
         let local = hosting.convert(panel.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
-        reconcile(inside: hosting.bounds.contains(local) && isInsideSilhouette(hosting.canvasPoint(local)))
+        return hosting.bounds.contains(local) && isInsideSilhouette(hosting.canvasPoint(local))
+    }
+
+    /// Whether the window takes clicks at all (spec §4.3, S15): only while the island
+    /// is open and the cursor is on its shape. Everywhere else — the closed island's
+    /// wings over the menu bar, the margin beside the open shape, the room a peek's
+    /// window leaves below it — the window ignores the mouse, so a click there reaches
+    /// what lies under it. A `nil` from `hitTest` was not enough: it only means no
+    /// view takes the click, after the window server has already handed it to this
+    /// window (logged: `sendEvent` saw the mouse-down on the closed wing and made the
+    /// panel key). With this, a click on the menu bar beside the open island's fillet
+    /// never reached the panel (logged). The tracking area keeps reporting the
+    /// pointer to an ignoring window, so hover works throughout.
+    ///
+    /// Left alone while a button is down: the window that took the mouse-down keeps
+    /// the drag to its mouse-up, and `mouseReleased` settles it afterwards.
+    private func updateClickTarget() {
+        guard let panel, NSEvent.pressedMouseButtons == 0 else { return }
+        let ignores = !(presenter.presentation.isOpen && cursorIsOnSilhouette())
+        if panel.ignoresMouseEvents != ignores { panel.ignoresMouseEvents = ignores }
     }
 
     // MARK: - Presenter
@@ -289,6 +322,7 @@ final class IslandController: NSObject, MascotPresenting {
     /// The island is leaving the screen or its screen changed: no animation, no
     /// pointer left behind.
     private func closeImmediately() {
+        giveUpKeyboard()
         if toldInside {
             presenter.pointerLeft(now: Date())
             toldInside = false
@@ -317,7 +351,7 @@ final class IslandController: NSObject, MascotPresenting {
     /// The canvas with its origin on a whole point, widened by up to a point so its
     /// centre stays on the notch's. The view centres the shape, the cat and the wing
     /// on the canvas, but AppKit puts a window's origin on a whole point: on a
-    /// MacBook whose notch is centred at x 863.5 the open canvas asked for 619.5, and
+    /// MacBook whose notch is centred at x 863.5 the open canvas asked for x 611.5, and
     /// the island and the cat stood half a point left of the compact ones — a jump
     /// each time the window grew and shrank (1 px in the captures).
     private static func onWholePoints(_ frame: CGRect, centreX: CGFloat) -> CGRect {
@@ -336,13 +370,7 @@ final class IslandController: NSObject, MascotPresenting {
         let body = IslandLayout.body(for: presentation, compact: geometry.island.size, expandedHeight: openHeight)
         hosting.silhouette = IslandLayout.silhouettePath(canvasWidth: panel.frame.width, body: body)
         hosting.clickThrough = !presentation.isOpen
-        // S15 needs the window itself to let go: a `nil` from `hitTest` only means no
-        // view takes the click — the window server has already given it to this
-        // window, and it goes nowhere (logged: `sendEvent` saw the mouse-down on the
-        // closed wing). An ignoring window's clicks reach the menu bar under it, and
-        // the `.activeAlways` tracking area still reports the pointer, so hover and
-        // the dwell work as before (captured).
-        panel.ignoresMouseEvents = !presentation.isOpen
+        updateClickTarget()
     }
 
     private func expandedHeightChanged(_ height: CGFloat) {
@@ -352,9 +380,11 @@ final class IslandController: NSObject, MascotPresenting {
 
     private func makePanel() {
         // `allowsKey`: the open island holds buttons, which need a window that can be
-        // key. It becomes key only on a mouse-down inside it (`OverlayPanel.sendEvent`);
-        // hover never touches focus.
+        // key. It becomes key only on a mouse-down inside it (`OverlayPanel.sendEvent`,
+        // `becomesKeyOnlyOnClick`) — never at launch, never from hover.
         let panel = OverlayPanel(contentRect: .zero, allowsKey: true)
+        panel.becomesKeyOnlyOnClick = true
+        panel.ignoresMouseEvents = true
         panel.level = Self.islandLevel
         panel.acceptsMouseMovedEvents = true
         // `giveUpKeyboard()` orders the panel out and straight back in. A panel's
