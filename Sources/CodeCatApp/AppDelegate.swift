@@ -16,11 +16,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and for the landing-page recording (scripts/capture-screenshots.sh). It
         // replaces `start()` rather than adding to it — see `startDemo`.
         if CommandLine.arguments.contains("--demo") {
-            appState.startDemo(pin: Self.demoPin())
-            // `--demo-open-menu` is what lets the capture script photograph the
-            // session list and the skin grid: with the app hidden from every
-            // screen-control tool, there is no other way to open them.
-            if CommandLine.arguments.contains("--demo-open-menu") {
+            let arguments = CommandLine.arguments
+            appState.startDemo(pin: Self.demoPin(),
+                               hooksInstalled: !arguments.contains("--demo-phase=firstrun"),
+                               unroutable: arguments.contains("--demo-noroute") ? [DemoFeed.sessionIDs[1]] : [])
+            // `--demo-expanded` (and the older `--demo-open-menu`) open the island or
+            // the floating panel for a capture: the app is hidden from every
+            // screen-control tool, so there is no other way to open them.
+            if arguments.contains("--demo-expanded") || arguments.contains("--demo-open-menu") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                     self?.presenter?.openMenuForCapture()
                 }
@@ -76,10 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appState.shutdown()
     }
 
-    /// `--demo-phase=idle|working|waiting|done|problem`, for a capture that must not
-    /// race the four-second loop. An unrecognised name means "loop", not "crash":
-    /// this flag exists for a script, and a typo in it should cost a retake, not a
-    /// launch failure.
+    /// `--demo-phase=idle|working|waiting|done|problem|one-working|one-waiting|`
+    /// `one-done|many|showcase|empty|firstrun`, for a capture that must not race the
+    /// four-second loop. An unrecognised name means "loop", not "crash": this flag
+    /// exists for a script, and a typo in it should cost a retake, not a launch
+    /// failure.
     private static func demoPin() -> DemoFeed.Pin? {
         guard let argument = CommandLine.arguments.first(where: { $0.hasPrefix("--demo-phase=") })
         else { return nil }
@@ -89,6 +93,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "waiting": return .phase(.waiting)
         case "done": return .phase(.done)
         case "problem": return .problem
+        case "one-working": return .single(.working)
+        case "one-waiting": return .single(.waiting)
+        case "one-done": return .single(.done)
+        case "many": return .many
+        case "showcase": return .showcase
+        case "empty", "firstrun": return .empty
         default: return nil
         }
     }

@@ -189,8 +189,60 @@ final class DemoFeedTests: XCTestCase {
             _ = aggregate(after: phase, in: store, now: now)
         }
         let h = store.sessions[DemoFeed.sessionIDs[1]]?.handoff
-        XCTAssertEqual(h?.summary, "Готово: тесты зелёные, релиз 0.4.1 собран.")
+        XCTAssertEqual(h?.summary, "Done — tests are green, release 0.4.1 is built.")
         XCTAssertEqual(h?.links.map(\.title), ["localhost:4321", "PR #12", "Figma"])
+    }
+
+    // MARK: - Pins for captures (Part 2)
+
+    func testASinglePinIsTheFirstSessionAloneInThatPhase() {
+        let working = SessionStore()
+        DemoFeed.apply(.single(.working), to: working, now: Date())
+        XCTAssertEqual(working.ordered.map(\.id), [DemoFeed.sessionIDs[0]])
+        XCTAssertEqual(working.ordered.first?.status, .working)
+        XCTAssertEqual(working.ordered.first?.stepProgress?.done, 2)
+        XCTAssertEqual(working.ordered.first?.stepProgress?.total, 5)
+
+        let done = SessionStore()
+        DemoFeed.apply(.single(.done), to: done, now: Date())
+        XCTAssertEqual(done.ordered.map(\.status), [.done])
+
+        let waiting = SessionStore()
+        DemoFeed.apply(.single(.waiting), to: waiting, now: Date())
+        XCTAssertEqual(waiting.ordered.map(\.status), [.waitingForYou(.question)])
+    }
+
+    func testTheManyPinPutsSixAgentsToWork() {
+        let store = SessionStore()
+        DemoFeed.apply(.many, to: store, now: Date())
+        XCTAssertEqual(store.ordered.count, 6)
+        XCTAssertEqual(store.aggregate, .working(6))
+        XCTAssertTrue(store.ordered.allSatisfy { $0.taskText != nil })
+    }
+
+    /// Figma's "Full list": every card kind at once.
+    func testTheShowcasePinHasEveryCardKind() {
+        let store = SessionStore()
+        DemoFeed.apply(.showcase, to: store, now: Date())
+        XCTAssertEqual(store.ordered.map(\.status),
+                       [.waitingForYou(.question), .working, .working, .done, .idle, .idle])
+        XCTAssertEqual(store.ordered.map(\.projectName),
+                       ["codecat", "orbit-api", "site", "studio-site", "notes-cli", "infra"])
+        XCTAssertEqual(store.ordered[2].stepProgress?.done, 2)
+        XCTAssertEqual(store.ordered[3].handoff?.links.count, 3)
+    }
+
+    func testTheEmptyPinLeavesNoSessions() {
+        let store = SessionStore()
+        DemoFeed.apply(.empty, to: store, now: Date())
+        XCTAssertTrue(store.ordered.isEmpty)
+    }
+
+    func testAPinnedPhaseLandsWhereTheLoopWouldHave() {
+        let store = SessionStore()
+        DemoFeed.apply(.phase(.waiting), to: store, now: Date())
+        XCTAssertEqual(store.aggregate, .waiting(1))
+        XCTAssertEqual(store.sessions[DemoFeed.sessionIDs[0]]?.taskText, DemoFeed.tasks[0])
     }
 }
 

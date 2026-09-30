@@ -52,6 +52,10 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(showMascot, forKey: "showMascot") }
     }
     @Published var hooksInstalled = false
+    /// Running the scripted `--demo` feed instead of real sessions (`startDemo`).
+    private(set) var isDemo = false
+    /// Demo sessions drawn as having no route, for the "no route" capture.
+    private var demoUnroutable: Set<String> = []
 
     /// When the mascot entered the state it is showing now. A movement made of several
     /// phases ("stretch — lie down — sleep") has no way of knowing whether its one-shot
@@ -327,12 +331,21 @@ final class AppState: ObservableObject {
     ///
     /// - Parameter interval: seconds per phase. Four is what the capture script
     ///   uses; the "done" animation is a transition and needs a beat to play.
-    /// - Parameter pin: hold one state instead of looping. A screenshot of
+    /// - Parameter pin: hold one scene instead of looping. A screenshot of
     ///   "waiting for you" taken against a four-second loop is a race; this makes it
     ///   a fact. `.problem` is reachable only this way — see `DemoFeed.Pin`.
-    func startDemo(interval: TimeInterval = 4, pin: DemoFeed.Pin? = nil) {
+    /// - Parameter hooksInstalled: false for the first-run capture: the demo
+    ///   otherwise claims hooks are installed, or every capture would show the setup
+    ///   card.
+    /// - Parameter unroutable: session ids to draw with no route, for the "no
+    ///   route" capture.
+    func startDemo(interval: TimeInterval = 4, pin: DemoFeed.Pin? = nil,
+                   hooksInstalled: Bool = true, unroutable: Set<String> = []) {
         log.write("demo mode — no socket, no watcher, no power assertion, no route cache"
             + (pin.map { ", pinned to \($0)" } ?? ""))
+        isDemo = true
+        self.hooksInstalled = hooksInstalled
+        demoUnroutable = unroutable
         // The demo must leave no trace in the user's state — see
         // `SessionStore.detachRouteCache`.
         store.detachRouteCache()
@@ -345,16 +358,10 @@ final class AppState: ObservableObject {
             for activity in DemoFeed.activities(for: phase, now: now) { store.apply(activity: activity) }
             refresh()
         }
-        switch pin {
-        case .phase(let phase):
-            // Pinned phases arrive cold, so whatever the loop would have applied
-            // before this phase is applied first — see `DemoFeed.leadIn`.
-            for earlier in DemoFeed.leadIn(for: phase) { apply(earlier) }
-            apply(phase)
-        case .problem:
-            DemoFeed.applyProblem(to: store, now: Date())
+        if let pin {
+            DemoFeed.apply(pin, to: store, now: Date())
             refresh()
-        case nil:
+        } else {
             func advance() {
                 apply(DemoFeed.phase(atStep: step))
                 step += 1
@@ -744,8 +751,20 @@ final class AppState: ObservableObject {
     /// scan below only for a row whose recorded pid is already dead — a rare row, and
     /// one that would otherwise be drawn as unreachable.
     func route(for session: Session) -> JumpRoute {
-        SessionRouter.route(for: session, isHostRunning: SessionRouter.isProcessRunning,
-                            livePID: Self.runningPID(ofBundleID:))
+        if isDemo { return demoRoute(for: session) }
+        return SessionRouter.route(for: session, isHostRunning: SessionRouter.isProcessRunning,
+                                   livePID: Self.runningPID(ofBundleID:))
+    }
+
+    /// Demo sessions have no host, and a card with no route is drawn dimmed — so
+    /// every capture of the list would show dimmed cards. Finder stands in as the
+    /// host: bringing it forward is harmless if a capture run clicks a card.
+    private func demoRoute(for session: Session) -> JumpRoute {
+        guard !demoUnroutable.contains(session.id),
+              let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first,
+              let url = finder.bundleURL
+        else { return .unavailable(reason: .noHostRecorded) }
+        return .application(pid: finder.processIdentifier, bundlePath: url.path)
     }
 
     /// The pid of a running instance of `bundleID`, or nil. Several instances are
