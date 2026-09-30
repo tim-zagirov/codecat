@@ -2,48 +2,33 @@ import SwiftUI
 import AppKit
 import CodeCatCore
 
-/// One link a finished turn handed over: a symbol, a short title, a click that
-/// opens it and a drag that carries it out of the island into a browser or Finder
-/// window — the one scene from the concept video that is pure use.
+/// One link a finished turn handed over: a short title, a click that opens it and a
+/// drag that carries it out of the island into a browser or Finder window — the one
+/// scene from the concept video that is pure use. Spec §5.4: a white 10 % pill, 12
+/// semibold, 22 pt tall, no symbol — the title is the link.
 struct HandoffChipView: View {
     let link: HandoffLink
     /// Position in the row, for the stagger.
     let index: Int
-    /// Card chips (spec §5.4): white 10 % pills, 12 semibold, 22 pt tall, no symbol —
-    /// the title is the link. The small form stays for the floating panel's rows.
-    var large = false
 
-    @Environment(\.menuStyle) private var style
-    /// The island's flag (the system setting or `--demo-reduce-motion`), and the
-    /// system's own for the floating panel's rows, which sit outside the island's
-    /// environment.
-    @Environment(\.islandReduceMotion) private var islandReduceMotion
-    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
-    private var reduceMotion: Bool { islandReduceMotion || systemReduceMotion }
+    @Environment(\.islandReduceMotion) private var reduceMotion
     @State private var hovering = false
     @State private var appeared = false
 
     var body: some View {
         Button(action: open) {
-            HStack(spacing: 4) {
-                if !large { Image(systemName: link.kind.symbol).font(.system(size: 10)) }
-                Text(shortTitle)
-                    .font(large ? IslandPalette.numberFont : .system(size: 10, weight: .medium))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(large ? IslandPalette.primary : style.primary)
-            .padding(.horizontal, large ? 10 : 7)
-            .padding(.vertical, large ? 0 : 3)
-            .frame(height: large ? 22 : nil)
-            .background(Capsule().fill(large ? (hovering ? IslandPalette.pillHover : IslandPalette.pill)
-                                             : (hovering ? style.chipHover : style.chipFill)))
+            Text(shortTitle)
+                .font(IslandPalette.numberFont)
+                .lineLimit(1)
+                .foregroundStyle(IslandPalette.primary)
+                .padding(.horizontal, 10)
+                .frame(height: 22)
+                .background(Capsule().fill(hovering ? IslandPalette.pillHover : IslandPalette.pill))
         }
         .buttonStyle(ChipButtonStyle())
         .onDrag { NSItemProvider(object: link.target as NSURL) }
-        // `HoverPhase.active` carries a `CGPoint` payload, so it cannot be compared
-        // with `==` the way the brief's snippet wrote it (that does not compile) —
-        // matched with `if case`, the same idiom `HoverHighlight` and
-        // `PointingHandOnHover` already use in `MenuStyle.swift`.
+        // `HoverPhase.active` carries a `CGPoint` payload, so it is matched with
+        // `if case`, the same idiom `PointingHandOnHover` uses (`IslandPalette.swift`).
         .onHoverRegion { phase in
             if case .active = phase {
                 hovering = true
@@ -127,53 +112,5 @@ private struct ChipButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(Motion.chipPress, value: configuration.isPressed)
-    }
-}
-
-extension HandoffLink.Kind {
-    var symbol: String {
-        switch self {
-        case .localhost: return "globe"
-        case .pullRequest: return "arrow.triangle.pull"
-        case .github: return "chevron.left.forwardslash.chevron.right"
-        case .figma: return "paintpalette"
-        case .artifact: return "doc.richtext"
-        case .web: return "link"
-        case .file: return "doc"
-        case .folder: return "folder"
-        }
-    }
-}
-
-/// The summary and the chips, under a finished or waiting row.
-struct HandoffBlockView: View {
-    let handoff: Handoff
-    /// Island rows have one line for the summary; panel rows two.
-    let compact: Bool
-    @Environment(\.menuStyle) private var style
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            if let summary = handoff.summary {
-                Text(summary)
-                    .font(.system(size: compact ? 10 : 11))
-                    .foregroundStyle(style.secondary)
-                    .lineLimit(compact ? 1 : 2)
-                    .truncationMode(.tail)
-            }
-            if !handoff.links.isEmpty {
-                ChipFlow(spacing: 6) {
-                    ForEach(Array(handoff.links.enumerated()), id: \.element.id) { index, link in
-                        HandoffChipView(link: link, index: index)
-                    }
-                }
-            }
-        }
-        // A click on a chip's `Button` must not also trigger the row's own
-        // `onTapGesture` (which jumps to the session and closes the menu). SwiftUI
-        // resolves a `Button` before an ancestor's `onTapGesture` on macOS, but a
-        // second, empty `onTapGesture` right here still wins any tie closer to the
-        // chips than the row's — cheap insurance verified on the rendered check.
-        .onTapGesture {}
     }
 }

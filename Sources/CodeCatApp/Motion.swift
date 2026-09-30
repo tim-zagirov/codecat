@@ -115,3 +115,20 @@ struct ContentReveal: ViewModifier {
             .animation(visible ? arrive : Motion.contentOut, value: visible)
     }
 }
+
+/// Opacity plus a small blur — the outgoing text softens as it goes, and the
+/// incoming one sharpens as it arrives. Two texts fading over each other read as two
+/// objects; the 2 px blur melts them into one change (a card's step title).
+private struct BlurFade: ViewModifier {
+    let radius: CGFloat
+    let opacity: Double
+    func body(content: Content) -> some View {
+        content.blur(radius: radius).opacity(opacity)
+    }
+}
+
+extension AnyTransition {
+    static let blurFade = AnyTransition.modifier(
+        active: BlurFade(radius: 2, opacity: 0),
+        identity: BlurFade(radius: 0, opacity: 1))
+}

@@ -10,9 +10,9 @@ import SwiftUI
 /// panel would take keystrokes away from the terminal the user is typing in while
 /// the mouse wanders onto the notch. An `.activeAlways` tracking area on the AppKit
 /// host does fire in that situation, so the host publishes the position here and
-/// `onHoverRegion` (`MenuStyle.swift`) decides "hovered" from each view's own frame.
-/// The floating details panel uses the same path even though it is key, so the two
-/// surfaces cannot drift apart.
+/// `onHoverRegion` (`IslandPalette.swift`) decides "hovered" from each view's own
+/// frame. The floating cat's panel uses the same path, so the two surfaces cannot
+/// drift apart.
 final class PointerTracker: ObservableObject {
     @Published var location: CGPoint?
 }
@@ -83,13 +83,29 @@ class HoverHostingView<Content: View>: NSHostingView<Content> {
     }
 }
 
-/// The island's host view: clicks are judged against the painted shape, and Escape
-/// goes to the controller.
-final class IslandHostingView: HoverHostingView<IslandView> {
-    /// Escape (keyCode 53). Reaches `keyDown` only while the panel is key — after a
-    /// click inside the open island — so it never takes a key from anyone else.
+/// A host whose panel answers Escape (keyCode 53) — it reaches `keyDown` only while
+/// the panel is key, after a click inside, so it never takes a key from anyone else.
+class EscapeHostingView<Content: View>: HoverHostingView<Content> {
     var onEscape: (() -> Void)?
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// So the owner can make this view first responder when the panel becomes key,
+    /// which is what puts Escape in front of it.
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 {
+            onEscape?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+}
+
+/// The island's host view: clicks are judged against the painted shape, and Escape
+/// goes to the controller.
+final class IslandHostingView: EscapeHostingView<IslandView> {
     /// The outline of the shape the island is heading to, in the view's top-left
     /// coordinates (SwiftUI's). Set by the controller together with the window frame,
     /// from one entry point, so the two never disagree.
@@ -110,20 +126,6 @@ final class IslandHostingView: HoverHostingView<IslandView> {
     /// What lets it through is the panel's `ignoresMouseEvents`, which the controller
     /// sets; this flag only keeps every view inside the closed island from answering.
     var clickThrough = true
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    /// So the controller can make this view first responder when the panel becomes
-    /// key, which is what puts Escape in front of it.
-    override var acceptsFirstResponder: Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            onEscape?()
-            return
-        }
-        super.keyDown(with: event)
-    }
 
     /// A point in the view's own coordinates, in the top-left space the silhouette is
     /// drawn in. `NSHostingView` is flipped, but relying on that silently would put

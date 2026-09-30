@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         presenter = nil
         presentedMode = appState.displayMode
         switch appState.displayMode {
-        case .floating: presenter = OverlayController(appState: appState)
+        case .floating: presenter = FloatingController(appState: appState)
         case .island: presenter = IslandController(appState: appState)
         }
     }

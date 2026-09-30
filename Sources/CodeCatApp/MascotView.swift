@@ -20,21 +20,18 @@ import CodeCatCore
 struct MascotView: View {
     let skin: MascotSkin
     /// Drives the sprite/hand-drawn pose (`SpriteMascotView` keys its animation on it,
-    /// `CatView` its posture). Kept distinct from `indicator`, which drives only the
-    /// badge — the pose has its own display priorities (waiting outranks working).
+    /// `CatView` its posture).
     let status: AggregateStatus
-    /// The single source the badge renders from — see `SessionStore.indicator`.
-    let indicator: MascotIndicator
-    /// Sizes for the island. Unset means the floating mascot's canvas and scale.
+    /// The sprite's size. Unset means the floating mascot's scale.
     var drawingSize: CGSize?
+    /// The canvas around it. Unset means `MascotLayout.canvasSize` square.
     var canvasSize: CGSize?
-    var showsBadge: Bool = true
     /// When the current state began — see `SpriteMascotView.since`.
     var since: Date?
     /// Called when a sprite skin could not be loaded, so the app can report it.
     var onLoadFailure: (MascotSkin) -> Void = { _ in }
 
-    /// Explains the badge count to a hovering mouse, reusing the same strings the
+    /// Explains the cat's state to a hovering mouse, reusing the same strings the
     /// menu-bar icon's own tooltip already shows for `AggregateStatus` — no new
     /// catalog keys, just a second place those five map to. The island's short
     /// menu is a non-key SwiftUI view, so AppKit may not surface `.help(...)` there;
@@ -72,8 +69,7 @@ struct MascotView: View {
     @ViewBuilder
     private var content: some View {
         if let loaded = SpriteSheetStore.shared.load(skin) {
-            SpriteMascotView(loaded: loaded, status: status, indicator: indicator,
-                             showsBadge: showsBadge,
+            SpriteMascotView(loaded: loaded, status: status,
                              drawingSize: drawingSize, canvasSize: canvasSize,
                              since: since)
         } else {
@@ -81,18 +77,10 @@ struct MascotView: View {
         }
     }
 
-    /// The emergency render. `CatView` has no `showsBadge` of its own — it draws
-    /// `MascotBadge` unconditionally — so the badge is suppressed here, in the branch
-    /// where `MascotView` already knows about `showsBadge`, rather than by changing
-    /// `CatView`'s contract (the floating cat's badge has to stay). `MascotBadge`
-    /// draws nothing for the `.sleeping` tone (see its body), so passing a sleeping
-    /// indicator reliably switches it off — the same technique `SkinGrid` uses
-    /// for its 34pt previews.
+    /// The emergency render: the hand-drawn cat, scaled into the canvas it was given.
     @ViewBuilder
     private var fallback: some View {
-        let badge = showsBadge ? indicator
-            : MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false)
-        let cat = CatView(status: status, indicator: badge)
+        let cat = CatView(status: status)
         if let canvasSize {
             // `CatView` draws itself on a square `MascotLayout.canvasSize` canvas
             // (128pt) — without shrinking, it would look like a cropped fragment in a
@@ -104,8 +92,8 @@ struct MascotView: View {
             // square cat to 32×32 — 4pt wider than the frame on each side, unnoticed
             // today only because `wingPadding` (8pt) absorbs it. Scaling by the smaller
             // side keeps the cat inside the frame by construction rather than by a
-            // coincidence of constants. When `canvasSize` is unset (the floating cat)
-            // this branch does not run and behaviour is unchanged to the pixel.
+            // coincidence of constants. When `canvasSize` is unset this branch does
+            // not run and the cat keeps its own 128 pt canvas.
             cat
                 .scaleEffect(min(canvasSize.width, canvasSize.height) / MascotLayout.canvasSize)
                 .frame(width: canvasSize.width, height: canvasSize.height)

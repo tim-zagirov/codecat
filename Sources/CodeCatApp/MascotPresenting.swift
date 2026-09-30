@@ -1,7 +1,7 @@
 import Foundation
 
 /// One way of showing the mascot. There are two implementations — the floating
-/// window (`OverlayController`) and the island in the notch (`IslandController`) —
+/// cat (`FloatingController`) and the island in the notch (`IslandController`) —
 /// and exactly one lives on screen at a time: `AppDelegate` destroys the previous
 /// one when the mode changes.
 ///

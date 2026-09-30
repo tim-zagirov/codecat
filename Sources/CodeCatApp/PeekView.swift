@@ -45,7 +45,7 @@ struct PeekView: View {
                        textColor: prominent ? .black : IslandPalette.primary,
                        height: 24, horizontalPadding: 12, action: onJump)
         case .chip(let link):
-            HandoffChipView(link: link, index: 0, large: true)
+            HandoffChipView(link: link, index: 0)
         case .show:
             PillButton(title: L10n.t("peek.show", "Show"), height: 24, horizontalPadding: 12, action: onShow)
         case .absent:

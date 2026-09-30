@@ -120,12 +120,14 @@ struct SessionCardView: View {
             if showsText, let links = session.handoff?.links, !links.isEmpty {
                 ChipFlow(spacing: 6) {
                     ForEach(Array(links.enumerated()), id: \.element.id) { index, link in
-                        HandoffChipView(link: link, index: index, large: true)
+                        HandoffChipView(link: link, index: index)
                     }
                 }
                 .padding(.top, 4)
                 // A chip's click must not also reach the card's tap (which jumps and
-                // closes the island) — see `HandoffBlockView`.
+                // closes the island): SwiftUI resolves a `Button` before an ancestor's
+                // `onTapGesture` on macOS, and an empty tap here still wins any tie
+                // closer to the chips than the card's.
                 .onTapGesture {}
             }
         case .crashed:
@@ -184,7 +186,7 @@ struct SessionCardView: View {
 }
 
 /// The step a working session is on: its title, `2/5` in the tone, and a 3 pt bar.
-/// The title changes through the same blur-fade as the panel's `StepLineView`.
+/// The title changes through a blur-fade (`AnyTransition.blurFade`).
 struct CardStepLine: View {
     let title: String
     let done: Int

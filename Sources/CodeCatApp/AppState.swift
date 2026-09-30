@@ -697,9 +697,9 @@ final class AppState: ObservableObject {
 
     // MARK: - Closed-lid mode
 
-    /// Single entry point for the closed-lid toggle, from both the menu bar and the
-    /// details panel. Turning it on when the one-time helper (`scripts/install-lid-mode.sh`,
-    /// see `LidSleepController`) is not yet installed kicks off that install asynchronously
+    /// Single entry point for the closed-lid toggle in the Power pane. Turning it on
+    /// when the one-time helper (`scripts/install-lid-mode.sh`, see
+    /// `LidSleepController`) is not yet installed kicks off that install asynchronously
     /// (it prompts for an administrator password via `osascript`) — `lidModeEnabled` only
     /// flips to `true` once the install actually took effect, never optimistically. Every
     /// outcome other than a clean success is reported with an `NSAlert`. Turning the mode
@@ -708,7 +708,7 @@ final class AppState: ObservableObject {
     ///
     /// Closed-lid mode is a strictly stronger form of keep-awake — it is meaningless on its
     /// own — so turning it on also turns on `keepAwakeEnabled`, updating that toggle's own
-    /// published state so the menu and the details panel both show it on.
+    /// published state so the Power pane shows it on.
     func requestLidModeChange(to newValue: Bool) {
         guard newValue != lidModeEnabled else { return }
         guard newValue else {
@@ -895,8 +895,8 @@ final class AppState: ObservableObject {
             // host quit in between). `.hostGone` is a real, reportable failure —
             // staying silent here would be a dead click on a row that looked
             // clickable. `.noHostRecorded` is correctly silent: `route(for:)` never
-            // makes such a row clickable in the first place (see
-            // `DetailsPanelView.hasRoute`), so this branch is unreachable for it
+            // makes such a card clickable in the first place (see
+            // `SessionCardView`), so this branch is unreachable for it
             // today, but honoring it explicitly keeps that guarantee visible here
             // too rather than relying only on the view layer.
             guard reason == .hostGone, let message = JumpMessages.alert(for: .hostGone) else { return }
@@ -977,8 +977,8 @@ final class AppState: ObservableObject {
     }
 
     /// Reports a skin whose sheets could not be read, and switches back to the
-    /// default skin. Told with an alert rather than a line in the details panel
-    /// because the panel may well be closed — this project's rule is that there are
+    /// default skin. Told with an alert rather than a line in the Cat pane
+    /// because the pane may well be closed — this project's rule is that there are
     /// no silent refusals.
     ///
     /// Only the alert is once per launch (see `reportedSkinFailures`'s doc comment);

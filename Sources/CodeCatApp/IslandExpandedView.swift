@@ -13,6 +13,8 @@ struct IslandExpandedView: View {
     /// already closing.
     let visible: Bool
     let maxHeight: CGFloat
+    /// The island's 420 pt, or the floating cat's 300 pt panel (spec §9).
+    var width: CGFloat = IslandLayout.expandedWidth
     var onJump: () -> Void = {}
     var onConnect: () -> Void = {}
 
@@ -50,7 +52,7 @@ struct IslandExpandedView: View {
             })
         }
         .scrollBounceBehavior(.basedOnSize)
-        .frame(width: IslandLayout.expandedWidth)
+        .frame(width: width)
         .frame(maxHeight: maxHeight)
     }
 

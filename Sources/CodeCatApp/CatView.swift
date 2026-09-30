@@ -2,9 +2,9 @@ import SwiftUI
 import CodeCatCore
 
 /// A calm, hand-drawn orange cat that mirrors the aggregate state of every tracked
-/// session. Pure function of `status`/`indicator` — no timers, no app-state
+/// session. Pure function of `status` — no timers, no app-state
 /// access, no stored animation flags. Every repeating motion (breathing, tail
-/// sway, eye tracking, paw wave, badge pulse) is driven by its own
+/// sway, eye tracking, paw wave) is driven by its own
 /// `.phaseAnimator`, scoped to the exact subview it animates. That means each
 /// cycle starts the instant its view is inserted into the hierarchy — whether
 /// that happens at first launch (`.sleeping`) or much later when the state
@@ -13,7 +13,7 @@ import CodeCatCore
 /// mounted at that instant.
 ///
 /// Drawn in a ~96pt coordinate space but laid out on a larger canvas
-/// (`MascotLayout.canvasSize`): the tail swish and the badge pulse reach past the
+/// (`MascotLayout.canvasSize`): the tail swish reaches past the
 /// drawing's nominal bounds, and the panel window has no slack of its own, so
 /// without that margin the window edge slices the tail off. See `MascotLayout`.
 /// It reads clearly over an arbitrary desktop background: every color is a fixed,
@@ -32,12 +32,9 @@ private struct Triangle: Shape {
 
 struct CatView: View {
     let status: AggregateStatus
-    /// The single source the badge renders from — see `SessionStore.indicator`.
-    let indicator: MascotIndicator
 
-    init(status: AggregateStatus, indicator: MascotIndicator) {
+    init(status: AggregateStatus) {
         self.status = status
-        self.indicator = indicator
     }
 
     private var bodyColor: Color {
@@ -58,12 +55,6 @@ struct CatView: View {
             } else {
                 sittingCat
             }
-            // Pinned to the canvas's top-trailing corner (see `MascotBadge`): a corner
-            // badge clears the cat's head whatever the pose, rather than the old fixed
-            // offset from the centre that could land on it.
-            MascotBadge(indicator: indicator)
-                .padding(6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         }
         .frame(width: MascotLayout.canvasSize, height: MascotLayout.canvasSize)
     }

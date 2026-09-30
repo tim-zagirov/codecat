@@ -86,9 +86,7 @@ struct CatStage: View {
     @ViewBuilder
     private func pose(_ status: AggregateStatus) -> some View {
         if let loaded = SpriteSheetStore.shared.load(skin) {
-            SpriteMascotView(loaded: loaded, status: status,
-                             indicator: MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false),
-                             maxFPS: 4, showsBadge: false,
+            SpriteMascotView(loaded: loaded, status: status, maxFPS: 4,
                              drawingSize: loaded.drawingSize(targetHeight: SpriteScale.islandTargetHeight,
                                                              maxWidth: SpriteScale.islandMaxWidth),
                              canvasSize: CGSize(width: 60, height: 32))
@@ -140,9 +138,7 @@ struct SkinGrid: View {
     @ViewBuilder
     private func preview(_ skin: MascotSkin) -> some View {
         if let loaded = SpriteSheetStore.shared.load(skin) {
-            SpriteMascotView(loaded: loaded, status: .working(1),
-                             indicator: MascotIndicator(tone: .sleeping, count: 0, crashedMarker: false),
-                             maxFPS: 4, showsBadge: false)
+            SpriteMascotView(loaded: loaded, status: .working(1), maxFPS: 4)
         } else {
             Color.clear.frame(width: MascotLayout.canvasSize, height: MascotLayout.canvasSize)
         }
@@ -153,7 +149,7 @@ struct SkinGrid: View {
 /// author and one licence — repeating them six times would bury the one line that is
 /// an actual obligation: mxmaze is CC BY 4.0), then one per imported pet. Drawn with
 /// system colours since the Settings window sits on system materials, unlike the
-/// island's and panel's own `MenuStyle` greys.
+/// island's own fixed whites (`IslandPalette`).
 @MainActor
 struct CreditsList: View {
     let skins: [MascotSkin]

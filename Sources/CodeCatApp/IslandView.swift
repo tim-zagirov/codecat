@@ -131,10 +131,8 @@ struct IslandView: View {
         return ZStack(alignment: .topLeading) {
             MascotView(skin: appState.skin,
                        status: appState.store.aggregate,
-                       indicator: appState.store.indicator,
                        drawingSize: metrics.spriteSize,
                        canvasSize: CGSize(width: metrics.spriteSize.width, height: metrics.bandHeight),
-                       showsBadge: false,
                        since: appState.statusSince,
                        onLoadFailure: { [appState] skin in appState.reportSkinLoadFailure(skin) })
                 .frame(width: metrics.wingWidth, height: metrics.bandHeight)

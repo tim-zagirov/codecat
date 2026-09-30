@@ -38,7 +38,6 @@
 "setting.hide.when.idle" = "Hide when nothing is running";
 "settings.no.notch" = "Island needs a display with a notch. This Mac doesn't have one, so the cat stays floating.";
 "settings.lid.password.hint" = "Turning this on the first time asks for an administrator password. One-time setup.";
-"settings.hooks.install" = "Set up Claude Code…";
 
 /* MARK: - Settings window */
 
@@ -120,16 +119,6 @@
 
 /* MARK: - Session list */
 
-"panel.no.sessions" = "No active sessions";
-"panel.setup.title" = "No sessions yet";
-"panel.setup.body" = "CodeCat needs one setup step before it can see your Claude Code sessions.";
-/* The floating panel's title: the aggregate state, mirroring the mascot badge.
-   %d is the session count for the working / waiting states. */
-"panel.title.working" = "%d working";
-"panel.title.waiting" = "%d waiting for you";
-"panel.title.problem" = "a session ended";
-"panel.title.done" = "all done";
-"panel.title.sleeping" = "nothing running";
 /* %@ is a duration such as "12 min". */
 "duration.minutes" = "%d min";
 "duration.hours.minutes" = "%dh %dm";

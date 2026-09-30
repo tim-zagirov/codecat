@@ -9,11 +9,8 @@ import CodeCatCore
 struct SpriteMascotView: View {
     let loaded: LoadedSkin
     let status: AggregateStatus
-    /// The single source the badge renders from — see `SessionStore.indicator`.
-    let indicator: MascotIndicator
-    /// Previews in the details panel cap this: nine animations run at once there.
+    /// Previews in the Cat pane cap this: every installed skin animates at once there.
     var maxFPS: Double = 8
-    var showsBadge: Bool = true
     /// The sprite's size on screen. Unset means the size from `LoadedSkin`, i.e. the
     /// floating mascot's scale.
     var drawingSize: CGSize?
@@ -42,15 +39,6 @@ struct SpriteMascotView: View {
                 TimelineView(.periodic(from: .now, by: 1 / fps)) { context in
                     frameImage(at: elapsed(at: context.date), in: animation)
                 }
-            }
-            if showsBadge {
-                // Pinned to the canvas's top-trailing corner, not offset from its
-                // centre: the head sits low-left in the taller poses, so a corner
-                // badge clears it whatever the pose height. The 6pt padding keeps it
-                // off the very edge.
-                MascotBadge(indicator: indicator)
-                    .padding(6)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
         .frame(width: canvasSize?.width ?? MascotLayout.canvasSize,
