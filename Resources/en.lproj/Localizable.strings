@@ -225,6 +225,20 @@
 "footer.power.awake" = "Mac stays awake — %d agents working";
 "footer.power.sleep.now" = "Mac can sleep now";
 "footer.power.sleep" = "Mac can sleep in %d min";
+/* Right side of the open island's footer, when closed-lid mode is on. */
+"footer.lid" = "Closed lid: on";
+
+/* The open island with no sessions. The command `claude` sits between the two halves. */
+"empty.title" = "Agents are asleep";
+"empty.start" = "Start";
+"empty.end" = "in a terminal and the cat wakes up.";
+/* The open island before Claude Code's hooks are installed. */
+"onboarding.title" = "Connect Claude Code";
+"onboarding.body" = "CodeCat adds five hook entries to ~/.claude/settings.json, so it knows the moment an agent needs you. It shows them first and touches nothing else.";
+"onboarding.connect" = "Connect…";
+"onboarding.later" = "Not now";
+/* Tooltip of the "•••" button in the open island. */
+"island.settings" = "Settings";
 
 /* The open island's cards. */
 "card.open" = "Open";

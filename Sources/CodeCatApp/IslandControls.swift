@@ -40,3 +40,25 @@ struct DismissButton: View {
         .pointingHandOnHover()
     }
 }
+
+/// "•••" in the open island's header: Settings (§5.3).
+struct SettingsButton: View {
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(IslandPalette.primary)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(hovered ? IslandPalette.pillHover : IslandPalette.pill))
+        }
+        .buttonStyle(.plain)
+        .help(L10n.t("island.settings", "Settings"))
+        .onHoverRegion { phase in
+            if case .active = phase { hovered = true } else { hovered = false }
+        }
+        .pointingHandOnHover()
+    }
+}

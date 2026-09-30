@@ -108,8 +108,25 @@ struct IslandView: View {
                 .allowsHitTesting(false)
             IslandWingView(content: RightWing.content(for: appState.store.ordered, aggregate: tone, now: Date()))
                 .frame(width: metrics.wingWidth, height: metrics.stripHeight)
+                // Open, the wing's live data gives way to the header's dots (§5.3).
+                .opacity(contentVisible ? 0 : 1)
+                .animation(Motion.contentOut, value: contentVisible)
                 .position(x: centre + side, y: y)
                 .allowsHitTesting(false)
+            if contentMounted {
+                // Dots only — the ring, the check and the count are the compact wing's
+                // shorthand; the cards below say the rest — and Settings. 20 pt in from
+                // the body's right edge (Figma 04, "Header right").
+                HStack(spacing: 10) {
+                    HStack(spacing: 5) {
+                        ForEach(appState.store.dots) { SessionDotView(tone: $0.tone) }
+                    }
+                    SettingsButton(action: model.onSettings)
+                }
+                .frame(width: IslandLayout.expandedWidth - 40, height: metrics.stripHeight, alignment: .trailing)
+                .modifier(ContentReveal(visible: contentVisible))
+                .position(x: centre, y: y)
+            }
         }
     }
 
