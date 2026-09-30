@@ -1,11 +1,11 @@
 import SwiftUI
 import CodeCatCore
 
-/// The island's content: the cat in the left wing, the counter in the right, and
+/// The island's content: the cat in the left wing, the right wing in the right, and
 /// between them a hole for the physical notch.
 ///
 /// The wings are equally wide, and that is the composition's main rule. The cat is
-/// an object with bulk, the counter is a mark; they cannot be balanced with type
+/// an object with bulk, the right wing is a mark; they cannot be balanced with type
 /// size or colour, only with geometry. While the wing was sized from the sprite, the
 /// whole black shape drifted off the screen's centre and was cat-heavy.
 struct IslandView: View {
@@ -115,7 +115,7 @@ struct IslandView: View {
         .environment(\.islandReduceMotion, reduceMotion || Motion.reduceMotionForced)
     }
 
-    /// The island strip: the cat in the left wing, the counter in the right, and
+    /// The island strip: the cat in the left wing, the right wing in the right, and
     /// between them a hole for the physical notch.
     private var strip: some View {
         HStack(spacing: 0) {
