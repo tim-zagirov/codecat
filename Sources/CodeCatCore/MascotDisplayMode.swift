@@ -21,7 +21,7 @@ public enum MascotDisplayMode: String, CaseIterable, Sendable {
     /// The label shown in the interface.
     public var title: String {
         switch self {
-        case .floating: return L10n.t("display.mode.floating", "Cat")
+        case .floating: return L10n.t("display.mode.floating", "Floating cat")
         case .island: return L10n.t("display.mode.island", "Island")
         }
     }

@@ -19,6 +19,9 @@
 #                              $CGEV and the notch ($NX $NY $NW $NH) are exported
 #   BURST=N                    N shots 50 ms apart instead of one
 #   CURSOR=1                   draw the cursor into the shots
+#   MODE=island                island | floating: which mascot the demo shows
+#   AT="x y w h"               an absolute crop in points from the main screen's
+#                              top-left corner, instead of CROP around the notch
 #
 # The installed CodeCat is stopped for the duration — two islands would share one
 # notch — and started again from /Applications on exit. The debug binary keeps its
@@ -60,7 +63,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-defaults write CodeCatApp mascotDisplayMode -string island
+defaults write CodeCatApp mascotDisplayMode -string "${MODE:-island}"
 "$BIN" --demo "$@" >/dev/null 2>&1 &
 APP_PID=$!
 sleep "$SETTLE"
@@ -69,6 +72,10 @@ read -r NX NY NW NH <<<"$("$CGEV" notch)" || die "no notch on any screen"
 export CGEV NX NY NW NH
 read -r CW CH <<<"$CROP"
 RECT="$(( NX + NW / 2 - CW / 2 )),$NY,$CW,$CH"
+if [ -n "${AT:-}" ]; then
+    read -r AX AY AW AH <<<"$AT"
+    RECT="$AX,$AY,$AW,$AH"
+fi
 FLAGS=(-x -R"$RECT")
 if [ "${CURSOR:-0}" = 1 ]; then FLAGS+=(-C); fi
 

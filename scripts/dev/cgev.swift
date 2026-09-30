@@ -7,7 +7,8 @@
 //                               single teleporting event does not fire tracking areas
 //   cgev glide X1 Y1 X2 Y2 MS   move from one point to the other in 30 steps over MS ms
 //   cgev click X Y              left click
-//   cgev key CODE               press and release a key (53 = Escape)
+//   cgev key CODE [cmd]         press and release a key, optionally with ⌘
+//                               (53 = Escape, 43 = ,)
 //
 // CGEvent and `screencapture -R` share this coordinate space, so a rectangle read
 // from `notch` can be handed to either.
@@ -77,11 +78,16 @@ case "click":
     post(.leftMouseUp, point)
 case "key":
     let code = CGKeyCode(Int(number(1)))
-    CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)?.post(tap: .cghidEventTap)
+    let cmd = args.count > 2 && args[2] == "cmd"
+    let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true)
+    let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false)
+    if cmd { down?.flags.insert(.maskCommand); up?.flags.insert(.maskCommand) }
+    down?.post(tap: .cghidEventTap)
     usleep(30_000)
-    CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false)?.post(tap: .cghidEventTap)
+    up?.post(tap: .cghidEventTap)
 default:
-    FileHandle.standardError.write("usage: cgev notch | move X Y | glide X1 Y1 X2 Y2 MS | click X Y | key CODE\n"
+    FileHandle.standardError.write(
+        "usage: cgev notch | move X Y | glide X1 Y1 X2 Y2 MS | click X Y | key CODE [cmd]\n"
         .data(using: .utf8)!)
     exit(2)
 }

@@ -1,11 +1,9 @@
 import AppKit
 import Combine
 import CodeCatCore
-import ServiceManagement
 
 extension Notification.Name {
-    /// "•••" on the island. Part 3 opens the Settings window on it; until then the
-    /// status-bar menu answers, since it holds every switch.
+    /// "•••" on the island (and on the floating panel): opens the Settings window.
     static let codecatShowSettings = Notification.Name("CodeCatShowSettings")
 }
 
@@ -15,9 +13,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var presenter: MascotPresenting?
     private var presentedMode: MascotDisplayMode?
     private var cancellables: Set<AnyCancellable> = []
+    private lazy var settings = SettingsWindowController(appState: appState)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        installMainMenu()
         // `--demo` drives the mascot through every state on a loop, for screenshots
         // and for the landing-page recording (scripts/capture-screenshots.sh). It
         // replaces `start()` rather than adding to it — see `startDemo`.
@@ -35,6 +35,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.presenter?.openMenuForCapture()
                 }
             }
+            if let name = arguments.first(where: { $0.hasPrefix("--demo-settings=") })?
+                .dropFirst("--demo-settings=".count),
+               let pane = SettingsPane.named(String(name)) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    self?.settings.show(pane)
+                    self?.settings.placeForCapture()
+                }
+            }
         } else {
             appState.start()
         }
@@ -49,21 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
         updateStatusIcon()
         NotificationCenter.default.addObserver(forName: .codecatShowSettings, object: nil, queue: .main) {
-            // The menu pops up where "•••" was clicked rather than through
-            // `performClick` on the status item: on a crowded menu bar the item sits in
-            // macOS's overflow, and a click on it only opened the overflow strip — the
-            // capture after "•••" showed the strip and no menu. It waits for the island
-            // to finish closing: the menu's tracking loop froze the close half-way, with
-            // the list still cut by the shrinking shape under the open menu.
-            //
-            // The wait is a run-loop timer, not `DispatchQueue.main.asyncAfter`: `popUp`
-            // runs a nested loop until the menu closes, and from inside a main-queue
-            // block that loop cannot drain the main queue — SIGTERM's handler and the
-            // store's forwarders would wait for the menu to close.
             [weak self] _ in
-            guard let self else { return }
-            self.perform(#selector(self.popUpStatusMenu(at:)), with: NSValue(point: NSEvent.mouseLocation),
-                         afterDelay: Motion.closeSettle)
+            self?.settings.show()
         }
 
         syncPresenter()
@@ -148,100 +143,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = buildMenu()
     }
 
+    /// An accessory app shows no menu bar, but its main menu still answers key
+    /// equivalents while one of its windows is key — the only way ⌘, ⌘W and ⌘Q reach
+    /// the Settings window (spec §8).
+    private func installMainMenu() {
+        let main = NSMenu()
+        let appMenu = NSMenu()
+        appMenu.addItem(NSMenuItem(title: L10n.t("menubar.settings", "Settings…"),
+                                   action: #selector(openSettings), keyEquivalent: ","))
+        appMenu.addItem(.separator())
+        appMenu.addItem(NSMenuItem(title: L10n.t("menu.quit", "Quit"), action: #selector(quit), keyEquivalent: "q"))
+        for item in appMenu.items where item.action != nil { item.target = self }
+        let appItem = NSMenuItem()
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+        let windowMenu = NSMenu(title: L10n.t("menu.window", "Window"))
+        windowMenu.addItem(NSMenuItem(title: L10n.t("menu.close", "Close"),
+                                      action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        let windowItem = NSMenuItem()
+        windowItem.submenu = windowMenu
+        main.addItem(windowItem)
+        NSApp.mainMenu = main
+    }
+
+    @objc private func openSettings() { settings.show() }
+
+    /// spec §8: "Show CodeCat as ▸, Settings… ⌘,, separator, version, Quit".
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        // S20: no per-session rows here — the panel and the island both show the live
-        // session list, and a disabled copy in the menu bar only went stale.
-
-        // One "View" item with a submenu of the two modes, each carrying its own
-        // checkmark, instead of two sibling "View: Cat" / "View: Island" rows.
-        let viewItem = NSMenuItem(title: L10n.t("settings.view", "View"),
-                                  action: nil, keyEquivalent: "")
-        let viewMenu = NSMenu()
-        for mode in MascotDisplayMode.allCases {
-            let item = NSMenuItem(title: mode.title,
-                                  action: #selector(selectDisplayMode(_:)), keyEquivalent: "")
-            item.state = (appState.displayMode == mode) ? .on : .off
-            item.representedObject = mode.rawValue
-            // Submenu items are not reached by the top-level target loop below.
+        let showItem = NSMenuItem(title: L10n.t("settings.show.as", "Show CodeCat as"), action: nil, keyEquivalent: "")
+        let showMenu = NSMenu()
+        // Items are enabled by hand (the island without a notch is not), which
+        // automatic validation would override.
+        showMenu.autoenablesItems = false
+        for mode in ShowMode.allCases {
+            let item = NSMenuItem(title: mode.title, action: #selector(selectShowMode(_:)), keyEquivalent: "")
+            item.state = appState.showMode == mode ? .on : .off
+            // Refused without a notch, like the Settings picker.
+            item.isEnabled = mode != .island || NotchScreen.exists
+            item.representedObject = mode
             item.target = self
-            viewMenu.addItem(item)
+            showMenu.addItem(item)
         }
-        viewItem.submenu = viewMenu
-        menu.addItem(viewItem)
-        menu.addItem(.separator())
-
-        menu.addItem(toggle(L10n.t("setting.keep.awake", "Keep the Mac awake while agents work"),
-                            appState.keepAwakeEnabled, #selector(toggleKeepAwake)))
-        menu.addItem(toggle(L10n.t("setting.lid.mode", "Keep agents running with the lid closed"),
-                            appState.lidModeEnabled, #selector(toggleLidMode)))
-        menu.addItem(toggle(L10n.t("setting.sounds", "Play a sound when an agent needs you"),
-                            appState.soundsEnabled, #selector(toggleSounds)))
-        menu.addItem(toggle(L10n.t("setting.show.cat", "Show the cat on screen"),
-                            appState.showMascot, #selector(toggleMascot)))
-        // A duplicate of the item in the settings panel, and mandatory here rather than
-        // a convenience: turning "hide" on removes both the mascot and the menu living
-        // inside it from the screen, leaving nowhere to turn it back off. The menu bar
-        // is always there.
-        menu.addItem(toggle(L10n.t("setting.hide.when.idle", "Hide the cat when nothing is running"),
-                            appState.hidesWhenNoSessions, #selector(toggleHideWhenIdle)))
-        menu.addItem(.separator())
-        if appState.hooksInstalled {
-            menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.remove", "Remove Claude Code hooks…"),
-                                    action: #selector(removeHooks), keyEquivalent: ""))
-        } else {
-            menu.addItem(NSMenuItem(title: L10n.t("menu.hooks.install", "Set up Claude Code…"),
-                                    action: #selector(installHooks), keyEquivalent: ""))
-        }
-        let loginItem = NSMenuItem(title: L10n.t("menu.login.item", "Open at login"),
-                                   action: #selector(toggleLoginItem), keyEquivalent: "")
-        loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
-        menu.addItem(loginItem)
+        showItem.submenu = showMenu
+        menu.addItem(showItem)
+        menu.addItem(NSMenuItem(title: L10n.t("menubar.settings", "Settings…"),
+                                action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(.separator())
         // The version is visible right in the menu, because otherwise there is no way
         // to tell what is installed: before 0.2.0 CFBundleVersion was "1" in every
         // build, and two different builds were indistinguishable.
-        let versionItem = NSMenuItem(title: "CodeCat \(Self.versionString)",
-                                     action: nil, keyEquivalent: "")
+        let versionItem = NSMenuItem(title: "CodeCat \(Self.versionString)", action: nil, keyEquivalent: "")
         versionItem.isEnabled = false
         menu.addItem(versionItem)
-        menu.addItem(NSMenuItem(title: L10n.t("menu.quit", "Quit"),
-                                action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: L10n.t("menu.quit", "Quit"), action: #selector(quit), keyEquivalent: "q"))
         for item in menu.items where item.action != nil { item.target = self }
         return menu
     }
 
-    private func toggle(_ title: String, _ on: Bool, _ action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-        item.state = on ? .on : .off
-        return item
+    @objc private func selectShowMode(_ sender: NSMenuItem) {
+        guard let mode = sender.representedObject as? ShowMode else { return }
+        appState.showMode = mode
     }
-
-    @objc private func toggleKeepAwake() { appState.keepAwakeEnabled.toggle() }
-    @objc private func toggleSounds() { appState.soundsEnabled.toggle() }
-    @objc private func toggleMascot() { appState.showMascot.toggle() }
-
-    @objc private func toggleHideWhenIdle() { appState.hidesWhenNoSessions.toggle() }
-
-    @objc private func toggleLidMode() {
-        appState.requestLidModeChange(to: !appState.lidModeEnabled)
-    }
-
-    /// The mode switch lives here too, not only in the panel: if the island turns out
-    /// to have nowhere to appear (the built-in display is disconnected), the mascot is
-    /// not visible at all, and getting back to the floating cat has to be possible.
-    @objc private func selectDisplayMode(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String else { return }
-        appState.displayMode = MascotDisplayMode.mode(withID: raw)
-    }
-
-    @objc private func popUpStatusMenu(at point: NSValue) {
-        statusItem.menu?.popUp(positioning: nil, at: point.pointValue, in: nil)
-    }
-
-    @objc private func installHooks() { appState.installHooksIfNeeded() }
-
-    @objc private func removeHooks() { appState.removeHooks() }
 
     /// "0.2.0 (136)". The build is the commit count, written into Info.plist when the
     /// bundle is assembled (see the Makefile). The "?" fallbacks are for running
@@ -252,16 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "\(short) (\(build))"
-    }
-
-    @objc private func toggleLoginItem() {
-        // works only from an assembled .app bundle; with swift run the error is ignored
-        if SMAppService.mainApp.status == .enabled {
-            try? SMAppService.mainApp.unregister()
-        } else {
-            try? SMAppService.mainApp.register()
-        }
-        statusItem.menu = buildMenu()
     }
 
     @objc private func quit() { NSApp.terminate(nil) }

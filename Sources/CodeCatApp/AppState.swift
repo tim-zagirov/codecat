@@ -137,6 +137,27 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(hoverDelay, forKey: "hoverDelay") }
     }
 
+    /// Spec §8 Alerts — which of §6.1's self-opening peeks the user wants. All on by
+    /// default: a peek is the product's answer to "an agent needs you".
+    @Published var peekOnWaiting: Bool {
+        didSet { UserDefaults.standard.set(peekOnWaiting, forKey: "peekOnWaiting") }
+    }
+    @Published var peekOnCrash: Bool {
+        didSet { UserDefaults.standard.set(peekOnCrash, forKey: "peekOnCrash") }
+    }
+    @Published var peekOnDone: Bool {
+        didSet { UserDefaults.standard.set(peekOnDone, forKey: "peekOnDone") }
+    }
+    /// Spec §6.2: the island steps aside while a full-screen app covers the notch
+    /// screen; a waiting or crashed peek still shows.
+    @Published var hidesInFullScreen: Bool {
+        didSet { UserDefaults.standard.set(hidesInFullScreen, forKey: "hideInFullScreen") }
+    }
+
+    var peekSettings: PeekSettings {
+        PeekSettings(onWaiting: peekOnWaiting, onCrash: peekOnCrash, onDone: peekOnDone)
+    }
+
     /// Whether the island should be hidden right now under the "hide when nothing is
     /// running" setting.
     ///
@@ -204,6 +225,7 @@ final class AppState: ObservableObject {
             "mascotDisplayMode": MascotDisplayMode.default.rawValue,
             "islandHidesWhenIdle": false, "showTaskText": true,
             "hoverDelay": Motion.hoverDelayDefault,
+            "peekOnWaiting": true, "peekOnCrash": true, "peekOnDone": true, "hideInFullScreen": true,
         ])
         keepAwakeEnabled = defaults.bool(forKey: "keepAwake")
         lidModeEnabled = defaults.bool(forKey: "lidMode")
@@ -214,6 +236,10 @@ final class AppState: ObservableObject {
         showsTaskText = defaults.bool(forKey: "showTaskText")
         hoverDelay = min(Motion.hoverDelayRange.upperBound,
                          max(Motion.hoverDelayRange.lowerBound, defaults.double(forKey: "hoverDelay")))
+        peekOnWaiting = defaults.bool(forKey: "peekOnWaiting")
+        peekOnCrash = defaults.bool(forKey: "peekOnCrash")
+        peekOnDone = defaults.bool(forKey: "peekOnDone")
+        hidesInFullScreen = defaults.bool(forKey: "hideInFullScreen")
         // Scan for pets before resolving the stored skin, so an imported id is
         // recognised on the very launch that brings its folder back (or takes it
         // away). `scanPets` is `static` and takes `reportedPetProblems` `inout`
@@ -974,5 +1000,41 @@ final class AppState: ObservableObject {
         alert.window.level = .modalPanel
         alert.window.orderFrontRegardless()
         alert.runModal()
+    }
+}
+
+/// "Show CodeCat as" (spec §8): the two display modes, or neither. "Menu bar only" is
+/// `showMascot` off — the key every earlier build already wrote — so no setting moves.
+enum ShowMode: Hashable, CaseIterable, Identifiable {
+    case island, floating, menuBarOnly
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .island: return MascotDisplayMode.island.title
+        case .floating: return MascotDisplayMode.floating.title
+        case .menuBarOnly: return L10n.t("display.mode.menubar", "Menu bar only")
+        }
+    }
+}
+
+extension AppState {
+    var showMode: ShowMode {
+        get {
+            guard showMascot else { return .menuBarOnly }
+            return displayMode == .island ? .island : .floating
+        }
+        set {
+            switch newValue {
+            case .menuBarOnly:
+                showMascot = false
+            case .island:
+                displayMode = .island
+                showMascot = true
+            case .floating:
+                displayMode = .floating
+                showMascot = true
+            }
+        }
     }
 }
