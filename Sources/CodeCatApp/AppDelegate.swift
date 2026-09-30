@@ -55,11 +55,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // capture after "•••" showed the strip and no menu. It waits for the island
             // to finish closing: the menu's tracking loop froze the close half-way, with
             // the list still cut by the shrinking shape under the open menu.
+            //
+            // The wait is a run-loop timer, not `DispatchQueue.main.asyncAfter`: `popUp`
+            // runs a nested loop until the menu closes, and from inside a main-queue
+            // block that loop cannot drain the main queue — SIGTERM's handler and the
+            // store's forwarders would wait for the menu to close.
             [weak self] _ in
-            let point = NSEvent.mouseLocation
-            DispatchQueue.main.asyncAfter(deadline: .now() + Motion.closeSettle) {
-                self?.statusItem.menu?.popUp(positioning: nil, at: point, in: nil)
-            }
+            guard let self else { return }
+            self.perform(#selector(self.popUpStatusMenu(at:)), with: NSValue(point: NSEvent.mouseLocation),
+                         afterDelay: Motion.closeSettle)
         }
 
         syncPresenter()
@@ -229,6 +233,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func selectDisplayMode(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String else { return }
         appState.displayMode = MascotDisplayMode.mode(withID: raw)
+    }
+
+    @objc private func popUpStatusMenu(at point: NSValue) {
+        statusItem.menu?.popUp(positioning: nil, at: point.pointValue, in: nil)
     }
 
     @objc private func installHooks() { appState.installHooksIfNeeded() }
