@@ -147,6 +147,36 @@ struct MenuStyle {
         lineSpacing: 4)
 }
 
+/// The island's whites and type — spec §7. Stated as numbers for the same reason
+/// as `MenuStyle.island`: the island is black whatever the system appearance, and
+/// system semantics know nothing about it. Colour lives only in the tones.
+enum IslandPalette {
+    static let primary = Color.white
+    static let secondary = Color.white.opacity(0.62)
+    static let tertiary = Color.white.opacity(0.38)
+    static let card = Color.white.opacity(0.06)
+    static let cardHover = Color.white.opacity(0.10)
+    static let hairline = Color.white.opacity(0.08)
+    /// Pills, chips, code tokens, the "•••" disc.
+    static let pill = Color.white.opacity(0.10)
+    static let pillHover = Color.white.opacity(0.20)
+    static let barTrack = Color.white.opacity(0.12)
+    static let ringTrack = Color.white.opacity(0.16)
+    /// The footer's line.
+    static let footer = Color.white.opacity(0.50)
+
+    /// Project names.
+    static let nameFont = Font.system(size: 15, weight: .semibold)
+    /// Task, reason, summary.
+    static let bodyFont = Font.system(size: 13)
+    /// Code tokens inside a line of body text.
+    static let codeFont = Font.system(size: 13, weight: .medium)
+    /// Numbers and pill labels.
+    static let numberFont = Font.system(size: 12, weight: .semibold)
+    /// Time, reasons for a missing route, the footer.
+    static let metaFont = Font.system(size: 11, weight: .medium)
+}
+
 private struct MenuStyleKey: EnvironmentKey {
     /// The floating panel is the project's original surface, so it is also the
     /// default: a view that declares no style looks the way it always did.
