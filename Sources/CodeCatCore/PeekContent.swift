@@ -58,7 +58,11 @@ public struct PeekContent: Equatable, Sendable {
     private static func single(_ kind: PeekItem.Kind, _ session: Session, showsTaskText: Bool) -> PeekContent {
         switch kind {
         case .crashed:
-            return PeekContent(title: session.projectName, segments: PeekReason.segments(for: session),
+            // Fixed text, not `PeekReason.segments(for:)`: that reads the session's
+            // *current* status, which can have moved on (done, working again) by the
+            // time this peek is drawn — a crash peek must not leak whatever comes next.
+            return PeekContent(title: session.projectName,
+                               segments: [.text(L10n.t("peek.reason.crashed", "the session ended unexpectedly"))],
                                pill: .open(prominent: false), sessionID: session.id, tone: .problem)
         case .done:
             let summary = showsTaskText ? session.handoff?.summary : nil

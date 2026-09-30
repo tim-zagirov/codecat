@@ -59,7 +59,7 @@ public struct PeekSettings: Equatable, Sendable {
 ///
 /// Break the first two and the scheduler waits forever for a peek that is no longer
 /// on screen: `next` returns nil for good and new events merge into a phantom.
-/// `IslandPeekFlowTests` drives both types through exactly this protocol.
+/// `IslandFlow` drives both types through exactly this protocol.
 public final class PeekScheduler {
     public static let gap: TimeInterval = 0.4
     public static let mergeWindow: TimeInterval = 1.0
@@ -118,7 +118,7 @@ public final class PeekScheduler {
     /// The next peek to show, or nil while one is on screen, within the gap after the
     /// last, or when nothing queued is still true.
     public func next(now: Date) -> PeekItem? {
-        guard showing == nil, now.timeIntervalSince(lastEnded) >= Self.gap else { return nil }
+        guard showing == nil, now >= lastEnded.addingTimeInterval(Self.gap) else { return nil }
         while !queue.isEmpty {
             let item = queue.removeFirst()
             if isStillTrue(item) {

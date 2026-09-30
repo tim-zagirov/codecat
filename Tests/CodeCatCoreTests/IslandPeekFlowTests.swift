@@ -146,6 +146,8 @@ final class IslandPeekFlowTests: XCTestCase {
         XCTAssertEqual(f.flow.presentation, .compact)
         guard let deadline = f.flow.nextDeadline else { return XCTFail("nothing to tick at") }
         XCTAssertEqual(deadline.timeIntervalSince(t0), 4.4, accuracy: 1e-6)
+        f.flow.tick(now: deadline)
+        XCTAssertEqual(f.peeked, ["b"], "a tick exactly at the deadline must not stall")
         f.flow.tick(now: at(4.41))
         XCTAssertEqual(f.peeked, ["b"])
     }
