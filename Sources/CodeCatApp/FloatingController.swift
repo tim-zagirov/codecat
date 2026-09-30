@@ -22,7 +22,10 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
     private let model = FloatingModel()
     private var flow: IslandFlow
     private var catPanel: OverlayPanel!
-    private var openPanel: OverlayPanel?
+    private var openPanel: PanelWindow?
+    /// Panels on their way out (`close(_:)`), each ordered out once its close has
+    /// settled; a new open of the same shape takes the latest back instead.
+    private var closingPanels: [PanelWindow] = []
     /// One timer, at the flow's next deadline, re-armed after every event (handover
     /// contract 4), as on the island.
     private var deadlineTimer: Timer?
@@ -32,10 +35,6 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
     /// The list's natural height plus the panel's padding, as last measured; 0 until
     /// the list has been laid out once.
     private var listHeight: CGFloat = 0
-    /// What the open panel shows on screen, for how its shape changes next; nil while
-    /// no panel is visible (none, or the first list's panel still waiting,
-    /// transparent, for its height).
-    private var shownKind: OpenKind?
     private var shapeRevision = 0
     /// A peek that turned into a list above the cat (decision 3 meeting decision 9):
     /// the band from the peek's bottom up to the list, which counts as inside until
@@ -48,7 +47,6 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
     private var mouseUpMonitors: [Any] = []
     private var cancellables: Set<AnyCancellable> = []
     private var pointerMonitor: Any?
-    private var keyObserver: NSObjectProtocol?
 
     init(appState: AppState) {
         self.appState = appState
@@ -105,9 +103,9 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         // would outlive it.
         deadlineTimer?.invalidate()
         if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }
-        if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
         mouseUpMonitors.forEach(NSEvent.removeMonitor)
-        openPanel?.orderOut(nil)
+        openPanel?.discard()
+        closingPanels.forEach { $0.discard() }
         catPanel?.orderOut(nil)
     }
 
@@ -155,14 +153,14 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
     private func pointerMoved() {
         let point = NSEvent.mouseLocation
         let onCat = catPanel.isVisible && catHitRect.contains(point)
-        let onPanel = openPanel?.isVisible == true && openShapeRect.contains(point)
+        let onPanel = openPanel?.window.isVisible == true && openShapeRect.contains(point)
         if let bridge = peekBridge, !(openPanel != nil && bridge.contains(point)) { peekBridge = nil }
         if model.catHovered != onCat { model.catHovered = onCat }
         // As on the island (Part 2, `updateClickTarget`): the panel's window is its
         // shape plus the bloom's margin, and a click in the margin belongs to what lies
         // under it. Left alone while a button is down — the drag keeps its window.
-        if let openPanel, NSEvent.pressedMouseButtons == 0, openPanel.ignoresMouseEvents == onPanel {
-            openPanel.ignoresMouseEvents = !onPanel
+        if let window = openPanel?.window, NSEvent.pressedMouseButtons == 0, window.ignoresMouseEvents == onPanel {
+            window.ignoresMouseEvents = !onPanel
         }
         // The bridge holds the list open, but takes no clicks: they belong to what
         // lies under its transparent band.
@@ -177,7 +175,7 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
 
     private var openShapeRect: CGRect {
         guard let openPanel else { return .zero }
-        return openPanel.frame.insetBy(dx: FloatingLayout.margin, dy: FloatingLayout.margin)
+        return openPanel.window.frame.insetBy(dx: FloatingLayout.margin, dy: FloatingLayout.margin)
     }
 
     private func reconcile(inside: Bool) {
@@ -199,10 +197,12 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         presenterChanged()
     }
 
-    /// A drag moves the cat, not an open list left behind.
+    /// A drag moves the cat, not an open list left behind — nor one closing into
+    /// the capsule's old place while the cat moves away from it.
     private func dragStarted() {
         flow.escape(now: Date())
         presenterChanged()
+        closingPanels.forEach(finishClosing)
     }
 
     private func jumped() {
@@ -233,19 +233,51 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
 
     private enum OpenKind { case peek, listBelow, listAbove }
 
-    /// The panel exists while the peek or the list is open; closed, it is released
-    /// like the 0.4 details panel was — its previews and timelines must not run on.
+    /// One window of the panel and what it shows. The open panel and the ones still
+    /// closing are each one of these.
+    private final class PanelWindow {
+        let window: OverlayPanel
+        let shape: PanelShapeModel
+        /// What it shows on screen, for how its shape changes next; nil while the
+        /// first list's panel waits, transparent, for its height.
+        var kind: OpenKind?
+        var keyObserver: NSObjectProtocol?
+        /// Orders it out once its close has settled.
+        var orderOut: DispatchWorkItem?
+
+        init(window: OverlayPanel, shape: PanelShapeModel) {
+            self.window = window
+            self.shape = shape
+        }
+
+        /// Gone for good: its previews and timelines must not run on, like the 0.4
+        /// details panel's.
+        func discard() {
+            orderOut?.cancel()
+            orderOut = nil
+            window.orderOut(nil)
+            if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+            keyObserver = nil
+        }
+    }
+
+    /// The panel exists while the peek or the list is open, and closes before it is
+    /// released (`close(_:)`).
     private func placeOpenPanel() {
         guard flow.presentation.isOpen, catPanel.isVisible, let screen = catPanel.screen ?? NSScreen.main else {
-            shownKind = nil
             peekBridge = nil
-            if openPanel != nil {
-                closeOpenPanel()
+            if let panel = openPanel {
+                openPanel = nil
+                // Decision 1: activation goes back to the app the user was in.
+                FocusReturn.handBack()
+                stopPointerMonitor()
+                close(panel)
                 // The list closed under a cursor that may not move again (a jump,
                 // Escape): without a fresh read the flow went on believing the pointer
                 // was inside, held the next peek open, and after the hover delay the
-                // dwell opened the list by itself. With `openPanel` gone this read
-                // cannot come back here to close it again.
+                // dwell opened the list by itself. The closing panel no longer counts
+                // as inside, and with `openPanel` gone this read cannot come back here
+                // to close it again.
                 pointerMoved()
             }
             return
@@ -274,31 +306,62 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         // rather than showing a 120 pt panel that jumps a frame later. A peek's
         // height is fixed, and it keeps the list mounted, measured, under it.
         let shows = kind == .peek || listHeight > 0
-        let change = shapeChange(to: kind, rect: rect, shows: shows)
+        let frame = rect.insetBy(dx: -FloatingLayout.margin, dy: -FloatingLayout.margin)
+        let previous = openPanel?.kind
+        // A peek turning into a list above the cat: the list opens in a window of its
+        // own and the peek closes as any peek does, back into the resting capsule,
+        // which returns under the cat (`panelIsAbove`). One motion — the peek goes
+        // home while the list rises — where moving the one window above the cat
+        // dropped the peek in a frame (recorded).
+        var handsKey = false
+        if let current = openPanel, current.kind == .peek, kind == .listAbove {
+            handsKey = current.window.isKeyWindow
+            openPanel = nil
+            close(current)
+        }
         if kind != .listAbove {
             peekBridge = nil
-        } else if shownKind == .peek {
+        } else if previous == .peek {
             peekBridge = FloatingLayout.peekRect(catWindow: catPanel.frame, visibleFrame: visible).union(rect)
         }
-        shownKind = shows ? kind : nil
-        let frame = rect.insetBy(dx: -FloatingLayout.margin, dy: -FloatingLayout.margin)
-        let isNew = openPanel == nil
-        let moved = isNew || openPanel?.frame != frame
+        // A close taken back before it settled — the cursor returned to the list, a
+        // peek replaced the peek — springs back from wherever it had got to, in the
+        // same window, instead of a second window growing over the first.
+        var revived: PanelWindow?
+        if openPanel == nil, shows,
+           let index = closingPanels.lastIndex(where: { $0.kind == kind && $0.window.frame == frame }) {
+            revived = closingPanels.remove(at: index)
+            revived?.orderOut?.cancel()
+            revived?.orderOut = nil
+        }
+        let reused = openPanel ?? revived
+        let moved = reused == nil || revived != nil || reused?.window.frame != frame
         // The window takes its new size before the view hears of the new shape, and
         // a new one is made at its frame, not at zero and then moved: a view laid out
         // with the new shape in a window of the old size took the resize into the
         // grow's spring, and the shape slid in from 200 pt too high, or from the
         // window's corner (both recorded at 60 fps).
-        if let openPanel, moved { openPanel.setFrame(frame, display: false) }
+        if let reused, reused.window.frame != frame { reused.window.setFrame(frame, display: false) }
+        let panel = reused ?? makeOpenPanel(frame: frame)
+        let change: PanelShape.Change = revived != nil ? .spring
+            : shapeChange(from: panel.kind, to: kind, rect: rect, shows: shows)
         // A size that did not change is not sent again: the list measured under a
         // growing peek would otherwise stop the spring where it was.
-        if change != .none || model.panelShape.size != rect.size {
-            model.panelShape = PanelShape(size: rect.size, change: change, revision: shapeRevision)
+        if change != .none || panel.shape.shape.size != rect.size {
+            panel.shape.shape = PanelShape(size: rect.size, change: change, revision: shapeRevision)
         }
-        let panel = openPanel ?? makeOpenPanel(frame: frame)
+        panel.kind = shows ? kind : nil
         openPanel = panel
-        panel.alphaValue = shows ? 1 : 0
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        panel.window.alphaValue = shows ? 1 : 0
+        if !panel.window.isVisible { panel.window.orderFrontRegardless() }
+        if handsKey {
+            // A click on the peek's Show made its window key (decision 1: Escape must
+            // reach the list it opened). The list's window becomes key otherwise only
+            // from a click in it, so that rule is lifted for this one hand-over.
+            panel.window.becomesKeyOnlyOnClick = false
+            panel.window.makeKey()
+            panel.window.becomesKeyOnlyOnClick = true
+        }
         startPointerMonitor()
         // The shape moved under a still cursor: where clicks go (`ignoresMouseEvents`)
         // and "inside" are read again, as the island does after a resize
@@ -310,42 +373,51 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
 
     /// Spec §9, "on the §5.2 springs": a shape appearing grows from the resting
     /// capsule, or, for a list above the cat, from a capsule-sized strip at its bottom
-    /// centre; a peek turning into a list below the cat springs from the peek, whose
-    /// top and sides it shares. Everything else — a list measured again, a peek
-    /// replacing a peek — takes its size at once.
-    private func shapeChange(to kind: OpenKind, rect: CGRect, shows: Bool) -> PanelShape.Change {
-        guard shows, kind != shownKind else { return .none }
-        if shownKind == .peek, kind == .listBelow { return .spring }
+    /// centre (`restRect`); a peek turning into a list below the cat springs from the
+    /// peek, whose top and sides it shares. Everything else — a list measured again,
+    /// a peek replacing a peek — takes its size at once.
+    private func shapeChange(from shown: OpenKind?, to kind: OpenKind, rect: CGRect, shows: Bool) -> PanelShape.Change {
+        guard shows, kind != shown else { return .none }
+        if shown == .peek, kind == .listBelow { return .spring }
         shapeRevision += 1
-        let capsule = FloatingLayout.capsule
-        if kind == .listAbove {
-            return .grow(from: CGRect(x: (rect.width - capsule.width) / 2, y: rect.height - capsule.height,
-                                      width: capsule.width, height: capsule.height))
-        }
-        let rest = FloatingLayout.capsuleOnScreen(catWindow: catPanel.frame)
-        return .grow(from: CGRect(x: rest.minX - rect.minX, y: rect.maxY - rest.maxY,
-                                  width: rest.width, height: rest.height))
+        return .grow(from: restRect(for: kind, rect: rect))
     }
 
-    private func makeOpenPanel(frame: NSRect) -> OverlayPanel {
+    /// Where a shape of `kind` at `rect` (on screen) grows from and closes into, in
+    /// the shape's own space: the resting capsule, which a peek and a list below the
+    /// cat both contain; for a list above the cat, which the capsule is not inside, a
+    /// capsule-sized strip at its bottom centre.
+    private func restRect(for kind: OpenKind, rect: CGRect) -> CGRect {
+        let capsule = FloatingLayout.capsule
+        if kind == .listAbove {
+            return CGRect(x: (rect.width - capsule.width) / 2, y: rect.height - capsule.height,
+                          width: capsule.width, height: capsule.height)
+        }
+        let rest = FloatingLayout.capsuleOnScreen(catWindow: catPanel.frame)
+        return CGRect(x: rest.minX - rect.minX, y: rect.maxY - rest.maxY, width: rest.width, height: rest.height)
+    }
+
+    private func makeOpenPanel(frame: NSRect) -> PanelWindow {
         // `allowsKey`: the list holds buttons, which need a window that can be key. It
         // becomes key only on a mouse-down inside it — never from hover.
-        let panel = OverlayPanel(contentRect: frame, allowsKey: true)
-        panel.becomesKeyOnlyOnClick = true
-        panel.level = .floating
-        panel.animationBehavior = .none
-        panel.acceptsMouseMovedEvents = true
+        let window = OverlayPanel(contentRect: frame, allowsKey: true)
+        window.becomesKeyOnlyOnClick = true
+        window.level = .floating
+        window.animationBehavior = .none
+        window.acceptsMouseMovedEvents = true
         // Decision 1, as on the island: a click inside activates CodeCat, so Escape
-        // reaches the panel; `closeOpenPanel()` hands activation back. A click that
-        // jumped has closed the list by the time this runs (after the mouse-up): the
-        // jump's target takes activation, not CodeCat.
-        panel.onActivatingClick = { [weak self] in
+        // reaches the panel; closing hands activation back (`placeOpenPanel`). A click
+        // that jumped has closed the list by the time this runs (after the mouse-up):
+        // the jump's target takes activation, not CodeCat.
+        window.onActivatingClick = { [weak self] in
             guard let self, self.flow.presentation.isOpen else { return }
             FocusReturn.remember()
             NSApp.activate()
         }
         let pointer = PointerTracker()
-        let hosting = EscapeHostingView(rootView: FloatingPanelView(appState: appState, model: model, pointer: pointer))
+        let shape = PanelShapeModel()
+        let hosting = EscapeHostingView(rootView: FloatingPanelView(appState: appState, model: model, panel: shape,
+                                                                    pointer: pointer))
         // The window's size is the controller's decision.
         hosting.sizingOptions = []
         hosting.pointer = pointer
@@ -354,27 +426,55 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
             self?.flow.escape(now: Date())
             self?.presenterChanged()
         }
-        panel.contentView = hosting
-        panel.ignoresMouseEvents = true
+        window.contentView = hosting
+        window.ignoresMouseEvents = true
+        let panel = PanelWindow(window: window, shape: shape)
         // Escape reaches `keyDown` only through the first responder, and a click that
         // made the panel key leaves one of SwiftUI's own views there (Part 2's island).
-        keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: panel,
-                                                             queue: .main) { [weak panel, weak hosting] _ in
-            guard let panel, let hosting else { return }
-            panel.makeFirstResponder(hosting)
+        panel.keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification,
+                                                                   object: window, queue: .main) {
+            [weak window, weak hosting] _ in
+            guard let window, let hosting else { return }
+            window.makeFirstResponder(hosting)
         }
         return panel
     }
 
-    private func closeOpenPanel() {
-        guard let panel = openPanel else { return }
-        // Decision 1: activation goes back to the app the user was in.
-        FocusReturn.handBack()
-        panel.orderOut(nil)
-        openPanel = nil
-        if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
-        keyObserver = nil
-        stopPointerMonitor()
+    /// The panel closes as it opened, backwards (spec §9, "on the §5.2 springs"): the
+    /// content fades out, the shape springs back into the rectangle it grew from
+    /// (`restRect`), and the window is ordered out once that has settled — before,
+    /// the panel vanished in one frame (recorded). Meanwhile it takes no clicks: they
+    /// belong to what lies under it.
+    private func close(_ panel: PanelWindow) {
+        panel.window.ignoresMouseEvents = true
+        // As on the island (`giveUpKeyboard`): keystrokes go back to what the user was
+        // typing in, not to a window on its way out. Ordering it out and straight
+        // back in hands key status back to the active app's window.
+        if panel.window.isKeyWindow {
+            panel.window.orderOut(nil)
+            panel.window.orderFrontRegardless()
+        }
+        guard let kind = panel.kind, panel.window.isVisible else {
+            finishClosing(panel)
+            return
+        }
+        let rect = panel.window.frame.insetBy(dx: FloatingLayout.margin, dy: FloatingLayout.margin)
+        shapeRevision += 1
+        panel.shape.shape = PanelShape(size: rect.size,
+                                       change: .close(to: restRect(for: kind, rect: rect), fades: kind == .listAbove),
+                                       revision: shapeRevision)
+        closingPanels.append(panel)
+        let work = DispatchWorkItem { [weak self, weak panel] in
+            guard let self, let panel else { return }
+            self.finishClosing(panel)
+        }
+        panel.orderOut = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.closeSettle, execute: work)
+    }
+
+    private func finishClosing(_ panel: PanelWindow) {
+        closingPanels.removeAll { $0 === panel }
+        panel.discard()
     }
 
     /// While the list is open the cursor moves between two windows and the space

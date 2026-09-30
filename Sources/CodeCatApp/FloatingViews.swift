@@ -6,9 +6,6 @@ import CodeCatCore
 final class FloatingModel: ObservableObject {
     @Published var presentation: IslandPresentation = .compact
     @Published var peekHold: IslandPresenter.PeekHold?
-    /// The open panel's shape — the peek capsule or the list's panel, as placed
-    /// (`FloatingLayout`) — and how it gets there.
-    @Published var panelShape = PanelShape(size: .zero, change: .none, revision: 0)
     /// The list opened above the cat (decision 9). Never during a peek: its capsule is
     /// always under the cat.
     @Published var panelIsAbove = false
@@ -29,6 +26,14 @@ final class FloatingModel: ObservableObject {
     var onListHeight: (CGFloat) -> Void = { _ in }
 }
 
+/// One panel window's shape. Each window has its own, not one in `FloatingModel`:
+/// a panel on its way out goes on shrinking into the resting capsule while the next
+/// one grows — a peek turning into a list above the cat opens the list in a window
+/// of its own.
+final class PanelShapeModel: ObservableObject {
+    @Published var shape = PanelShape(size: .zero, change: .none, revision: 0)
+}
+
 /// The open panel's shape, as the controller placed it, and how the view gets there
 /// (spec §9: "on the §5.2 springs"). The panel's window is `size` plus
 /// `FloatingLayout.margin` on every side; rectangles are in the shape's own space,
@@ -45,6 +50,12 @@ struct PanelShape: Equatable {
         /// a shape that opens under the cat, a strip at the bottom centre for a list
         /// above it, which the resting capsule is not inside.
         case grow(from: CGRect)
+        /// The panel closes (§5.2): the content fades out, then the shape springs
+        /// back into the rectangle it grew from, and the controller orders the
+        /// window out once that has settled (`Motion.closeSettle`). `fades`: nothing
+        /// covers that rectangle — the strip of a list above the cat — so the shape
+        /// fades out on the way instead of ending as a strip that vanishes at once.
+        case close(to: CGRect, fades: Bool)
     }
     let size: CGSize
     let change: Change
@@ -141,14 +152,15 @@ struct FloatingCatView: View {
 /// list in a 300 pt panel, both black with the rim (spec §9). It fills its window,
 /// which the controller sizes to the shape plus `FloatingLayout.margin` for the bloom.
 ///
-/// The shape is drawn at `drawn`, which trails the controller's `panelShape`: a
+/// The shape is drawn at `drawn`, which trails the controller's `panel.shape`: a
 /// new shape starts at the resting capsule's rectangle — or, for a list above the
 /// cat, which the resting capsule is not inside, at a capsule-sized strip at the
 /// panel's bottom centre — and springs to its own, as the island's does from its
-/// strip.
+/// strip; closing, it springs back into the same rectangle.
 struct FloatingPanelView: View {
     @ObservedObject var appState: AppState
     @ObservedObject var model: FloatingModel
+    @ObservedObject var panel: PanelShapeModel
     /// The host's pointer: the cards' hover reads it (`onHoverRegion`), as on the island.
     let pointer: PointerTracker
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -163,15 +175,27 @@ struct FloatingPanelView: View {
     @State private var drawn: CGRect = .zero
     /// Drives `ContentReveal`: false until the shape starts growing.
     @State private var contentVisible = false
+    /// The whole panel faded out by a close: under Reduce Motion, and on the way
+    /// into a strip nothing covers.
+    @State private var faded = false
+    @State private var closing: Task<Void, Never>?
 
     private var reduced: Bool { systemReduceMotion || Motion.reduceMotionForced }
 
+    /// Read in the same render as the presentation that closed it, so the content
+    /// starts fading in the frame the close begins — `apply` runs a render later.
+    private var isClosing: Bool {
+        if case .close = panel.shape.change { return true }
+        return false
+    }
+
     var body: some View {
-        let size = model.panelShape.size
+        let size = panel.shape.size
         let peek = peekItem
+        let closing = isClosing
         ZStack(alignment: .topLeading) {
             surface
-            content(size: size, peek: peek)
+            content(size: size, peek: peek, shown: contentVisible && !closing)
                 .mask(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: Self.radius(for: drawn.size), style: .continuous)
                         .frame(width: drawn.width, height: drawn.height)
@@ -183,8 +207,11 @@ struct FloatingPanelView: View {
                 }
         }
         .frame(width: size.width, height: size.height, alignment: .topLeading)
-        .onPreferenceChange(IslandContentHeightKey.self) { model.onListHeight($0 + Self.padding) }
-        .onChange(of: model.panelShape, initial: true) { _, shape in apply(shape) }
+        .opacity(faded ? 0 : 1)
+        // A panel on its way out measures the same list as the open one; only the
+        // open one reports.
+        .onPreferenceChange(IslandContentHeightKey.self) { if !closing { model.onListHeight($0 + Self.padding) } }
+        .onChange(of: panel.shape, initial: true) { _, shape in apply(shape) }
         .padding(FloatingLayout.margin)
         // Top-left, not centred: the window and the view do not change size in the
         // same render, and a centred root would jump by half the difference.
@@ -214,11 +241,11 @@ struct FloatingPanelView: View {
     /// The list stays mounted under a peek, invisible and not hit-testable, so it is
     /// measured: a peek that becomes the list opens straight at the list's height,
     /// as on the island.
-    private func content(size: CGSize, peek: PeekItem?) -> some View {
+    private func content(size: CGSize, peek: PeekItem?, shown: Bool) -> some View {
         ZStack(alignment: .topLeading) {
             // The list's own maximum is the room on screen, so it reports its natural
             // height (`listMaxHeight`); the scroll view never outgrows the panel.
-            IslandExpandedView(appState: appState, visible: contentVisible && model.presentation == .expanded,
+            IslandExpandedView(appState: appState, visible: shown && model.presentation == .expanded,
                                maxHeight: max(0, model.listMaxHeight - Self.padding),
                                width: FloatingLayout.panelWidth,
                                onJump: model.onJump, onConnect: model.onConnect)
@@ -235,7 +262,7 @@ struct FloatingPanelView: View {
                         PeekHairline(tone: line.tone, hold: model.peekHold, inset: FloatingLayout.peekRadius)
                             .allowsHitTesting(false)
                     }
-                    .modifier(ContentReveal(visible: contentVisible))
+                    .modifier(ContentReveal(visible: shown))
                     .transition(.opacity)
             }
         }
@@ -254,6 +281,8 @@ struct FloatingPanelView: View {
     }
 
     private func apply(_ shape: PanelShape) {
+        closing?.cancel()
+        closing = nil
         let target = CGRect(origin: .zero, size: shape.size)
         switch shape.change {
         case .none:
@@ -261,16 +290,40 @@ struct FloatingPanelView: View {
             instant.disablesAnimations = true
             withTransaction(instant) { drawn = target }
         case .spring:
-            withAnimation(Motion.open(reduced: reduced)) { drawn = target }
+            // Also a close taken back before it settled (the cursor returned, a click
+            // on the cat): the shape springs back from wherever the close had it.
+            withAnimation(Motion.open(reduced: reduced)) {
+                drawn = target
+                faded = false
+            }
+            contentVisible = true
         case .grow(let from):
             var instant = Transaction()
             instant.disablesAnimations = true
-            withTransaction(instant) { drawn = from }
+            withTransaction(instant) {
+                drawn = from
+                faded = false
+            }
             // The start has to be drawn once before the spring can leave it: set in
             // the same update, SwiftUI animates only from what was on screen.
             DispatchQueue.main.async {
                 withAnimation(Motion.open(reduced: reduced)) { drawn = target }
                 contentVisible = true
+            }
+        case .close(let to, let fades):
+            // As on the island (§5.2): the content goes first — `isClosing` has it
+            // fading since this render — and the shape follows once it is gone.
+            // Reduce Motion: no intermediate sizes, the panel cross-fades out while
+            // the resting capsule fades back under the cat.
+            closing = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(Motion.contentOutDuration))
+                guard !Task.isCancelled else { return }
+                if reduced {
+                    withAnimation(Motion.reducedCrossfade) { faded = true }
+                    return
+                }
+                withAnimation(Motion.closeSpring) { drawn = to }
+                if fades { withAnimation(.easeIn(duration: Motion.closeSpringSettle)) { faded = true } }
             }
         }
     }
