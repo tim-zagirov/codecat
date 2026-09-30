@@ -237,7 +237,7 @@ struct SessionListView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 status
                 Spacer(minLength: 8)
-                Text(duration(session))
+                Text(SessionTime.text(for: session))
                     .font(.system(size: 10))
                     .foregroundStyle(style.tertiary)
                     .monospacedDigit()
@@ -381,7 +381,7 @@ struct SessionListView: View {
             // On the panel the duration has its own column in the status line, and the
             // glyph keeps this spot (S3).
             if style.rowLayout == .twoLine {
-                Text(duration(session))
+                Text(SessionTime.text(for: session))
                     .font(.system(size: 10))
                     .foregroundStyle(style.tertiary)
                     .monospacedDigit()
@@ -491,46 +491,5 @@ struct SessionListView: View {
         case .idle: return .secondary
         default: return ToneColor.color(for: status.tone)
         }
-    }
-
-    /// The duration each row shows, phrased to match what the session is doing. The
-    /// old version always computed `lastActivity - startedAt`, which freezes the
-    /// instant a session stops being active: a waiting session read "0 min" and a
-    /// stopped one "running for 0 min", both nonsense. Now the clock reflects status.
-    /// "now" is read from `Date()` at render; the app ticks `objectWillChange` every
-    /// 15 s, so the value keeps counting up on its own.
-    ///
-    /// - working / idle: how long since it started (`now - startedAt`) — a plain span.
-    /// - waiting: how long it has been waiting on you (`now - lastActivity`) → "waiting …".
-    /// - done / crashed: how long ago it last did anything (`now - lastActivity`) → "… ago".
-    ///
-    /// Under a minute every status reads a bare "just now": "just now ago" and
-    /// "waiting just now" are not English, and the first of them shipped once.
-    private func duration(_ session: Session) -> String {
-        let now = Date()
-        let justNow = L10n.t("duration.just.now", "just now")
-        switch session.status {
-        case .working, .idle:
-            return span(from: session.startedAt, to: now) ?? justNow
-        case .waitingForYou:
-            guard let elapsed = span(from: session.lastActivity, to: now) else { return justNow }
-            return L10n.f("duration.waiting", "waiting %@", elapsed)
-        case .done, .crashed:
-            guard let elapsed = span(from: session.lastActivity, to: now) else { return justNow }
-            return L10n.f("duration.ago", "%@ ago", elapsed)
-        }
-    }
-
-    /// A bare elapsed span in whole minutes, floored at zero so a slight clock skew
-    /// never prints a negative minute count; nil under a minute.
-    private func span(from start: Date, to now: Date) -> String? {
-        let seconds = max(0, Int(now.timeIntervalSince(start)))
-        let m = seconds / 60
-        if m == 0 {
-            return nil
-        }
-        return m < 60
-            ? L10n.f("duration.minutes", "%d min", m)
-            : L10n.f("duration.hours.minutes", "%dh %dm", m / 60, m % 60)
     }
 }

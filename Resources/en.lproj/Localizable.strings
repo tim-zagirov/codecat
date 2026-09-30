@@ -225,3 +225,9 @@
 "footer.power.awake" = "Mac stays awake — %d agents working";
 "footer.power.sleep.now" = "Mac can sleep now";
 "footer.power.sleep" = "Mac can sleep in %d min";
+
+/* The open island's cards. */
+"card.open" = "Open";
+"card.dismiss" = "Dismiss";
+/* %d is how many sessions are open with no task. */
+"card.idle.fold" = "%d open without a task";

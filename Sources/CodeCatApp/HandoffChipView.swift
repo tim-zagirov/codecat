@@ -9,6 +9,9 @@ struct HandoffChipView: View {
     let link: HandoffLink
     /// Position in the row, for the stagger.
     let index: Int
+    /// Card chips (spec §5.4): white 10 % pills, 12 semibold, 22 pt tall, no symbol —
+    /// the title is the link. The small form stays for the floating panel's rows.
+    var large = false
 
     @Environment(\.menuStyle) private var style
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -18,13 +21,17 @@ struct HandoffChipView: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 4) {
-                Image(systemName: link.kind.symbol).font(.system(size: 10))
-                Text(shortTitle).font(.system(size: 10, weight: .medium)).lineLimit(1)
+                if !large { Image(systemName: link.kind.symbol).font(.system(size: 10)) }
+                Text(shortTitle)
+                    .font(large ? IslandPalette.numberFont : .system(size: 10, weight: .medium))
+                    .lineLimit(1)
             }
-            .foregroundStyle(style.primary)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(Capsule().fill(hovering ? style.chipHover : style.chipFill))
+            .foregroundStyle(large ? IslandPalette.primary : style.primary)
+            .padding(.horizontal, large ? 10 : 7)
+            .padding(.vertical, large ? 0 : 3)
+            .frame(height: large ? 22 : nil)
+            .background(Capsule().fill(large ? (hovering ? IslandPalette.pillHover : IslandPalette.pill)
+                                             : (hovering ? style.chipHover : style.chipFill)))
         }
         .buttonStyle(ChipButtonStyle())
         .onDrag { NSItemProvider(object: link.target as NSURL) }
@@ -66,7 +73,7 @@ struct HandoffChipView: View {
 /// instead of letting a fixed-width row crush them: a chip's title is a name —
 /// "localhost:4321" — and a name cut off mid-digit is not the name it names, so
 /// truncation was never an option here the way it is for a summary line.
-private struct ChipFlow: Layout {
+struct ChipFlow: Layout {
     var spacing: CGFloat = 6
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
