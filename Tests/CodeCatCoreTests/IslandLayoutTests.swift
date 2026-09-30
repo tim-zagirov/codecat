@@ -339,22 +339,23 @@ final class IslandLayoutTests: XCTestCase {
     }
 
     /// Closed, the window is the inhaled body plus its fillets and the shadow margins:
-    /// 335 + 2 × 10 + 2 × 20 = 395 wide, 36 + 24 = 60 tall, centred on the notch
-    /// (x = 863.5 − 197.5), top at the screen's top edge (y = 1117 − 60).
+    /// 335 + 2 × 10 + 2 × 28 = 411 wide, 36 + 40 = 76 tall, centred on the notch
+    /// (x = 863.5 − 205.5), top at the screen's top edge (y = 1117 − 76).
     func testTheClosedCanvasHasRoomToInhaleAndCastShadows() {
         let notch = IslandLayout.notchRect(auxLeft: auxLeft, auxRight: auxRight)!
         let island = IslandLayout.islandFrame(notch: notch)
         let largest = IslandLayout.body(for: .inhaled, compact: island.size, expandedHeight: 0)
         XCTAssertEqual(IslandLayout.canvasFrame(island: island, largest: largest),
-                       CGRect(x: 666, y: 1057, width: 395, height: 60))
+                       CGRect(x: 658, y: 1041, width: 411, height: 76))
     }
 
-    /// Open: 420 + 2 × 14 + 2 × 20 = 488 wide, 1029 + 24 = 1053 tall.
+    /// Open: 420 + 2 × 14 + 2 × 28 = 504 wide, 1029 + 40 = 1069 tall, x = 863.5 − 252,
+    /// y = 1117 − 1069.
     func testTheOpenCanvasHoldsTheTallestListTheScreenAllows() {
         let notch = IslandLayout.notchRect(auxLeft: auxLeft, auxRight: auxRight)!
         let island = IslandLayout.islandFrame(notch: notch)
         XCTAssertEqual(IslandLayout.canvasFrame(island: island, largest: IslandLayout.openCanvasBody(maxHeight: 1029)),
-                       CGRect(x: 619.5, y: 64, width: 488, height: 1053))
+                       CGRect(x: 611.5, y: 48, width: 504, height: 1069))
     }
 
     func testTheSilhouetteSitsCentredAtTheTopOfTheCanvas() {

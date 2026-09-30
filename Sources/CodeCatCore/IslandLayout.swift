@@ -96,8 +96,13 @@ public enum IslandLayout {
     /// Air under the list, inside the body.
     public static let listBottomPadding: CGFloat = 12
     /// Room around the body for the bloom and the hover shadow (§4.1, §4.3), so
-    /// neither is clipped by the window: radius 14 at y 3 reaches about 17 pt down.
-    public static let shadowMargin = CGSize(width: 20, height: 24)
+    /// neither is clipped by the window. A radius-14 bloom fades into the backdrop
+    /// about 34 pt past the edge it is cast from (measured below the open island,
+    /// whose window leaves it room): roughly 3 × 12 pt of blur plus its 2–3 pt
+    /// offset. Below the body that is 36 + 2 → 40. Sideways it is cast from the wall,
+    /// which lies `edgeRadius` inside the silhouette's rect: 36 − 10 = 26 → 28. The
+    /// 24 pt this was cut the inhaled bloom off in a straight line 24 pt under it.
+    public static let shadowMargin = CGSize(width: 28, height: 40)
 
     /// The body the island is drawn at in `presentation`. `compact` is the strip's
     /// size (both wings and the notch); `expandedHeight` the open list's full height.
