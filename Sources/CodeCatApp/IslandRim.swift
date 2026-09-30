@@ -61,3 +61,26 @@ struct RimStroke: View, Animatable {
         }
     }
 }
+
+/// The black shape with its bloom and rim: everything that says the island's state
+/// without a word — spec §4.1, §4.3. The bloom casts the tone down onto the
+/// wallpaper; under the cursor a black shadow lifts the island off it and the rim
+/// brightens.
+struct IslandSurface: View {
+    let bodyShape: IslandBody
+    let tone: MascotTone
+    /// The presentation the shape is drawn at — `.compact` for an inhale under Reduce
+    /// Motion, which has no inhale.
+    let presentation: IslandPresentation
+
+    var body: some View {
+        let bloom = RimLight.bloom(for: presentation)
+        IslandShape(bodyShape: bodyShape)
+            .fill(Color.black)
+            .shadow(color: tone == .sleeping ? .clear : ToneColor.island(tone).opacity(bloom.opacity),
+                    radius: bloom.radius, x: 0, y: bloom.y)
+            .shadow(color: .black.opacity(presentation == .inhaled ? 0.6 : 0), radius: 8, x: 0, y: 3)
+            .overlay { IslandRim(bodyShape: bodyShape, tone: tone, boost: RimLight.boost(for: presentation)) }
+            .animation(Motion.toneCrossfade, value: tone)
+    }
+}

@@ -3,6 +3,12 @@ import Combine
 import CodeCatCore
 import ServiceManagement
 
+extension Notification.Name {
+    /// "•••" on the island. Part 3 opens the Settings window on it; until then the
+    /// status-bar menu answers, since it holds every switch.
+    static let codecatShowSettings = Notification.Name("CodeCatShowSettings")
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let appState = AppState()
     private var statusItem: NSStatusItem!
@@ -41,6 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
         updateStatusIcon()
+        NotificationCenter.default.addObserver(forName: .codecatShowSettings, object: nil, queue: .main) {
+            [weak self] _ in self?.statusItem.button?.performClick(nil)
+        }
 
         syncPresenter()
     }

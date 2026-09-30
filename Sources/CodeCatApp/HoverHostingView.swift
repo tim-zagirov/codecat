@@ -28,6 +28,10 @@ final class PointerTracker: ObservableObject {
 class HoverHostingView<Content: View>: NSHostingView<Content> {
     var onEnter: (() -> Void)?
     var onExit: (() -> Void)?
+    /// Every position the tracking area reports, in the same top-left coordinates as
+    /// `pointer`, and `nil` when the cursor leaves the window. The island decides
+    /// "inside" from this against its silhouette: its window is larger than the shape.
+    var onPointer: ((CGPoint?) -> Void)?
     /// Set by the controller before the view is shown, and handed to the SwiftUI
     /// content as an environment object by the same controller.
     var pointer = PointerTracker()
@@ -49,7 +53,8 @@ class HoverHostingView<Content: View>: NSHostingView<Content> {
 
     /// Puts the point into the top-left-origin coordinates SwiftUI's `.global` space
     /// reports frames in — which for a flipped `NSHostingView` is the converted point
-    /// as is. The flip is not assumed silently, the same care `silhouettePoint` takes.
+    /// as is. The flip is not assumed silently, the same care
+    /// `IslandHostingView.canvasPoint` takes.
     ///
     /// An unchanged position is not reassigned: every mouse move in a key panel
     /// reaches here twice (once down the responder chain, once from the tracking
@@ -59,6 +64,7 @@ class HoverHostingView<Content: View>: NSHostingView<Content> {
         let point = CGPoint(x: inSelf.x,
                             y: isFlipped ? inSelf.y : bounds.height - inSelf.y)
         if pointer.location != point { pointer.location = point }
+        onPointer?(point)
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -72,78 +78,43 @@ class HoverHostingView<Content: View>: NSHostingView<Content> {
 
     override func mouseExited(with event: NSEvent) {
         pointer.location = nil
+        onPointer?(nil)
         onExit?()
     }
 }
 
-/// The island's host view: on top of hover it reports a click — but only on the
-/// island strip itself.
-///
-/// One window holds both the island and the menu, so "a click on the island" is no
-/// longer the same as "a click on the window". Everything below the strip belongs
-/// to the menu's content — toggles, the skin picker, session rows — and events
-/// must reach it untouched, or everything inside the menu stops working at once.
-///
-/// `mouseDown` on the strip is swallowed deliberately and the action hangs off
-/// `mouseUp`, so a click does not fire if the user pressed on the island and
-/// released somewhere else.
+/// The island's host view: clicks are judged against the painted shape, and Escape
+/// goes to the controller.
 final class IslandHostingView: HoverHostingView<IslandView> {
-    var onClick: (() -> Void)?
-    /// Called when Escape is pressed. Wired to close the full menu. Only the full
-    /// menu makes the panel key, so `keyDown` reaches this view only then — Escape
-    /// can close the full menu and nothing else.
+    /// Escape (keyCode 53). Reaches `keyDown` only while the panel is key — after a
+    /// click inside the open island — so it never takes a key from anyone else.
     var onEscape: (() -> Void)?
-    /// Height of the island strip, measured from the window's top edge.
-    var islandStripHeight: CGFloat = 0
-    /// Whether a menu is currently revealed under the strip. Set by the controller
-    /// (in `applyFrame`) on every menu transition. When it is `false` the window is
-    /// the bare strip, and S15 lets clicks on it fall through to the menu bar
-    /// beneath — see `hitTest`.
-    var menuIsOpen: Bool = false
 
-    /// Outline of the painted area in SwiftUI coordinates (y grows downward, origin
-    /// at the window's top-left). Set by the controller together with the window frame.
+    /// The outline of the shape the island is heading to, in the view's top-left
+    /// coordinates (SwiftUI's). Set by the controller together with the window frame,
+    /// from one entry point, so the two never disagree.
     ///
-    /// Needed because the window is a rectangle and the island is not. The shape
-    /// already exists in `IslandLayout.silhouettePath`, and without this test the
-    /// window's rectangle intercepts clicks over area where nothing is drawn. Two
-    /// places make it obvious:
-    ///
-    ///  * **The fillets at the screen edge.** The window's top corners are NEVER
-    ///    painted — the shape is concave there. The window is wider than the body by
-    ///    `edgeRadius` on each side, and in that zone clicks on the app menu to the
-    ///    left and the status icons to the right were going to the island. That was
-    ///    a permanent irritant, not a momentary one.
-    ///  * **The menu expanding.** The window jumps to its final size at once while
-    ///    the mask catches up on a spring (`revealedHeight`), so for a fraction of a
-    ///    second the window is wider than the drawing beneath it.
-    ///
-    /// `nil` turns the test off and the window behaves as an ordinary rectangle.
+    /// The window is a rectangle much larger than the island — room to inhale, to
+    /// open, to cast shadows — and without this test that whole rectangle would take
+    /// clicks meant for the menu bar, the status items and the windows under it.
     var silhouette: CGPath?
 
-    private func isInStrip(_ event: NSEvent) -> Bool {
-        isInStripRegion(convert(event.locationInWindow, from: nil))
-    }
-
-    /// Whether a point in the view's own coordinates lies within the island strip
-    /// (the top `islandStripHeight`, whichever way the view is flipped). When the
-    /// menu is closed the whole window is the strip, so this is effectively "inside
-    /// the window".
-    private func isInStripRegion(_ pointInSelf: NSPoint) -> Bool {
-        isFlipped
-            ? pointInSelf.y <= islandStripHeight
-            : pointInSelf.y >= bounds.height - islandStripHeight
-    }
+    /// S15: the closed island passes every click straight through to the menu bar
+    /// under it — its wings cover the app menu and other apps' status items, and a
+    /// click there is meant for them. Hover still works: it rides the tracking area,
+    /// which AppKit drives from the cursor's position, not from `hitTest`.
+    ///
+    /// This alone does not hand the click on — the window has already received it;
+    /// the controller also sets the panel's `ignoresMouseEvents` together with this
+    /// flag. Kept here so no view inside the closed island ever answers a click.
+    var clickThrough = true
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// Lets the view become first responder so `keyDown` reaches it: the controller
-    /// makes it first responder only while the full menu is key, which is what puts
-    /// Escape (below) in front of the view instead of letting AppKit beep at it.
+    /// So the controller can make this view first responder when the panel becomes
+    /// key, which is what puts Escape in front of it.
     override var acceptsFirstResponder: Bool { true }
 
-    /// Escape (keyCode 53) closes the full menu; every other key falls through to the
-    /// SwiftUI content so the toggles and buttons keep their own key handling.
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
             onEscape?()
@@ -152,41 +123,20 @@ final class IslandHostingView: HoverHostingView<IslandView> {
         super.keyDown(with: event)
     }
 
-    /// A point in the outline's SwiftUI coordinates: y grows downward from the
-    /// window's top edge. `NSHostingView` is flipped, but relying on that silently
-    /// is not safe — the shape would end up upside down if it ever changed.
-    private func silhouettePoint(_ pointInSelf: NSPoint) -> CGPoint {
-        CGPoint(x: pointInSelf.x,
-                y: isFlipped ? pointInSelf.y : bounds.height - pointInSelf.y)
+    /// A point in the view's own coordinates, in the top-left space the silhouette is
+    /// drawn in. `NSHostingView` is flipped, but relying on that silently would put
+    /// the shape upside down the day it is not.
+    func canvasPoint(_ pointInSelf: NSPoint) -> CGPoint {
+        CGPoint(x: pointInSelf.x, y: isFlipped ? pointInSelf.y : bounds.height - pointInSelf.y)
     }
 
-    /// Returns `nil` for points outside the painted shape, so the event goes where
-    /// it belongs: the menu bar, the window under the island, wherever.
+    /// `nil` for every point the island does not paint, and for every point while it
+    /// is closed, so the event goes where it belongs.
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let silhouette else { return super.hitTest(point) }
-        // `hitTest` is handed a point in the SUPERVIEW's coordinates, not its own.
+        // `hitTest` is handed a point in the SUPERVIEW's coordinates.
         let local = superview.map { convert(point, from: $0) } ?? point
         guard bounds.contains(local) else { return super.hitTest(point) }
-        guard silhouette.contains(silhouettePoint(local)) else { return nil }
-        // S15: with the menu closed the window is the bare strip, and the strip sits
-        // on top of the menu bar. Pass clicks on it straight through to the menu
-        // titles beneath — the app menu under the left wing, the status icons under
-        // the right — instead of swallowing them into a window the user is not
-        // interacting with. Hover is unaffected: it rides the `.activeAlways`
-        // tracking area, which AppKit evaluates from the cursor's geometry, not from
-        // `hitTest`, so the dwell still opens the menu. Only the redundant
-        // click-to-open is given up while closed; once a menu is open (`menuIsOpen`)
-        // the strip is live again, so clicking it expands or dismisses as before.
-        if !menuIsOpen, isInStripRegion(local) { return nil }
+        guard !clickThrough, let silhouette, silhouette.contains(canvasPoint(local)) else { return nil }
         return super.hitTest(point)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        guard isInStrip(event) else { super.mouseDown(with: event); return }
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        guard isInStrip(event) else { super.mouseUp(with: event); return }
-        onClick?()
     }
 }

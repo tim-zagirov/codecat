@@ -137,8 +137,6 @@
 
 /* Header of the collapsible skins disclosure in the island menu. */
 "island.section.skins" = "Skins";
-/* Hint at the foot of the short (hover) island menu that a click reveals more. */
-"island.more" = "Click for skins and settings";
 
 /* MARK: - Hooks */
 

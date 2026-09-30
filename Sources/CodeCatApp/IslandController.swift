@@ -3,54 +3,57 @@ import SwiftUI
 import Combine
 import CodeCatCore
 
-/// The island: a black slab around the physical notch of a built-in display.
+/// The island: a black shape around the physical notch of a built-in display.
 ///
 /// It only works where a notch exists. An external monitor, a closed lid and a Mac
-/// without a notch all mean `geometry() == nil`, and then the controller shows
+/// without a notch all mean `computeGeometry() == nil`, and then the controller shows
 /// nothing: control stays in the status-bar icon, from which the floating cat can
 /// be brought back.
+///
+/// What the island does — inhale, open, close — is decided by `IslandPresenter` in
+/// CodeCatCore, which is pure and tested. This class feeds it the pointer and the
+/// clock and carries out what it decided: the window's size, where hover and clicks
+/// count, and the `IslandModel` the view draws from.
 final class IslandController: NSObject, MascotPresenting {
 
     /// The menu bar sits at level 24 and other apps' status icons at 25; open system
     /// menus are at 101 (measured with `CGWindowLevelForKey`). The island goes to 26:
     /// above the menu bar and the icons but below open menus, so those draw over it
     /// and no fight over clicks arises.
-    static let islandLevel = NSWindow.Level(
-        rawValue: Int(CGWindowLevelForKey(.statusWindow)) + 1)
+    static let islandLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.statusWindow)) + 1)
 
     private let appState: AppState
-    private var islandPanel: OverlayPanel?
+    private let model = IslandModel()
     private let pointer = PointerTracker()
-    private var menuLevel: IslandMenuLevel?
-    /// The menu collapses on a spring while its content is still mounted;
-    /// `pendingTeardown` takes the content down afterwards.
-    private var isCollapsing = false
-    /// Which menu level is collapsing right now: the content has to stay on screen
-    /// while the silhouette travels back, or there would be nothing to collapse.
-    private var collapsingLevel: IslandMenuLevel?
-    private var pendingClose: DispatchWorkItem?
-    /// M11: the short menu opens on a deliberate dwell, not the instant the cursor
-    /// touches the notch. A cursor merely crossing the strip on its way to the menu
-    /// bar or a corner should leave it closed. This work item is the 300 ms dwell;
-    /// it is cancelled when the cursor leaves, when a click opens the menu, and
-    /// whenever the menu is hidden.
-    private var pendingOpen: DispatchWorkItem?
-    /// Tearing the menu window down after the closing animation arrives. Kept apart
-    /// from `pendingClose` (which decides *whether to close* the short menu when the
-    /// cursor leaves): the menu can be reopened in the middle of closing, and then the
-    /// teardown must be cancelled without touching the hover logic.
-    private var pendingTeardown: DispatchWorkItem?
-    private var cancellables: Set<AnyCancellable> = []
-    /// The last requested visibility of the island. `screensChanged()` reads it: it
-    /// calls `setVisible(isVisible)` to redisplay the island after a display
-    /// configuration change, without asking `AppState.showMascot` again (which by then
-    /// may not have changed at all).
+    private var panel: OverlayPanel?
+    private var hosting: IslandHostingView?
+    private var presenter: IslandPresenter
+    private var geometry: Geometry?
+    /// The last requested visibility; `screensChanged()` re-applies it.
     private var isVisible = false
+    /// The window is sized for the open island from the moment it starts opening
+    /// until the close spring has settled (§5.2); otherwise it is the inhaled island
+    /// plus the shadow margins, so a cursor near the notch but outside the island
+    /// never lands in a large invisible window.
+    private var canvasIsOpen = false
+    private var shrink: DispatchWorkItem?
+    /// One timer, at the presenter's next deadline (dwell, close delay), re-armed
+    /// after every event: `tick` handles one deadline per call (handover contract 4).
+    private var deadlineTimer: Timer?
+    /// What the presenter was last told about the pointer. Changes are fed only while
+    /// no mouse button is down, so a drag across the notch never opens the island and
+    /// a chip dragged out of it does not close it mid-drag (contract 5); a change seen
+    /// with a button down waits for the button to come up.
+    private var toldInside = false
+    private var mouseUpMonitors: [Any] = []
+    /// The open body's height as the view laid it out.
+    private var expandedHeight: CGFloat = 0
+    /// `--demo-inhale`: the dwell never completes, for a capture of the inhaled island.
+    private var holdsInhale = false
+    private var cancellables: Set<AnyCancellable> = []
 
-    /// Everything worth knowing about the geometry right now. Recomputed on every
-    /// state change: the skin may have changed, a display may have been disconnected.
-    struct Geometry {
-        let screen: NSScreen
+    struct Geometry: Equatable {
+        let visibleFrame: CGRect
         let notch: CGRect
         let island: CGRect
         let spriteSize: CGSize
@@ -58,324 +61,341 @@ final class IslandController: NSObject, MascotPresenting {
 
     init(appState: AppState) {
         self.appState = appState
+        presenter = IslandPresenter(hoverDelay: appState.hoverDelay)
         super.init()
+        model.onExpandedHeight = { [weak self] in self?.expandedHeightChanged($0) }
+        model.onJump = { [weak self] in self?.jumped() }
+        model.onSettings = { [weak self] in self?.openSettings() }
 
         appState.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.handleStateChange() }
             .store(in: &cancellables)
-
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(menuDidResignKey(_:)),
-            name: NSWindow.didResignKeyNotification, object: nil)
-
-        // The built-in display can be disconnected and reconnected — the notch appears
-        // and disappears with it, and so does the room for the island.
+        // The built-in display can be disconnected and reconnected — the notch
+        // appears and disappears with it, and so does the room for the island.
         NotificationCenter.default.addObserver(
             self, selector: #selector(screensChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowBecameKey(_:)),
+            name: NSWindow.didBecomeKeyNotification, object: nil)
 
         setVisible(appState.showMascot)
+        if appState.isDemo, CommandLine.arguments.contains("--demo-inhale") { holdInhaleForCapture() }
     }
 
     deinit {
-        // The panel has to be taken off screen explicitly: the controller dies when the
-        // display mode changes, and a window left visible would outlive it.
+        // The panel has to be taken off screen explicitly: the controller dies when
+        // the display mode changes, and a window left visible would outlive it.
         NotificationCenter.default.removeObserver(self)
-        islandPanel?.orderOut(nil)
+        deadlineTimer?.invalidate()
+        mouseUpMonitors.forEach(NSEvent.removeMonitor)
+        panel?.orderOut(nil)
     }
+
+    // MARK: - Visibility
 
     func setVisible(_ visible: Bool) {
         isVisible = visible
-        // `mascotShouldHideNow` is the "hide when nothing is running" setting. The menu
-        // goes with it: there would be nothing left to anchor it to.
-        guard visible, !appState.mascotShouldHideNow, let geometry = geometry() else {
-            dropMenu()
-            islandPanel?.orderOut(nil)
+        // `mascotShouldHideNow` is the "hide when nothing is running" setting.
+        guard visible, !appState.mascotShouldHideNow, let geometry = computeGeometry() else {
+            closeImmediately()
+            panel?.orderOut(nil)
             return
         }
-        let panel = islandPanel ?? makePanel()
-        islandPanel = panel
-        let hosting = self.hosting(of: panel) ?? {
-            let hosting = IslandHostingView(rootView: content(for: geometry))
-            hosting.pointer = pointer
-            hosting.onEnter = { [weak self] in self?.pointerEnteredRegion() }
-            hosting.onExit = { [weak self] in self?.pointerLeftRegion() }
-            hosting.onClick = { [weak self] in self?.islandClicked() }
-            // S18: Escape closes the full menu. Only the full menu is key, so a
-            // key-down event reaches the host only then — Escape can only ever
-            // close the full menu, never the non-key short one.
-            hosting.onEscape = { [weak self] in self?.hideMenu() }
-            panel.contentView = hosting
-            return hosting
-        }()
-        hosting.rootView = content(for: geometry)
-        hosting.islandStripHeight = geometry.island.height
-        applyFrame(panel: panel, hosting: hosting, geometry: geometry)
-        panel.orderFrontRegardless()
+        self.geometry = geometry
+        if !holdsInhale { presenter.hoverDelay = appState.hoverDelay }
+        let metrics = IslandMetrics(
+            notchWidth: geometry.notch.width,
+            wingWidth: IslandLayout.wingWidth,
+            stripHeight: geometry.island.height,
+            spriteSize: geometry.spriteSize,
+            expandedMaxHeight: IslandLayout.expandedMaxHeight(visibleHeight: geometry.visibleFrame.height))
+        if model.metrics != metrics { model.metrics = metrics }
+        if panel == nil { makePanel() }
+        applyFrame()
+        panel?.orderFrontRegardless()
     }
 
     private func handleStateChange() {
         setVisible(appState.showMascot)
     }
 
-    // MARK: - Hover and click
+    /// See `MascotPresenting.openMenuForCapture()`.
+    func openMenuForCapture() {
+        presenter.open(now: Date())
+        presenterChanged()
+    }
 
-    /// The cursor is inside the window. One window now holds both the island and the
-    /// menu, so there is one question: this used to mean asking about two windows and
-    /// making sure moving the mouse from the island onto the menu did not count as leaving.
-    private func pointerEnteredRegion() {
-        pendingClose?.cancel()
-        pendingClose = nil
-        guard menuLevel == nil else { return }
-        // M11: never open while a mouse button is down — a drag passing over the
-        // notch (moving a window, selecting text) must not summon the menu.
-        guard NSEvent.pressedMouseButtons == 0 else { return }
-        // Open after a 300 ms dwell rather than immediately, so a cursor that only
-        // crosses the strip leaves it closed. The state is re-checked inside the
-        // block: across the delay a button may have gone down or a click may have
-        // already opened the menu.
-        pendingOpen?.cancel()
+    // MARK: - Pointer
+
+    private func pointerMoved(_ point: CGPoint?) {
+        reconcile(inside: point.map(isInsideSilhouette) ?? false)
+    }
+
+    private func isInsideSilhouette(_ point: CGPoint) -> Bool {
+        hosting?.silhouette?.contains(point) ?? false
+    }
+
+    private func reconcile(inside: Bool) {
+        guard inside != toldInside else { return }
+        guard NSEvent.pressedMouseButtons == 0 else {
+            waitForMouseUp()
+            return
+        }
+        toldInside = inside
+        if inside {
+            presenter.pointerEntered(now: Date())
+        } else {
+            presenter.pointerLeft(now: Date())
+        }
+        presenterChanged()
+    }
+
+    /// A button came down while the pointer crossed the silhouette. The change is
+    /// fed once the button is up — which can happen anywhere on screen, so the
+    /// monitors are global as well as local.
+    private func waitForMouseUp() {
+        guard mouseUpMonitors.isEmpty else { return }
+        let mask: NSEvent.EventTypeMask = [.leftMouseUp, .rightMouseUp, .otherMouseUp]
+        let released: () -> Void = { [weak self] in
+            DispatchQueue.main.async { self?.mouseReleased() }
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { _ in released() }) {
+            mouseUpMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { event in
+            released()
+            return event
+        }) {
+            mouseUpMonitors.append(local)
+        }
+    }
+
+    private func mouseReleased() {
+        mouseUpMonitors.forEach(NSEvent.removeMonitor)
+        mouseUpMonitors = []
+        resyncPointer()
+    }
+
+    /// Where the cursor really is, fed as if it had moved there — after the window
+    /// changed size under a still cursor, or a button came up. Without it the
+    /// presenter could go on believing the pointer is inside a shape that shrank away
+    /// from it, and the island would never inhale again.
+    private func resyncPointer() {
+        guard let panel, let hosting, panel.isVisible else {
+            reconcile(inside: false)
+            return
+        }
+        let local = hosting.convert(panel.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        reconcile(inside: hosting.bounds.contains(local) && isInsideSilhouette(hosting.canvasPoint(local)))
+    }
+
+    // MARK: - Presenter
+
+    /// Carries out whatever the presenter decided. Opening sizes the window before
+    /// the view hears of it, so the spring starts in a window that already fits;
+    /// closing keeps the window open until the close spring has settled.
+    private func presenterChanged() {
+        let old = model.presentation
+        let new = presenter.presentation
+        if new.isOpen, !old.isOpen { beginOpening() }
+        if !new.isOpen, old.isOpen { beginClosing() }
+        if model.presentation != new { model.presentation = new }
+        updateSilhouette()
+        armTimer()
+    }
+
+    private func beginOpening() {
+        shrink?.cancel()
+        shrink = nil
+        canvasIsOpen = true
+        applyFrame()
+    }
+
+    private func beginClosing() {
+        giveUpKeyboard()
+        shrink?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.pendingOpen = nil
-            guard self.menuLevel == nil, NSEvent.pressedMouseButtons == 0 else { return }
-            self.showMenu(.short)
+            self.shrink = nil
+            self.canvasIsOpen = false
+            self.applyFrame()
+            self.resyncPointer()
         }
-        pendingOpen = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+        shrink = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Motion.closeSettle, execute: work)
     }
 
-    private func pointerLeftRegion() {
-        // A pending open is abandoned the moment the cursor leaves: the dwell was
-        // not completed, so nothing should open.
-        pendingOpen?.cancel()
-        pendingOpen = nil
-        // The full menu closes only on a click outside: it holds toggles and the skin
-        // picker, and it must not vanish while the user is moving the mouse towards the
-        // switch they want.
-        guard menuLevel == .short else { return }
-        pendingClose?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            // Ask where the cursor actually is rather than trusting the order of
-            // events: by now the window may already have grown under it.
-            guard !self.pointerIsInsideRegion() else { return }
-            self.hideMenu()
+    /// A click inside made the panel key (`OverlayPanel.sendEvent`) so a card works in
+    /// one click. Once the island closes, keystrokes must go back to what the user was
+    /// typing in; ordering the panel out and straight back in returns key status to
+    /// the active app's window.
+    private func giveUpKeyboard() {
+        guard let panel, panel.isKeyWindow else { return }
+        panel.orderOut(nil)
+        panel.orderFrontRegardless()
+    }
+
+    private func armTimer() {
+        deadlineTimer?.invalidate()
+        deadlineTimer = nil
+        guard let deadline = presenter.nextDeadline else { return }
+        let timer = Timer(fire: max(deadline, Date()), interval: 0, repeats: false) { [weak self] _ in
+            self?.deadlineReached()
         }
-        pendingClose = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+        RunLoop.main.add(timer, forMode: .common)
+        deadlineTimer = timer
     }
 
-    /// `NSEvent.mouseLocation` is in the same screen coordinates as `NSWindow.frame`.
-    private func pointerIsInsideRegion() -> Bool {
-        guard let panel = islandPanel, panel.isVisible else { return false }
-        return panel.frame.contains(NSEvent.mouseLocation)
-    }
-
-    private func islandClicked() {
-        // A click decides the menu now — any dwell still counting down is void.
-        pendingOpen?.cancel()
-        pendingOpen = nil
-        switch menuLevel {
-        case .full: hideMenu()
-        case .short: expandMenu()
-        case nil: showMenu(.full)
+    private func deadlineReached() {
+        // A button pressed during the dwell — a drag starting at the island's edge, a
+        // click on the menu title under a wing — must not end in an open island. It
+        // counts as the pointer leaving; the mouse-up feeds it back in.
+        if presenter.presentation == .inhaled, NSEvent.pressedMouseButtons != 0 {
+            toldInside = false
+            presenter.pointerLeft(now: Date())
+            waitForMouseUp()
+            presenterChanged()
+            return
         }
+        presenter.tick(now: Date())
+        presenterChanged()
     }
 
-    /// Going from short to full is a change of content in the same window, with no
-    /// recreation: the session list has no business blinking and rebuilding itself.
-    /// The height catches up on the same spring inside `IslandView`.
-    private func expandMenu() {
-        guard let panel = islandPanel, let hosting = hosting(of: panel),
-              let geometry = geometry() else { return }
-        menuLevel = .full
-        hosting.rootView = content(for: geometry)
-        applyFrame(panel: panel, hosting: hosting, geometry: geometry)
-        // The full menu has to become key, or the toggles, the mode picker and the
-        // hooks button inside it never receive clicks.
-        panel.makeKeyAndOrderFront(nil)
-        // And the hosting view has to be first responder, or `keyDown` (and so Escape)
-        // never reaches it. Only the full-menu key path does this; the short menu is
-        // never key and never takes key events.
+    private func jumped() {
+        presenter.jumped()
+        presenterChanged()
+    }
+
+    private func escape() {
+        presenter.escape()
+        presenterChanged()
+    }
+
+    private func openSettings() {
+        escape()
+        NotificationCenter.default.post(name: .codecatShowSettings, object: nil)
+    }
+
+    private func holdInhaleForCapture() {
+        holdsInhale = true
+        presenter.hoverDelay = 3600
+        toldInside = true
+        presenter.pointerEntered(now: Date())
+        presenterChanged()
+    }
+
+    /// The island is leaving the screen or its screen changed: no animation, no
+    /// pointer left behind.
+    private func closeImmediately() {
+        if toldInside {
+            presenter.pointerLeft(now: Date())
+            toldInside = false
+        }
+        presenter.escape()
+        shrink?.cancel()
+        shrink = nil
+        canvasIsOpen = false
+        if model.presentation != presenter.presentation { model.presentation = presenter.presentation }
+        armTimer()
+    }
+
+    // MARK: - Window
+
+    private func applyFrame() {
+        guard let panel, let geometry else { return }
+        let largest = canvasIsOpen
+            ? IslandLayout.openCanvasBody(maxHeight: model.metrics.expandedMaxHeight)
+            : IslandLayout.body(for: .inhaled, compact: geometry.island.size, expandedHeight: 0)
+        let frame = Self.onWholePoints(IslandLayout.canvasFrame(island: geometry.island, largest: largest),
+                                       centreX: geometry.island.midX)
+        if panel.frame != frame { panel.setFrame(frame, display: true) }
+        updateSilhouette()
+    }
+
+    /// The canvas with its origin on a whole point, widened by up to a point so its
+    /// centre stays on the notch's. The view centres the shape, the cat and the wing
+    /// on the canvas, but AppKit puts a window's origin on a whole point: on a
+    /// MacBook whose notch is centred at x 863.5 the open canvas asked for 619.5, and
+    /// the island and the cat stood half a point left of the compact ones — a jump
+    /// each time the window grew and shrank (1 px in the captures).
+    private static func onWholePoints(_ frame: CGRect, centreX: CGFloat) -> CGRect {
+        let minX = frame.minX.rounded(.down)
+        return CGRect(x: minX, y: frame.minY, width: 2 * (centreX - minX), height: frame.height)
+    }
+
+    /// Hover and clicks are judged against the shape the island is heading to, never
+    /// against the window, and the closed island takes no clicks at all.
+    private func updateSilhouette() {
+        guard let panel, let hosting, let geometry else { return }
+        let presentation = presenter.presentation
+        // Until the view has measured the list, the open outline is at least the
+        // inhaled one, so the cursor that opened the island is still inside it.
+        let openHeight = max(expandedHeight, geometry.island.height + IslandLayout.inhaleGrowth.height)
+        let body = IslandLayout.body(for: presentation, compact: geometry.island.size, expandedHeight: openHeight)
+        hosting.silhouette = IslandLayout.silhouettePath(canvasWidth: panel.frame.width, body: body)
+        hosting.clickThrough = !presentation.isOpen
+        // S15 needs the window itself to let go: a `nil` from `hitTest` only means no
+        // view takes the click — the window server has already given it to this
+        // window, and it goes nowhere (logged: `sendEvent` saw the mouse-down on the
+        // closed wing). An ignoring window's clicks reach the menu bar under it, and
+        // the `.activeAlways` tracking area still reports the pointer, so hover and
+        // the dwell work as before (captured).
+        panel.ignoresMouseEvents = !presentation.isOpen
+    }
+
+    private func expandedHeightChanged(_ height: CGFloat) {
+        expandedHeight = height
+        updateSilhouette()
+    }
+
+    private func makePanel() {
+        // `allowsKey`: the open island holds buttons, which need a window that can be
+        // key. It becomes key only on a mouse-down inside it (`OverlayPanel.sendEvent`);
+        // hover never touches focus.
+        let panel = OverlayPanel(contentRect: .zero, allowsKey: true)
+        panel.level = Self.islandLevel
+        panel.acceptsMouseMovedEvents = true
+        // `giveUpKeyboard()` orders the panel out and straight back in. A panel's
+        // default `orderOut` fades it, and the whole island vanished for about 0.3 s
+        // at the start of every close (captured: frames 2-5 of the close burst) before
+        // `orderFrontRegardless` snapped it back.
+        panel.animationBehavior = .none
+        let hosting = IslandHostingView(rootView: IslandView(appState: appState, model: model, pointer: pointer))
+        // The window's size is the controller's decision; without this the hosting
+        // view would push its own idea of a fitting size onto it.
+        hosting.sizingOptions = []
+        hosting.pointer = pointer
+        hosting.onPointer = { [weak self] in self?.pointerMoved($0) }
+        hosting.onEscape = { [weak self] in self?.escape() }
+        panel.contentView = hosting
+        self.panel = panel
+        self.hosting = hosting
+    }
+
+    /// Escape reaches `keyDown` only through the first responder, and a click that
+    /// made the panel key leaves one of SwiftUI's own views there.
+    @objc private func windowBecameKey(_ notification: Notification) {
+        guard let panel, let hosting, (notification.object as? NSWindow) === panel else { return }
         panel.makeFirstResponder(hosting)
     }
 
-    /// See `MascotPresenting.openMenuForCapture()`.
-    func openMenuForCapture() {
-        showMenu(.full)
-    }
-
-    private func showMenu(_ level: IslandMenuLevel) {
-        guard let panel = islandPanel, let hosting = hosting(of: panel),
-              let geometry = geometry() else { return }
-        pendingTeardown?.cancel()
-        pendingTeardown = nil
-        isCollapsing = false
-        collapsingLevel = nil
-        menuLevel = level
-        hosting.rootView = content(for: geometry)
-        applyFrame(panel: panel, hosting: hosting, geometry: geometry)
-        if level == .full {
-            panel.makeKeyAndOrderFront(nil)
-            // First responder, so Escape reaches `IslandHostingView.keyDown`. Only the
-            // full menu does this; the short menu stays non-key below.
-            panel.makeFirstResponder(hosting)
-        } else {
-            panel.orderFrontRegardless()
-        }
-    }
-
-    /// - Parameter animated: close on a spring, mirroring the reveal. `false` for the
-    ///   paths where waiting is not possible: the island is leaving the screen
-    ///   entirely, the display mode is changing, another menu is opening in its place.
-    private func hideMenu(animated: Bool = true) {
-        // A dwell counting down while the menu is being torn down (screen change,
-        // Escape, resign-key) must not fire afterwards and reopen it.
-        pendingOpen?.cancel()
-        pendingOpen = nil
-        pendingClose?.cancel()
-        pendingClose = nil
-        pendingTeardown?.cancel()
-        pendingTeardown = nil
-
-        guard animated, menuLevel != nil, let panel = islandPanel,
-              let hosting = hosting(of: panel), let geometry = geometry() else {
-            dropMenu()
-            return
-        }
-
-        // From this moment the menu no longer counts as open: a click on the island
-        // while it closes must reopen it, not close it a second time. The content
-        // itself stays mounted — the silhouette is what collapses it.
-        collapsingLevel = menuLevel
-        menuLevel = nil
-        isCollapsing = true
-        hosting.rootView = content(for: geometry)
-
-        let teardown = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.pendingTeardown = nil
-            self.dropMenu()
-        }
-        pendingTeardown = teardown
-        DispatchQueue.main.asyncAfter(deadline: .now() + IslandView.revealDuration,
-                                      execute: teardown)
-    }
-
-    /// Takes the menu's content down and shrinks the window back to the island strip.
-    /// The window stays the same one: this is a single shape, not two.
-    private func dropMenu() {
-        pendingTeardown?.cancel()
-        pendingTeardown = nil
-        menuLevel = nil
-        isCollapsing = false
-        collapsingLevel = nil
-        guard let panel = islandPanel, let hosting = hosting(of: panel),
-              let geometry = geometry() else { return }
-        hosting.rootView = content(for: geometry)
-        applyFrame(panel: panel, hosting: hosting, geometry: geometry)
-    }
-
-    private func hosting(of panel: OverlayPanel) -> IslandHostingView? {
-        panel.contentView as? IslandHostingView
-    }
-
-    /// Sets the window frame and the hit-test outline in ONE action.
-    ///
-    /// Together rather than separately, deliberately: an outline that lags behind cuts
-    /// clicks on painted area, which is worse than having none. The first version of
-    /// this fix updated the outline in only two of four places — caught by grep rather
-    /// than by tests, because in practice it would only have shown up in those rare
-    /// transitions. A single entry point makes that mistake impossible.
-    ///
-    /// The outline is computed with exactly the arguments `IslandView` builds its own
-    /// mask from: `IslandShape(bottomRadius: IslandLayout.cornerRadius)` across the
-    /// window's full width.
-    private func applyFrame(panel: OverlayPanel, hosting: IslandHostingView,
-                            geometry: Geometry) {
-        let frame = windowFrame(for: geometry, hosting: hosting)
-        panel.setFrame(frame, display: true)
-        // S15: the host lets clicks fall through to the menu bar while the strip is
-        // alone. Every menu transition routes through here — setVisible, showMenu,
-        // expandMenu, dropMenu — so this one assignment keeps the flag in step with
-        // `menuLevel` across all of them.
-        hosting.menuIsOpen = menuLevel != nil
-        hosting.silhouette = IslandLayout.silhouettePath(
-            in: CGRect(x: 0, y: 0, width: frame.width, height: frame.height),
-            bottomRadius: IslandLayout.cornerRadius)
-    }
-
-    /// The window frame for the current content. The height is asked of the layout
-    /// itself (`fittingSize`) rather than computed: the menu is assembled from the
-    /// session list and the settings, and its height depends on how many sessions exist.
-    private func windowFrame(for geometry: Geometry, hosting: IslandHostingView) -> NSRect {
-        let fitting = hosting.fittingSize.height
-        let total = fitting > 0 ? fitting : geometry.island.height
-        return IslandLayout.windowFrame(island: geometry.island,
-                                        totalHeight: total,
-                                        screenFrame: geometry.screen.frame)
-    }
-
-    @objc private func menuDidResignKey(_ notification: Notification) {
-        guard let panel = notification.object as? NSPanel, panel === islandPanel,
-              menuLevel == .full else { return }
-        hideMenu()
-    }
-
-    /// The display configuration changed — a notch may have appeared or disappeared
-    /// with it. `didChangeScreenParametersNotification` is documented nowhere as
-    /// guaranteed to arrive on the main thread (Apple confirms only that the
-    /// notification is posted, not on which thread), and `geometry()` — through
-    /// `assumeIsolated` — does not forgive that mistake: it does not warn about a
-    /// violation, it kills the process. So the hop to the main thread here is explicit
-    /// rather than merely assumed.
+    /// `didChangeScreenParametersNotification` is not documented to arrive on the main
+    /// thread, and `computeGeometry()` — through `assumeIsolated` — kills the process
+    /// if it is reached from another one. So the hop is explicit.
     @objc private func screensChanged() {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { [weak self] in self?.screensChanged() }
             return
         }
-        hideMenu()
+        closeImmediately()
         setVisible(isVisible)
-    }
-
-    private func makePanel() -> OverlayPanel {
-        // `allowsKey: true`: one window holds both the island and the menu, and the
-        // full menu contains toggles and buttons — without the right to become key they
-        // receive no clicks. The window is only made key by a click
-        // (`makeKeyAndOrderFront`); hover shows the menu with `orderFrontRegardless`
-        // and does not touch focus.
-        let panel = OverlayPanel(contentRect: .zero, allowsKey: true)
-        panel.level = Self.islandLevel
-        panel.acceptsMouseMovedEvents = true
-        return panel
-    }
-
-    private func content(for geometry: Geometry) -> IslandView {
-        IslandView(appState: appState,
-                   notchWidth: geometry.notch.width,
-                   wingWidth: IslandLayout.wingWidth,
-                   spriteSize: geometry.spriteSize,
-                   height: geometry.island.height,
-                   menuLevel: menuLevel ?? (isCollapsing ? collapsingLevel : nil),
-                   isCollapsing: isCollapsing,
-                   maxContentHeight: maxContentHeight(for: geometry),
-                   onJump: { [weak self] in self?.hideMenu() },
-                   pointer: pointer)
-    }
-
-    /// The room a revealed menu has below the island strip before it must scroll: the
-    /// screen's visible height less the strip and a margin. Capping the menu here (and
-    /// the reported content height inside `IslandMenuView`) keeps the silhouette on
-    /// screen so the settings block and hooks button never fall off the bottom.
-    private func maxContentHeight(for geometry: Geometry) -> CGFloat {
-        max(0, geometry.screen.visibleFrame.height - geometry.island.height - 24)
     }
 
     /// The notched display and all the geometry derived from it. `nil` means the
     /// island has nowhere to live.
-    private func geometry() -> Geometry? {
+    private func computeGeometry() -> Geometry? {
         // Search directly for what is needed — the first screen a notch can be built
         // for — rather than for `safeAreaInsets.top > 0` (`IslandLayout.hasNotch`).
         // The order of `NSScreen.screens` is documented nowhere as "built-in first",
@@ -401,33 +421,27 @@ final class IslandController: NSObject, MascotPresenting {
         // `.receive(on: DispatchQueue.main)`. `assumeIsolated` simply states that fact
         // rather than changing the architecture.
         //
-        // The invariant: every path here arrives on the main thread. Six calls reach
-        // `geometry()` today:
+        // The invariant: every path here arrives on the main thread. Three calls reach
+        // `computeGeometry()` today, all through `setVisible(_:)`:
         //  - from `init` (via `setVisible(appState.showMascot)`);
-        //  - from `handleStateChange()` twice — via `setVisible(...)` and directly,
-        //    when relaying an already-open menu under new geometry;
-        //  - from `pointerEnteredRegion()` (via `showMenu(.short)`) — called from
-        //    `mouseEntered` on the island's host view and the menu's;
-        //  - from `islandClicked()` (via `showMenu(.full)`) — called from `mouseUp` on
-        //    the island's host view;
+        //  - from `handleStateChange()` (via `setVisible(appState.showMascot)`), which
+        //    `appState.objectWillChange` drives through a Combine sink with
+        //    `.receive(on: DispatchQueue.main)`;
         //  - from `screensChanged()` (via `setVisible(isVisible)`), which hops to the
         //    main thread explicitly before calling — see its comment.
-        // `handleStateChange()` gets here through a Combine sink with
-        // `.receive(on: DispatchQueue.main)`, and `pointerEnteredRegion()` and
-        // `islandClicked()` through overrides of `NSResponder.mouseEntered` / `mouseUp`,
-        // which AppKit always delivers on the main thread. If a path from another
-        // thread ever appears, `assumeIsolated` will not warn about it — it will kill
-        // the process. Keep that in mind when editing.
-        // There is a seventh path: `setVisible(false)` from `AppDelegate.syncPresenter()`
-        // (itself running on the main thread). Today it never reaches `geometry()` —
-        // the `guard visible` in `setVisible` cuts it off earlier. If `setVisible(false)`
-        // ever starts computing geometry, that path needs checking separately.
+        // If a path from another thread ever appears, `assumeIsolated` will not warn
+        // about it — it will kill the process. Keep that in mind when editing.
+        // There is a fourth caller of `setVisible`: `setVisible(false)` from
+        // `AppDelegate.syncPresenter()` (itself running on the main thread). It never
+        // reaches `computeGeometry()` — the `guard visible` in `setVisible` cuts it off
+        // earlier. If `setVisible(false)` ever starts computing geometry, that path
+        // needs checking separately.
         let spriteSize = MainActor.assumeIsolated {
             SpriteSheetStore.shared.load(appState.skin)?
                 .drawingSize(targetHeight: SpriteScale.islandTargetHeight,
                              maxWidth: SpriteScale.islandMaxWidth)
         } ?? CGSize(width: 24, height: 24)
-        return Geometry(screen: screen,
+        return Geometry(visibleFrame: screen.visibleFrame,
                         notch: notch,
                         island: IslandLayout.islandFrame(notch: notch),
                         spriteSize: spriteSize)

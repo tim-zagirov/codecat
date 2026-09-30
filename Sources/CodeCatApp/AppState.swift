@@ -118,6 +118,13 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(showsTaskText, forKey: "showTaskText") }
     }
 
+    /// How long the cursor rests on the island before it opens — spec §5.1 (0.4's
+    /// fixed 300 ms dwell, made adjustable). The switch arrives with the Settings
+    /// window in Part 3; the value is read from here from now on.
+    @Published var hoverDelay: TimeInterval {
+        didSet { UserDefaults.standard.set(hoverDelay, forKey: "hoverDelay") }
+    }
+
     /// Whether the island should be hidden right now under the "hide when nothing is
     /// running" setting.
     ///
@@ -186,6 +193,7 @@ final class AppState: ObservableObject {
             "mascotSkin": MascotSkins.default.id,
             "mascotDisplayMode": MascotDisplayMode.default.rawValue,
             "islandHidesWhenIdle": false, "showTaskText": true,
+            "hoverDelay": Motion.hoverDelayDefault,
         ])
         keepAwakeEnabled = defaults.bool(forKey: "keepAwake")
         lidModeEnabled = defaults.bool(forKey: "lidMode")
@@ -194,6 +202,8 @@ final class AppState: ObservableObject {
         displayMode = MascotDisplayMode.mode(withID: defaults.string(forKey: "mascotDisplayMode"))
         hidesWhenNoSessions = defaults.bool(forKey: "islandHidesWhenIdle")
         showsTaskText = defaults.bool(forKey: "showTaskText")
+        hoverDelay = min(Motion.hoverDelayRange.upperBound,
+                         max(Motion.hoverDelayRange.lowerBound, defaults.double(forKey: "hoverDelay")))
         // Scan for pets before resolving the stored skin, so an imported id is
         // recognised on the very launch that brings its folder back (or takes it
         // away). `scanPets` is `static` and takes `reportedPetProblems` `inout`
