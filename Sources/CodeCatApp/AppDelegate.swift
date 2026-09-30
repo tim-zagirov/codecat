@@ -49,7 +49,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
         updateStatusIcon()
         NotificationCenter.default.addObserver(forName: .codecatShowSettings, object: nil, queue: .main) {
-            [weak self] _ in self?.statusItem.button?.performClick(nil)
+            // The menu pops up where "•••" was clicked rather than through
+            // `performClick` on the status item: on a crowded menu bar the item sits in
+            // macOS's overflow, and a click on it only opened the overflow strip — the
+            // capture after "•••" showed the strip and no menu. It waits for the island
+            // to finish closing: the menu's tracking loop froze the close half-way, with
+            // the list still cut by the shrinking shape under the open menu.
+            [weak self] _ in
+            let point = NSEvent.mouseLocation
+            DispatchQueue.main.asyncAfter(deadline: .now() + Motion.closeSettle) {
+                self?.statusItem.menu?.popUp(positioning: nil, at: point, in: nil)
+            }
         }
 
         syncPresenter()
