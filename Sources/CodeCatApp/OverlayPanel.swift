@@ -81,6 +81,17 @@ class OverlayPanel: NSPanel {
 
     override var canBecomeKey: Bool { allowsKey && (!becomesKeyOnlyOnClick || clickGrantsKey) }
 
+    /// Key status handed over from another of CodeCat's panels that a click had made
+    /// key (the floating peek's Show opening the list in a window of its own). Granted
+    /// as a click grants it, so it holds until `resignKey`: lifting
+    /// `becomesKeyOnlyOnClick` for one `makeKey()` left a key window reporting it
+    /// could not be key, which AppKit may consult again when the app activates.
+    func grantKey() {
+        guard allowsKey else { return }
+        clickGrantsKey = true
+        makeKey()
+    }
+
     override func resignKey() {
         super.resignKey()
         clickGrantsKey = false

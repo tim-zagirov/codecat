@@ -297,6 +297,20 @@ struct FloatingPanelView: View {
                 faded = false
             }
             contentVisible = true
+        case .grow where reduced:
+            // §11: no intermediate sizes, and no start shape either: drawn from its
+            // start, a list above the cat showed its strip opaque for a frame before
+            // the cross-fade (recorded). The panel fades in at its final shape.
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) {
+                drawn = target
+                faded = true
+            }
+            DispatchQueue.main.async {
+                withAnimation(Motion.reducedCrossfade) { faded = false }
+                contentVisible = true
+            }
         case .grow(let from):
             var instant = Transaction()
             instant.disablesAnimations = true

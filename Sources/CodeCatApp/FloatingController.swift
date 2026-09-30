@@ -36,6 +36,9 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
     /// the list has been laid out once.
     private var listHeight: CGFloat = 0
     private var shapeRevision = 0
+    /// The cat is being hidden: its window goes at once, so a panel closing meanwhile
+    /// fades as it springs rather than ending as a capsule under no cat.
+    private var hiding = false
     /// A peek that turned into a list above the cat (decision 3 meeting decision 9):
     /// the band from the peek's bottom up to the list, which counts as inside until
     /// the cursor leaves it. The cursor that rested on the peek is no longer on any
@@ -124,7 +127,9 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
                 flow.pointerLeft(now: Date())
             }
             flow.escape(now: Date())
+            hiding = true
             presenterChanged()
+            hiding = false
             catPanel.orderOut(nil)
         }
     }
@@ -356,11 +361,8 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         if !panel.window.isVisible { panel.window.orderFrontRegardless() }
         if handsKey {
             // A click on the peek's Show made its window key (decision 1: Escape must
-            // reach the list it opened). The list's window becomes key otherwise only
-            // from a click in it, so that rule is lifted for this one hand-over.
-            panel.window.becomesKeyOnlyOnClick = false
-            panel.window.makeKey()
-            panel.window.becomesKeyOnlyOnClick = true
+            // reach the list it opened); the list's window takes it over as if clicked.
+            panel.window.grantKey()
         }
         startPointerMonitor()
         // The shape moved under a still cursor: where clicks go (`ignoresMouseEvents`)
@@ -461,7 +463,7 @@ final class FloatingController: NSObject, NSWindowDelegate, MascotPresenting {
         let rect = panel.window.frame.insetBy(dx: FloatingLayout.margin, dy: FloatingLayout.margin)
         shapeRevision += 1
         panel.shape.shape = PanelShape(size: rect.size,
-                                       change: .close(to: restRect(for: kind, rect: rect), fades: kind == .listAbove),
+                                       change: .close(to: restRect(for: kind, rect: rect), fades: kind == .listAbove || hiding),
                                        revision: shapeRevision)
         closingPanels.append(panel)
         let work = DispatchWorkItem { [weak self, weak panel] in
