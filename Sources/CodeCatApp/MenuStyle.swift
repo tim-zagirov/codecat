@@ -112,9 +112,9 @@ struct MenuStyle {
         lineSpacing: 2)
 }
 
-/// The island's whites and type — spec §7. Stated as numbers for the same reason
-/// as `MenuStyle.island`: the island is black whatever the system appearance, and
-/// system semantics know nothing about it. Colour lives only in the tones.
+/// The island's whites and type — spec §7. Stated as numbers because the island is
+/// a fixed black surface whatever the system appearance, and system semantics
+/// know nothing about it. Colour lives only in the tones.
 enum IslandPalette {
     static let primary = Color.white
     static let secondary = Color.white.opacity(0.62)
