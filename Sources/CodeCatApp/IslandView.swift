@@ -68,6 +68,13 @@ struct IslandView: View {
     }
 
     /// The open list, under the header band, clipped by the same animated shape.
+    ///
+    /// With Reduce Motion the clip takes the final shape at once: `IslandShape` is
+    /// animatable, and inside `Motion.open(reduced:)`'s transaction the clip grew
+    /// through intermediate sizes while the list was already half visible — a capture
+    /// showed the rows cut off at ≈ 375 × 200 pt inside the full-size faded outline.
+    /// Only the clip loses the animation: `ContentReveal` sets its own, so the list
+    /// still cross-fades.
     private func content(canvas: CGSize) -> some View {
         let width = IslandLayout.expandedWidth
         return IslandMenuView(appState: appState, width: width,
@@ -79,6 +86,7 @@ struct IslandView: View {
             .padding(.top, IslandLayout.headerHeight)
             .frame(width: canvas.width, height: canvas.height, alignment: .topLeading)
             .clipShape(IslandShape(bodyShape: bodyShape))
+            .transaction { if reduced { $0.animation = nil } }
     }
 
     /// The cat in the left wing and the live data in the right, both centred on their
