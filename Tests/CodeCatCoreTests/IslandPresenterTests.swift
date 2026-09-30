@@ -160,4 +160,17 @@ final class IslandPresenterTests: XCTestCase {
         XCTAssertTrue(IslandPresentation.expanded.isOpen)
         XCTAssertTrue(IslandPresentation.peek(PeekItem(kind: .done, sessionIDs: ["a"], createdAt: Date())).isOpen)
     }
+
+    /// What the countdown hairline draws (spec §6.2): the hold running, paused under
+    /// the cursor, and resumed from where it stopped.
+    func testThePeekHoldRunsPausesAndResumes() {
+        var p = IslandPresenter(hoverDelay: 0.3)
+        XCTAssertNil(p.peekHold)
+        p.show(peek(), now: t0)
+        XCTAssertEqual(p.peekHold, .running(endsAt: at(3), total: 3))
+        p.pointerEntered(now: at(1))
+        XCTAssertEqual(p.peekHold, .paused(remaining: 2, total: 3))
+        p.pointerLeft(now: at(2))
+        XCTAssertEqual(p.peekHold, .running(endsAt: at(4), total: 3))
+    }
 }

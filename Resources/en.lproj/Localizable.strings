@@ -180,6 +180,13 @@
 "peek.reason.edit" = "wants to edit";
 "peek.reason.open" = "wants to open";
 "peek.reason.use" = "wants to use";
+/* %d is how many sessions need you at once, in a merged peek. */
+"peek.merged" = "%d agents need you";
+/* Title of the peek that summarises what happened on a locked screen. */
+"peek.away.title" = "While you were away";
+"peek.away.done" = "%d done";
+"peek.away.waiting" = "%d waiting";
+"peek.away.crashed" = "%d crashed";
 
 /* MARK: - "While you were away" entries */
 

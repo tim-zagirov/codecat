@@ -208,4 +208,18 @@ final class PeekSchedulerTests: XCTestCase {
         XCTAssertNil(p.next(now: t0.addingTimeInterval(2.2)), "still within the gap after the peek")
         XCTAssertEqual(p.next(now: t0.addingTimeInterval(2.41))?.sessionIDs, ["b"])
     }
+
+    /// Without it nobody asks again: a peek queued behind another waited for the
+    /// next unrelated event.
+    func testReadyAtIsTheGapsEndWhileSomethingWaitsInTheQueue() {
+        let p = seeded([s("a", .working), s("b", .working)])
+        XCTAssertNil(p.readyAt, "nothing queued")
+        p.sessionsChanged([s("a", .waitingForYou(.permission)), s("b", .working)], now: t0.addingTimeInterval(1))
+        XCTAssertNotNil(p.next(now: t0.addingTimeInterval(1)))
+        // Two seconds later: outside the merge window, so queued.
+        p.sessionsChanged([s("a", .waitingForYou(.permission)), s("b", .crashed)], now: t0.addingTimeInterval(3))
+        XCTAssertNil(p.readyAt, "a peek is on screen")
+        p.peekEnded(now: t0.addingTimeInterval(4))
+        XCTAssertEqual(p.readyAt, t0.addingTimeInterval(4).addingTimeInterval(PeekScheduler.gap))
+    }
 }

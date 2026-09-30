@@ -134,6 +134,14 @@ public final class PeekScheduler {
         lastEnded = now
     }
 
+    /// When `next(now:)` can hand out what is queued: the end of the gap after the last
+    /// peek. Nil while one is on screen or nothing is queued. The caller ticks here —
+    /// without it a peek queued behind another waited for the next unrelated event.
+    public var readyAt: Date? {
+        guard showing == nil, !queue.isEmpty else { return nil }
+        return lastEnded.addingTimeInterval(Self.gap)
+    }
+
     /// The list is open — spec §6: it already shows every session, so a peek on top
     /// of it or after it would repeat what the user has just seen. Forgets the peek
     /// on screen (the dwell that opened the list ended it) and drops the queue, which

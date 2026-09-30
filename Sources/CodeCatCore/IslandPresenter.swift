@@ -49,6 +49,20 @@ public struct IslandPresenter {
         [dwellAt, closeAt, peekEndsAt].compactMap { $0 }.min()
     }
 
+    /// The peek's countdown as the hairline under it draws it (spec §6.2).
+    public enum PeekHold: Equatable, Sendable {
+        case running(endsAt: Date, total: TimeInterval)
+        /// The cursor is on the peek: the hold waits with `remaining` left.
+        case paused(remaining: TimeInterval, total: TimeInterval)
+    }
+
+    public var peekHold: PeekHold? {
+        guard case .peek(let item) = presentation else { return nil }
+        if let end = peekEndsAt { return .running(endsAt: end, total: item.hold) }
+        if let remaining = peekRemaining { return .paused(remaining: remaining, total: item.hold) }
+        return nil
+    }
+
     public mutating func pointerEntered(now: Date) {
         pointerInside = true
         switch presentation {
