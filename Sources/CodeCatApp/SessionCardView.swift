@@ -211,7 +211,8 @@ struct CardStepLine: View {
                     .font(IslandPalette.numberFont)
                     .foregroundStyle(ToneColor.island(.working))
                     .monospacedDigit()
-                    .contentTransition(.numericText())
+                    // Reduce Motion: the digits change in place instead of rolling (§11).
+                    .contentTransition(reduced ? .identity : .numericText())
                     .animation(Motion.stepTitle, value: done)
             }
             .frame(height: 14)

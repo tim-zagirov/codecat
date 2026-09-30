@@ -14,7 +14,12 @@ struct HandoffChipView: View {
     var large = false
 
     @Environment(\.menuStyle) private var style
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The island's flag (the system setting or `--demo-reduce-motion`), and the
+    /// system's own for the floating panel's rows, which sit outside the island's
+    /// environment.
+    @Environment(\.islandReduceMotion) private var islandReduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { islandReduceMotion || systemReduceMotion }
     @State private var hovering = false
     @State private var appeared = false
 
