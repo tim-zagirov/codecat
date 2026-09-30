@@ -144,3 +144,32 @@ Demo: `dist/CodeCat.app/Contents/MacOS/CodeCat --demo`, island mode.
 - [ ] System Settings → Accessibility → Reduce Motion on: no scale, no stagger; the waiting dot is a ring.
 - [ ] Panel mode: the step line replaces the status line; the handoff block under the done row.
 - [ ] Switch off "Show what each session is doing": rows are name, status, duration.
+
+## The island (0.5)
+
+Captures from `scripts/dev/island-shot.sh` cover how it looks; these need a hand.
+
+- The rim: a waiting agent sends a white highlight along the island's edge, one lap
+  every 2.4 s; it stops the moment nobody waits. No glow behind the cat.
+- Hover the island: it grows a little, the rim brightens, a shadow lifts it; leave
+  before 0.3 s and it settles back. Rest on it and it opens.
+- Hover near the notch but beside the island — nothing. Click the app menu under the
+  left wing and a status icon under the right one: both open as if the island were
+  not there.
+- Drag a window across the notch: the island does not open.
+- Open the island, click a card for a session in Terminal: you land in its tab and
+  the island closes. Over a card the pointer is a pointing hand.
+- Open the island, click an empty part of it, move away until it closes, then type:
+  the text goes to the app you were in, not nowhere.
+- Open the island, click inside it, press Escape: it closes. Known, parked: this is
+  unreliable — the window server hands the keyboard back to the frontmost app about
+  35 ms after the click, so Escape often goes to that app instead. Moving away closes
+  it every time.
+- Drag a chip from a done card into a browser: the link arrives; the island stays
+  open during the drag and closes after.
+- "•••" closes the island and opens the status-bar menu at the pointer, about 0.6 s
+  later (interim, until the Settings window exists in Part 3).
+- System Settings → Accessibility → Display → Reduce motion on: no inhale, the island
+  cross-fades open and closed, the waiting dot has a still ring, the rim does not travel.
+- Hooks removed: the open island shows only the "Connect Claude Code" card; "Not now"
+  hides it until the next launch.
