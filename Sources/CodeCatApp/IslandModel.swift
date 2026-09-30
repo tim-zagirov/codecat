@@ -16,6 +16,8 @@ final class IslandModel: ObservableObject {
     var onJump: () -> Void = {}
     /// "•••" was pressed.
     var onSettings: () -> Void = {}
+    /// Connect… on the first-run card was pressed.
+    var onConnect: () -> Void = {}
 }
 
 /// The notched screen's numbers, as the view needs them.

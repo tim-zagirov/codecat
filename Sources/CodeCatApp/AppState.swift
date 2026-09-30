@@ -490,7 +490,7 @@ final class AppState: ObservableObject {
             HooksInstaller.events.joined(separator: ", "))
         confirm.addButton(withTitle: L10n.t("hooks.install.confirm.button", "Set up"))
         confirm.addButton(withTitle: L10n.t("button.cancel", "Cancel"))
-        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+        guard runInFront(confirm) == .alertFirstButtonReturn else { return }
 
         let existing: Data?
         switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
@@ -509,7 +509,7 @@ final class AppState: ObservableObject {
             alert.informativeText = L10n.f("hooks.settings.unreadable",
                 "Couldn't read the settings file %@. Check its permissions and try again.",
                 CodeCatPaths.claudeSettings.path)
-            alert.runModal()
+            runInFront(alert)
             return
         }
 
@@ -520,7 +520,7 @@ final class AppState: ObservableObject {
             alert.informativeText = L10n.f("hooks.settings.unwritable",
                 "Couldn't update the settings file %@. Check that the file is valid.",
                 CodeCatPaths.claudeSettings.path)
-            alert.runModal()
+            runInFront(alert)
             return
         }
 
@@ -546,7 +546,7 @@ final class AppState: ObservableObject {
             alert.messageText = L10n.t("hooks.install.failed.title", "Couldn't install the hooks")
             alert.informativeText = L10n.f("hooks.settings.write.error", "Couldn't write to %@: %@",
                 CodeCatPaths.claudeSettings.path, error.localizedDescription)
-            alert.runModal()
+            runInFront(alert)
         }
     }
 
@@ -594,7 +594,7 @@ final class AppState: ObservableObject {
             HooksInstaller.events.joined(separator: ", "))
         confirm.addButton(withTitle: L10n.t("hooks.remove.confirm.button", "Remove"))
         confirm.addButton(withTitle: L10n.t("button.cancel", "Cancel"))
-        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+        guard runInFront(confirm) == .alertFirstButtonReturn else { return }
 
         guard let updated = try? HooksInstaller.remove(
             from: existing, hookCommand: hookBinaryPath()) else {
@@ -637,7 +637,22 @@ final class AppState: ObservableObject {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
-        alert.runModal()
+        runInFront(alert)
+    }
+
+    /// Runs `alert` in front of everything. The hooks' dialogs are asked for from the
+    /// island's Connect…, the floating panel or the status-bar menu, and none of them
+    /// activates CodeCat, an accessory app: without this, `runModal()` put the confirm
+    /// behind the frontmost app's windows and the click on Connect… seemed to do
+    /// nothing, while the app sat blocked in the modal. Activating is fine here — the
+    /// user asked for this window (spec §8) — and the window is also raised itself,
+    /// for the reason `presentJumpAlert` gives.
+    @discardableResult
+    private func runInFront(_ alert: NSAlert) -> NSApplication.ModalResponse {
+        NSApp.activate()
+        alert.window.level = .modalPanel
+        alert.window.orderFrontRegardless()
+        return alert.runModal()
     }
 
     // MARK: - Closed-lid mode
@@ -875,13 +890,10 @@ final class AppState: ObservableObject {
     /// second. So the alert's own window is raised explicitly as well — that part
     /// depends on no ordering and cannot be refused.
     private func presentJumpAlert(_ message: (title: String, body: String)) {
-        NSApp.activate()
         let alert = NSAlert()
         alert.messageText = message.title
         alert.informativeText = message.body
-        alert.window.level = .modalPanel
-        alert.window.orderFrontRegardless()
-        alert.runModal()
+        runInFront(alert)
     }
 
     /// Re-reads the pet folders. Cheap, so it runs whenever the picker appears; the

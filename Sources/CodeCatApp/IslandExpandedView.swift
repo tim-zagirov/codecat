@@ -14,6 +14,7 @@ struct IslandExpandedView: View {
     let visible: Bool
     let maxHeight: CGFloat
     var onJump: () -> Void = {}
+    var onConnect: () -> Void = {}
 
     @State private var idleUnfolded = false
     @Environment(\.islandReduceMotion) private var reduced
@@ -61,7 +62,7 @@ struct IslandExpandedView: View {
         let empty = active.isEmpty && idle.isEmpty
         return VStack(alignment: .leading, spacing: 6) {
             if showsOnboarding {
-                OnboardingCard(appState: appState)
+                OnboardingCard(appState: appState, onConnect: onConnect)
                     .modifier(ContentReveal(visible: visible, index: 0))
             } else if empty {
                 EmptyIslandView()
@@ -188,9 +189,11 @@ struct EmptyIslandView: View {
 }
 
 /// Hooks not installed (§5.6): the whole onboarding is one card, and it asks before
-/// it writes — **Connect…** runs the existing confirm flow.
+/// it writes — **Connect…** runs the existing confirm flow, through the controller
+/// (`IslandModel.onConnect`), which settles the pointer once the dialog is gone.
 struct OnboardingCard: View {
     @ObservedObject var appState: AppState
+    let onConnect: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -204,9 +207,8 @@ struct OnboardingCard: View {
                 .foregroundStyle(IslandPalette.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
-                PillButton(title: L10n.t("onboarding.connect", "Connect…"), fill: .white, textColor: .black) {
-                    appState.installHooksIfNeeded()
-                }
+                PillButton(title: L10n.t("onboarding.connect", "Connect…"), fill: .white, textColor: .black,
+                           action: onConnect)
                 PillButton(title: L10n.t("onboarding.later", "Not now")) {
                     appState.firstRunDismissed = true
                 }

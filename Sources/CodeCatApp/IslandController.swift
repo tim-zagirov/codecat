@@ -66,6 +66,7 @@ final class IslandController: NSObject, MascotPresenting {
         model.onExpandedHeight = { [weak self] in self?.expandedHeightChanged($0) }
         model.onJump = { [weak self] in self?.jumped() }
         model.onSettings = { [weak self] in self?.openSettings() }
+        model.onConnect = { [weak self] in self?.connect() }
 
         appState.objectWillChange
             .receive(on: DispatchQueue.main)
@@ -309,6 +310,17 @@ final class IslandController: NSObject, MascotPresenting {
     private func openSettings() {
         escape()
         NotificationCenter.default.post(name: .codecatShowSettings, object: nil)
+    }
+
+    /// The dialogs behind Connect… are modal, and while one is up the tracking area
+    /// reports nothing: the cursor that left the island for the dialog's buttons was
+    /// never fed as leaving, and the island stayed open over the menu bar until the
+    /// pointer next moved. Asking where the cursor is once the modal returns closes
+    /// it then, or keeps it open if the cursor is back on it.
+    private func connect() {
+        appState.installHooksIfNeeded()
+        resyncPointer()
+        updateClickTarget()
     }
 
     private func holdInhaleForCapture() {

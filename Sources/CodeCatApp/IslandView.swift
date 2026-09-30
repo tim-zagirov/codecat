@@ -80,7 +80,7 @@ struct IslandView: View {
         return IslandExpandedView(appState: appState, visible: contentVisible,
                                   maxHeight: max(0, metrics.expandedMaxHeight - IslandLayout.headerHeight
                                                  - IslandLayout.listBottomPadding),
-                                  onJump: model.onJump)
+                                  onJump: model.onJump, onConnect: model.onConnect)
             .padding(.leading, (canvas.width - width) / 2)
             .padding(.top, IslandLayout.headerHeight)
             .frame(width: canvas.width, height: canvas.height, alignment: .topLeading)
