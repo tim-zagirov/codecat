@@ -22,8 +22,23 @@ final class RimLightTests: XCTestCase {
     }
 
     /// At the ends of its lap the highlight's shoulders run past the 10 % stop and
-    /// the edge; the stops that would fall out of order are dropped.
+    /// the edge; the stops that would fall out of order are dropped, and no stop
+    /// lands in the outer 10 %, where the walls are: a 95 % stop there lit a whole
+    /// wall up to the screen edge for a few frames of every lap.
     func testAHighlightAtTheEdgeDropsTheStopsItOvertakes() {
+        for step in 0...80 {
+            let inner = RimLight.stops(highlight: 0.1 + Double(step) / 100).dropFirst().dropLast()
+            XCTAssertTrue(inner.allSatisfy { $0.location >= 0.1 && $0.location <= 0.9 }, "\(inner)")
+        }
+        // h = 0.2: the shoulder is 0.04 into the band — the 10 % stop is 40 % of the
+        // way to the curve's value there, with the spec's step kept just inside it.
+        let t = 1 - 0.1 / 0.14
+        let edge = RimLight.stops(highlight: 0.2)
+        XCTAssertEqual(edge[1].location, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(edge[1].opacity, 0.55 + (0.95 + 0.05 * t - 0.55) * 0.4, accuracy: 1e-9)
+        XCTAssertEqual(edge[1].white, t * 0.4, accuracy: 1e-9)
+        XCTAssertEqual(edge[2].location, 0.1001, accuracy: 1e-9)
+        XCTAssertEqual(edge[2].white, t, accuracy: 1e-9)
         assertStops(RimLight.stops(highlight: 0.1), [
             (0, 0, false), (0.1, 1, true), (0.24, 0.95, false), (0.9, 0.55, false), (1, 0, false),
         ])

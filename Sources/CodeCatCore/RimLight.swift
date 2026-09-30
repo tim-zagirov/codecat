@@ -13,10 +13,16 @@ public enum RimLight {
     public struct Stop: Equatable, Sendable {
         public let location: Double
         public let opacity: Double
-        /// The highlight itself is white; every other stop is the tone.
-        public let isWhite: Bool
+        /// How far the colour is mixed from the tone toward white: 1 at the highlight,
+        /// 0 for the tone stops, in between only where a band edge cuts the highlight's
+        /// shoulder (see `stops`).
+        public let white: Double
+        public var isWhite: Bool { white >= 1 }
         public init(location: Double, opacity: Double, isWhite: Bool = false) {
-            self.location = location; self.opacity = opacity; self.isWhite = isWhite
+            self.init(location: location, opacity: opacity, white: isWhite ? 1 : 0)
+        }
+        public init(location: Double, opacity: Double, white: Double) {
+            self.location = location; self.opacity = opacity; self.white = white
         }
     }
 
@@ -43,21 +49,45 @@ public enum RimLight {
     /// the walls sit there and fade toward the screen edge — 55 % from 10 % to 90 %,
     /// rising to 95 % 0.14 either side of the highlight and white at it.
     ///
-    /// Near the ends of the lap the highlight's shoulders overtake the 10 %/90 %
-    /// stops and the edges; those stops are dropped so the locations stay strictly
-    /// ascending, which a gradient needs. `boost` brightens the tone stops for the
-    /// hover inhale (§4.3), clamped at full opacity.
+    /// Near the ends of its lap the highlight's shoulder runs into the outer 10 %.
+    /// Placing its 95 % stop there lit the whole wall up to the screen edge for a
+    /// few frames every lap, then switched it off as the stop left the gradient
+    /// (`m2-waiting-lap`: the right wall at h = 0.87, the left at 0.15). So no stop
+    /// sits inside the outer 10 % but the transparent end, and the band beyond the
+    /// 10 % / 90 % stop always ramps to nothing, which keeps the walls dark. Once the
+    /// shoulder has passed that stop, the stop takes the curve's value there — part
+    /// of the way from the shoulder to the white — reached over the shoulder's first
+    /// 0.1 into the band, with the spec's 0.55 → 0.95 step kept just inside it
+    /// meanwhile, so no frame jumps. `boost` brightens the tone stops for the hover
+    /// inhale (§4.3), clamped at full opacity.
     public static func stops(highlight h: Double, boost: Double = 1) -> [Stop] {
-        let left = h - 0.14, right = h + 0.14
+        let shoulder = 0.14
+        /// The stops between the band edge `edge` (0.1 or 0.9) and the highlight, in
+        /// ascending order; `inward` is +1 on the left, −1 on the right.
+        func band(_ edge: Double, inward: Double) -> [Stop] {
+            let s = h - inward * shoulder
+            let into = (edge - s) * inward
+            if into < 0 {
+                let pair = [Stop(location: edge, opacity: 0.55), Stop(location: s, opacity: 0.95)]
+                return inward > 0 ? pair : pair.reversed()
+            }
+            let toHighlight = abs(h - edge)
+            guard toHighlight > 1e-9 else { return [] }
+            let t = 1 - toHighlight / shoulder
+            let curve = 0.95 + 0.05 * t
+            let r = min(1, into / 0.1)
+            guard r < 1 else { return [Stop(location: edge, opacity: curve, white: t)] }
+            let pair = [Stop(location: edge, opacity: 0.55 + (curve - 0.55) * r, white: t * r),
+                        Stop(location: edge + inward * 1e-4, opacity: curve, white: t)]
+            return inward > 0 ? pair : pair.reversed()
+        }
         var stops = [Stop(location: 0, opacity: 0)]
-        if left > 0.1 { stops.append(Stop(location: 0.1, opacity: 0.55)) }
-        if left > 0 { stops.append(Stop(location: left, opacity: 0.95)) }
+        stops += band(0.1, inward: 1)
         stops.append(Stop(location: h, opacity: 1, isWhite: true))
-        if right < 1 { stops.append(Stop(location: right, opacity: 0.95)) }
-        if right < 0.9 { stops.append(Stop(location: 0.9, opacity: 0.55)) }
+        stops += band(0.9, inward: -1)
         stops.append(Stop(location: 1, opacity: 0))
         return stops.map { stop in
-            stop.isWhite ? stop : Stop(location: stop.location, opacity: min(1, stop.opacity * boost))
+            stop.isWhite ? stop : Stop(location: stop.location, opacity: min(1, stop.opacity * boost), white: stop.white)
         }
     }
 

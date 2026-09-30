@@ -51,7 +51,7 @@ struct RimStroke: View, Animatable {
             let silhouette = IslandLayout.silhouetteRect(canvasWidth: width, body: bodyShape)
             let color = ToneColor.island(tone)
             let stops = RimLight.stops(highlight: highlight, boost: boost).map {
-                Gradient.Stop(color: $0.isWhite ? .white : color.opacity($0.opacity), location: $0.location)
+                Gradient.Stop(color: Self.color(color, towardWhite: $0.white).opacity($0.opacity), location: $0.location)
             }
             IslandRimShape(bodyShape: bodyShape)
                 .stroke(LinearGradient(stops: stops,
@@ -59,6 +59,17 @@ struct RimStroke: View, Animatable {
                                        endPoint: UnitPoint(x: silhouette.maxX / width, y: 0.5)),
                         style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
         }
+    }
+
+    /// The tone mixed `fraction` of the way to white — the band-edge stop that cuts
+    /// the highlight's shoulder near the ends of a lap (`RimLight.stops`).
+    /// `Color.mix` needs macOS 15, so the mix goes through `NSColor`.
+    private static func color(_ tone: Color, towardWhite fraction: Double) -> Color {
+        if fraction <= 0 { return tone }
+        if fraction >= 1 { return .white }
+        guard let mixed = NSColor(tone).usingColorSpace(.sRGB)?.blended(withFraction: fraction, of: .white)
+        else { return tone }
+        return Color(nsColor: mixed)
     }
 }
 
