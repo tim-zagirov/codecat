@@ -26,7 +26,10 @@ import UniformTypeIdentifiers
 /// wrote for the mark. Anything else stops the script with the command's name, so a
 /// re-export that uses more cannot be drawn wrong in silence.
 func svgPath(_ d: String) -> Path {
-    let pattern = try! NSRegularExpression(pattern: #"[MLHVCZmlhvcz]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?"#)
+    // Every letter is a token — a command this reader does not know has to reach the
+    // check below, not vanish and leave its numbers to the command before it. An
+    // exponent's `e` never gets here: the number alternative has already taken it.
+    let pattern = try! NSRegularExpression(pattern: #"[A-Za-z]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?"#)
     let tokens = pattern.matches(in: d, range: NSRange(d.startIndex..., in: d)).map { String(d[Range($0.range, in: d)!]) }
     var path = Path()
     var i = 0
@@ -36,6 +39,9 @@ func svgPath(_ d: String) -> Path {
     func point() -> CGPoint { CGPoint(x: number(), y: number()) }
     while i < tokens.count {
         if let c = tokens[i].first, c.isLetter {
+            // Lower-case commands are relative; drawing them as absolute would put the
+            // shape somewhere else without a word, so they stop here too.
+            guard "MLHVCZ".contains(c) else { unsupported(c) }
             command = c
             i += 1
             if c == "Z" { path.closeSubpath(); continue }
@@ -50,11 +56,15 @@ func svgPath(_ d: String) -> Path {
             path.addCurve(to: end, control1: c1, control2: c2)
             current = end
         default:
-            FileHandle.standardError.write(Data("make-icon: SVG command \(command) is not supported\n".utf8))
-            exit(1)
+            unsupported(command)
         }
     }
     return path
+}
+
+func unsupported(_ command: Character) -> Never {
+    FileHandle.standardError.write(Data("make-icon: SVG command \(command) is not supported\n".utf8))
+    exit(1)
 }
 
 /// The first `attribute="…"` after `marker` in `svg`. The name is matched with the
