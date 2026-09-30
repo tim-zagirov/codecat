@@ -314,6 +314,76 @@ final class IslandLayoutTests: XCTestCase {
         }
         XCTAssertEqual(curveCount, 2, "exactly 2 curve elements")
     }
+
+    // MARK: - 0.5 bodies and canvases (Part 2)
+
+    private let compactSize = CGSize(width: 329, height: 32)   // 2 × 72 + 185
+
+    func testTheBodyForEachPresentation() {
+        XCTAssertEqual(IslandLayout.body(for: .compact, compact: compactSize, expandedHeight: 487),
+                       IslandBody(width: 329, height: 32, edgeRadius: 10, bottomRadius: 16))
+        XCTAssertEqual(IslandLayout.body(for: .inhaled, compact: compactSize, expandedHeight: 487),
+                       IslandBody(width: 335, height: 36, edgeRadius: 10, bottomRadius: 16))
+        XCTAssertEqual(IslandLayout.body(for: .expanded, compact: compactSize, expandedHeight: 487),
+                       IslandBody(width: 420, height: 487, edgeRadius: 14, bottomRadius: 24))
+        let peek = PeekItem(kind: .waiting, sessionIDs: ["a"], createdAt: Date())
+        XCTAssertEqual(IslandLayout.body(for: .peek(peek), compact: compactSize, expandedHeight: 487),
+                       IslandBody(width: 420, height: 78, edgeRadius: 14, bottomRadius: 24))
+    }
+
+    /// Figma's full list: a 439 pt list under the 36 pt header and over 12 pt of air.
+    func testTheExpandedHeightIsHeaderListAndPaddingCappedByTheScreen() {
+        XCTAssertEqual(IslandLayout.expandedHeight(listHeight: 439, maxHeight: 1029), 487)
+        XCTAssertEqual(IslandLayout.expandedHeight(listHeight: 2000, maxHeight: 1029), 1029)
+        XCTAssertEqual(IslandLayout.expandedMaxHeight(visibleHeight: 1085), 1029)
+    }
+
+    /// Closed, the window is the inhaled body plus its fillets and the shadow margins:
+    /// 335 + 2 × 10 + 2 × 20 = 395 wide, 36 + 24 = 60 tall, centred on the notch
+    /// (x = 863.5 − 197.5), top at the screen's top edge (y = 1117 − 60).
+    func testTheClosedCanvasHasRoomToInhaleAndCastShadows() {
+        let notch = IslandLayout.notchRect(auxLeft: auxLeft, auxRight: auxRight)!
+        let island = IslandLayout.islandFrame(notch: notch)
+        let largest = IslandLayout.body(for: .inhaled, compact: island.size, expandedHeight: 0)
+        XCTAssertEqual(IslandLayout.canvasFrame(island: island, largest: largest),
+                       CGRect(x: 666, y: 1057, width: 395, height: 60))
+    }
+
+    /// Open: 420 + 2 × 14 + 2 × 20 = 488 wide, 1029 + 24 = 1053 tall.
+    func testTheOpenCanvasHoldsTheTallestListTheScreenAllows() {
+        let notch = IslandLayout.notchRect(auxLeft: auxLeft, auxRight: auxRight)!
+        let island = IslandLayout.islandFrame(notch: notch)
+        XCTAssertEqual(IslandLayout.canvasFrame(island: island, largest: IslandLayout.openCanvasBody(maxHeight: 1029)),
+                       CGRect(x: 619.5, y: 64, width: 488, height: 1053))
+    }
+
+    func testTheSilhouetteSitsCentredAtTheTopOfTheCanvas() {
+        XCTAssertEqual(IslandLayout.silhouetteRect(canvasWidth: 488,
+                                                   body: IslandBody(width: 420, height: 487, edgeRadius: 14, bottomRadius: 24)),
+                       CGRect(x: 20, y: 0, width: 448, height: 487))
+        XCTAssertEqual(IslandLayout.silhouetteRect(canvasWidth: 395,
+                                                   body: IslandBody(width: 329, height: 32, edgeRadius: 10, bottomRadius: 16)),
+                       CGRect(x: 23, y: 0, width: 349, height: 32))
+    }
+
+    /// Spec §14: the 420 × 487 silhouette with fillet 14 and bottom 24. The body runs
+    /// x ∈ [34, 454]; its bottom-left corner is centred at (58, 463).
+    func testTheExpandedSilhouetteContainsItsBodyButNotTheCornersOrTheMargin() {
+        let path = IslandLayout.silhouettePath(canvasWidth: 488,
+                                               body: IslandBody(width: 420, height: 487, edgeRadius: 14, bottomRadius: 24))
+        XCTAssertTrue(path.contains(CGPoint(x: 40, y: 40)), "inside the body")
+        XCTAssertTrue(path.contains(CGPoint(x: 58, y: 480)), "inside the bottom-left corner")
+        XCTAssertFalse(path.contains(CGPoint(x: 36, y: 485)), "outside the rounded corner")
+        XCTAssertFalse(path.contains(CGPoint(x: 10, y: 10)), "the shadow margin is not the island")
+        XCTAssertFalse(path.contains(CGPoint(x: 244, y: 495)), "below the body")
+    }
+
+    func testTheRimInCanvasCoordinatesStartsAtTheLeftFillet() {
+        let path = IslandLayout.rimPath(canvasWidth: 488,
+                                        body: IslandBody(width: 420, height: 487, edgeRadius: 14, bottomRadius: 24))
+        XCTAssertEqual(points(of: path).first, CGPoint(x: 34.75, y: 14))
+        XCTAssertEqual(points(of: path).last, CGPoint(x: 453.25, y: 14))
+    }
 }
 
 /// The outline as a click hit test (see `IslandHostingView.hitTest`).

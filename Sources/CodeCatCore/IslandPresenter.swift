@@ -8,6 +8,17 @@ public enum IslandPresentation: Equatable, Sendable {
     case expanded
 }
 
+extension IslandPresentation {
+    /// Whether the island is open — the peek or the list: the shapes that are wider
+    /// than the notch's wings, take clicks and show content under the header band.
+    public var isOpen: Bool {
+        switch self {
+        case .peek, .expanded: return true
+        case .compact, .inhaled: return false
+        }
+    }
+}
+
 /// When the island inhales, opens, peeks and closes — spec §4.3, §5.1, §6.2. Pure:
 /// the controller feeds pointer events and `tick`s at `nextDeadline`, and executes
 /// whatever `presentation` became. Keeping the timers here and not in AppKit is what

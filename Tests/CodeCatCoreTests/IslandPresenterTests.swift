@@ -153,4 +153,11 @@ final class IslandPresenterTests: XCTestCase {
         XCTAssertEqual(p.presentation, .expanded)
         assertDeadline(p, 1.15)
     }
+
+    func testOnlyThePeekAndTheListCountAsOpen() {
+        XCTAssertFalse(IslandPresentation.compact.isOpen)
+        XCTAssertFalse(IslandPresentation.inhaled.isOpen)
+        XCTAssertTrue(IslandPresentation.expanded.isOpen)
+        XCTAssertTrue(IslandPresentation.peek(PeekItem(kind: .done, sessionIDs: ["a"], createdAt: Date())).isOpen)
+    }
 }

@@ -216,3 +216,8 @@
 "handoff.title.github" = "GitHub";
 "handoff.title.figma" = "Figma";
 "handoff.title.artifact" = "Artifact";
+
+/* Right wing of the compact island: how long a single working session has run. */
+"wing.elapsed.fresh" = "<1m";
+"wing.elapsed.minutes" = "%dm";
+"wing.elapsed.hours" = "%dh";

@@ -1,5 +1,17 @@
 import CoreGraphics
 
+/// The island's outline at one moment: the body's size (without the fillets) and
+/// both radii — the four numbers the shape animates between states (spec §5.2).
+public struct IslandBody: Hashable, Sendable {
+    public var width: CGFloat
+    public var height: CGFloat
+    public var edgeRadius: CGFloat
+    public var bottomRadius: CGFloat
+    public init(width: CGFloat, height: CGFloat, edgeRadius: CGFloat, bottomRadius: CGFloat) {
+        self.width = width; self.height = height; self.edgeRadius = edgeRadius; self.bottomRadius = bottomRadius
+    }
+}
+
 /// Geometry of the "island" — the black slab that covers a display's physical
 /// notch and extends into wings on either side.
 ///
@@ -75,6 +87,81 @@ public enum IslandLayout {
     public static let peekHeight: CGFloat = 78
     /// How much the island grows under the cursor before it opens.
     public static let inhaleGrowth = CGSize(width: 6, height: 4)
+
+    // MARK: Bodies and canvases (spec §4.3, §5.2)
+
+    /// The band the cat and the dots sit in when the island is open; the list starts
+    /// below it. Four points more than the strip, so the first card clears the cat.
+    public static let headerHeight: CGFloat = 36
+    /// Air under the list, inside the body.
+    public static let listBottomPadding: CGFloat = 12
+    /// Room around the body for the bloom and the hover shadow (§4.1, §4.3), so
+    /// neither is clipped by the window: radius 14 at y 3 reaches about 17 pt down.
+    public static let shadowMargin = CGSize(width: 20, height: 24)
+
+    /// The body the island is drawn at in `presentation`. `compact` is the strip's
+    /// size (both wings and the notch); `expandedHeight` the open list's full height.
+    public static func body(for presentation: IslandPresentation, compact: CGSize,
+                            expandedHeight: CGFloat) -> IslandBody {
+        switch presentation {
+        case .compact:
+            return IslandBody(width: compact.width, height: compact.height,
+                              edgeRadius: edgeRadius, bottomRadius: cornerRadius)
+        case .inhaled:
+            return IslandBody(width: compact.width + inhaleGrowth.width, height: compact.height + inhaleGrowth.height,
+                              edgeRadius: edgeRadius, bottomRadius: cornerRadius)
+        case .peek:
+            return IslandBody(width: expandedWidth, height: peekHeight,
+                              edgeRadius: expandedEdgeRadius, bottomRadius: expandedCornerRadius)
+        case .expanded:
+            return IslandBody(width: expandedWidth, height: expandedHeight,
+                              edgeRadius: expandedEdgeRadius, bottomRadius: expandedCornerRadius)
+        }
+    }
+
+    /// The tallest the open body may be: the visible frame less the menu bar and a
+    /// margin, so the list scrolls instead of running off the screen (§5.2).
+    public static func expandedMaxHeight(visibleHeight: CGFloat) -> CGFloat {
+        max(0, visibleHeight - 32 - 24)
+    }
+
+    /// The open body's height for a list of `listHeight`: header, list, air — capped.
+    public static func expandedHeight(listHeight: CGFloat, maxHeight: CGFloat) -> CGFloat {
+        min(headerHeight + listHeight + listBottomPadding, maxHeight)
+    }
+
+    /// The largest body the open island can take — what its window is sized for.
+    public static func openCanvasBody(maxHeight: CGFloat) -> IslandBody {
+        IslandBody(width: expandedWidth, height: maxHeight,
+                   edgeRadius: expandedEdgeRadius, bottomRadius: expandedCornerRadius)
+    }
+
+    /// The window for a state whose largest shape is `largest`: that body, its
+    /// fillets and the shadow margins, centred on the island, top at the screen edge.
+    /// AppKit coordinates (y up), like `island`.
+    public static func canvasFrame(island: CGRect, largest: IslandBody) -> CGRect {
+        let width = largest.width + 2 * largest.edgeRadius + 2 * shadowMargin.width
+        let height = largest.height + shadowMargin.height
+        return CGRect(x: island.midX - width / 2, y: island.maxY - height, width: width, height: height)
+    }
+
+    /// Where the silhouette (body plus fillets) sits in a canvas `canvasWidth` wide:
+    /// centred, at the top. SwiftUI coordinates (y down) — the view and the hit test
+    /// both use them.
+    public static func silhouetteRect(canvasWidth: CGFloat, body: IslandBody) -> CGRect {
+        let width = body.width + 2 * body.edgeRadius
+        return CGRect(x: (canvasWidth - width) / 2, y: 0, width: width, height: body.height)
+    }
+
+    public static func silhouettePath(canvasWidth: CGFloat, body: IslandBody) -> CGPath {
+        silhouettePath(in: silhouetteRect(canvasWidth: canvasWidth, body: body),
+                       bottomRadius: body.bottomRadius, edgeRadius: body.edgeRadius)
+    }
+
+    public static func rimPath(canvasWidth: CGFloat, body: IslandBody) -> CGPath {
+        rimPath(in: silhouetteRect(canvasWidth: canvasWidth, body: body),
+                bottomRadius: body.bottomRadius, edgeRadius: body.edgeRadius)
+    }
 
     /// A body of any size, centred on the notch, top at the screen edge.
     public static func bodyFrame(notch: CGRect, size: CGSize) -> CGRect {
