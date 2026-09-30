@@ -3,7 +3,8 @@
 //
 //   cgev notch                  the notch as "x y w h", integer global points, origin
 //                               at the top-left of the main display
-//   cgev move X Y               put the cursor at X Y
+//   cgev move X Y               glide there quickly from where the cursor is — a
+//                               single teleporting event does not fire tracking areas
 //   cgev glide X1 Y1 X2 Y2 MS   move from one point to the other in 30 steps over MS ms
 //   cgev click X Y              left click
 //   cgev key CODE               press and release a key (53 = Escape)
@@ -45,7 +46,20 @@ case "notch":
     let y = main.frame.maxY - left.maxY
     print(String(format: "%.0f %.0f %.0f %.0f", x, y, right.minX - left.maxX, left.height))
 case "move":
-    post(.mouseMoved, CGPoint(x: number(1), y: number(2)))
+    // AppKit's `NSTrackingArea` fires `mouseEntered` off the crossing, not just the
+    // final position — a single event teleported straight to the target leaves the
+    // island's hover never told the cursor passed through it. Eight steps in 80 ms
+    // reads as instant to a human but still looks like a mouse sliding in to the
+    // window server.
+    let target = CGPoint(x: number(1), y: number(2))
+    let start = CGEvent(source: nil)?.location ?? target
+    let steps = 8
+    for step in 1...steps {
+        let t = CGFloat(step) / CGFloat(steps)
+        post(.mouseMoved, CGPoint(x: start.x + (target.x - start.x) * t,
+                                  y: start.y + (target.y - start.y) * t))
+        usleep(10_000)
+    }
 case "glide":
     let from = CGPoint(x: number(1), y: number(2)), to = CGPoint(x: number(3), y: number(4))
     let total = Double(number(5))
