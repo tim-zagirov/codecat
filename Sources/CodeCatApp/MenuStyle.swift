@@ -8,12 +8,14 @@ import SwiftUI
 /// system semantic colours (`.secondary`, `.tertiary`, `Color.primary`, the accent
 /// blue) are exactly right: they adapt to light and dark on their own.
 ///
-/// The island menu sits on **pure black** — not a system background but a colour
-/// matched to the display's physical notch. System semantics lie there:
-/// `.secondary` believes it knows the background and, in light mode, produces
-/// near-black text on black. So the island states its whites as numbers, colour
-/// lives only in the status dots, and selection is a white border — the system
-/// blue is already spoken for by the "done" status.
+/// `.island` is for **pure black** — not a system background but a colour matched
+/// to the display's physical notch. System semantics lie there: `.secondary`
+/// believes it knows the background and, in light mode, produces near-black text on
+/// black. So the island states its whites as numbers, colour lives only in the
+/// status dots, and selection is a white border — the system blue is already spoken
+/// for by the "done" status. The 0.4 island menu drew with it; the 0.5 island draws
+/// with `IslandPalette` and has no menu, so nothing sets `.island` any more, and it
+/// leaves with `SettingsSectionView`'s island branch in Part 3.
 ///
 /// The style travels through `Environment` rather than as a parameter on every
 /// view: it is needed all the way down, to the session row and the skin cell, and
@@ -119,8 +121,9 @@ struct MenuStyle {
         blockSpacing: 10,
         lineSpacing: 2)
 
-    /// The island menu. Its whites are stated as numbers: the background here is
-    /// not a system one, and system semantics know nothing about it.
+    /// The 0.4 island menu's style (see the type's comment). Its whites are stated as
+    /// numbers: the background here is not a system one, and system semantics know
+    /// nothing about it.
     static let island = MenuStyle(
         rowLayout: .twoLine,
         primary: .white,

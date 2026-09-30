@@ -122,8 +122,10 @@ final class AppState: ObservableObject {
     /// It is a setting at all because the text is the user's own words, and there are
     /// moments — a demo, a screen recording, a shared call — when a project someone
     /// else should not read is on screen. The always-on-screen surface never shows it
-    /// (the island plate carries the cat and the counter, nothing else); it appears
-    /// only in the panel and in the menu, both opened deliberately.
+    /// (the compact island carries the cat and the right wing's live data, nothing
+    /// else); it appears only where the user opened something: the floating panel's
+    /// rows, and the open island's cards — their task line, step line, handoff
+    /// summary and chips, and the words in a waiting or crashed card's reason line.
     @Published var showsTaskText: Bool {
         didSet { UserDefaults.standard.set(showsTaskText, forKey: "showTaskText") }
     }
@@ -158,12 +160,10 @@ final class AppState: ObservableObject {
     /// open clipped inside a panel whose AppKit content rect didn't grow with it.
     @Published var creditsExpanded = false
 
-    /// Whether the island's "Skins" and "Settings" disclosures are open. Closed by
-    /// default: the island menu opens on a hover and half a screen of skins and
-    /// toggles in response to that reads as clutter (S5). Kept here rather than as
-    /// local `@State` for the same reason as `creditsExpanded`: toggling one changes
-    /// the menu's content height, and publishing through `objectWillChange` is what
-    /// lets the island's reveal spring and silhouette relayout to the new height.
+    /// Whether `SettingsSectionView.islandSections`' "Skins" and "Settings"
+    /// disclosures are open. The 0.4 island menu drew them; the 0.5 island has no menu
+    /// and nothing shows them any more. They go with `islandSections` when Part 3's
+    /// Settings window replaces it.
     @Published var islandSkinsExpanded = false
     @Published var islandSettingsExpanded = false
 

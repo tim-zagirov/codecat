@@ -20,9 +20,11 @@ public struct IslandBody: Hashable, Sendable {
 /// of the menu bar to the left and right of the notch. The notch itself is the gap
 /// between them, and the system offers no other way to learn its width.
 ///
-/// There are no content rectangles here (the cat, the counter): `IslandView` lays
-/// three known widths — left wing, notch, right wing — out in an ordinary `HStack`,
-/// and a second coordinate system for that would earn nothing.
+/// There are few content rectangles here: `IslandView` places the cat and the right
+/// wing's live data at a known distance from the notch's centre, and a second
+/// coordinate system for that would earn nothing. The one exception is the open
+/// header's right side (`headerDotsRoom`), whose width decides what `RightWing`
+/// may put there.
 public enum IslandLayout {
 
     /// Padding from the sprite to the wing's edge on each side. The wings physically
@@ -33,7 +35,7 @@ public enum IslandLayout {
     /// Wing width, the same on the left and the right.
     ///
     /// The wings deliberately do not adapt to the current skin. The cat is an object
-    /// with bulk, the counter is a mark, and the only way to balance them is with
+    /// with bulk, the wing's live data is a mark, and the only way to balance them is with
     /// geometry: equal wings put the whole black shape exactly at the notch's centre
     /// for every skin. The wing used to be sized from the sprite (48–72 pt on the
     /// left against a fixed 34 on the right), and the shape drifted 9.5 pt off centre.
