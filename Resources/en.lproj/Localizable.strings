@@ -156,6 +156,9 @@
 /* %1$@ is the settings path, %2$@ the list of hook event names. */
 "hooks.remove.confirm.body" = "CodeCat's entries for these events will be removed from %1$@: %2$@. Other hooks and the rest of your settings are left alone.\n\nWithout hooks the cat keeps working, but it learns about session changes late — from transcripts rather than from events.";
 "hooks.remove.confirm.button" = "Remove";
+"hooks.demo.title" = "The demo leaves Claude Code alone";
+/* In `--demo`, from Connect… or Remove. %@ is the settings path. */
+"hooks.demo.body" = "CodeCat is running its demo, so %@ is not read or changed. Connect from the CodeCat you use every day.";
 "button.cancel" = "Cancel";
 
 /* MARK: - Closed-lid mode */

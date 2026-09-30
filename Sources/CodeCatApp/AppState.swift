@@ -475,6 +475,7 @@ final class AppState: ObservableObject {
     }
 
     func installHooksIfNeeded() {
+        guard !isDemo else { return presentDemoHooksAlert() }
         // This edits the user's own settings file, so it asks first — the mirror of
         // `removeHooks`. On Cancel nothing is read, merged or written.
         let confirm = NSAlert()
@@ -560,6 +561,7 @@ final class AppState: ObservableObject {
     ///
     /// It asks for confirmation: this edits the user's settings file, not our own state.
     func removeHooks() {
+        guard !isDemo else { return presentDemoHooksAlert() }
         let existing: Data?
         switch HooksInstaller.readSettings(at: CodeCatPaths.claudeSettings) {
         case .notFound:
@@ -615,6 +617,20 @@ final class AppState: ObservableObject {
                 message: L10n.f("hooks.settings.write.error", "Couldn't write to %@: %@",
                     CodeCatPaths.claudeSettings.path, error.localizedDescription))
         }
+    }
+
+    /// The demo is a debug build run for captures, and `hookBinaryPath()` points into
+    /// `.build/debug/`: a confirmed Connect… on the first-run card added a second set
+    /// of hooks calling that binary to the user's real settings (install only merges
+    /// an identical command), and Remove took out the installed app's. So in the demo
+    /// neither reads nor writes the file; the alert says why nothing happened.
+    private func presentDemoHooksAlert() {
+        presentHooksAlert(
+            title: L10n.t("hooks.demo.title", "The demo leaves Claude Code alone"),
+            message: L10n.f("hooks.demo.body",
+                "CodeCat is running its demo, so %@ is not read or changed. "
+                + "Connect from the CodeCat you use every day.",
+                CodeCatPaths.claudeSettings.path))
     }
 
     private func presentHooksAlert(title: String, message: String) {
