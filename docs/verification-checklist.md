@@ -144,15 +144,12 @@ Captures from `scripts/dev/island-shot.sh` cover how it looks; these need a hand
   not key while you hover, and macOS ignores a non-key window's cursor.
 - [ ] Open the island, click an empty part of it, move away until it closes, then type:
   the text goes to the app you were in, not nowhere.
-- [ ] Open the island, click inside it, press Escape: it closes. Known, parked: this is
-  unreliable — the window server hands the keyboard back to the frontmost app about
-  35 ms after the click, so Escape often goes to that app instead. Moving away closes
-  it every time.
+- [ ] Open the island, click inside it, press Escape: it closes (the 0.5.0 section below
+  has the full check, with Terminal in front).
 - [ ] Click a chip on a done card: the link opens in the browser.
 - [ ] Drag a chip from a done card into a browser: the link arrives; the island stays
   open during the drag and closes after.
-- [ ] "•••" closes the island and opens the status-bar menu at the pointer, about 0.6 s
-  later (interim, until the Settings window exists in Part 3).
+- [ ] "•••" closes the island and opens the Settings window.
 - [ ] System Settings → Accessibility → Display → Reduce motion on: no inhale, the island
   cross-fades open and closed, the waiting dot has a still ring, the rim does not travel.
 - [ ] Hooks removed: the open island shows only the "Connect Claude Code" card; "Not now"
@@ -163,5 +160,60 @@ Captures from `scripts/dev/island-shot.sh` cover how it looks; these need a hand
 - [ ] Switch off "Show what each session is doing": the cards show no task, step,
   summary or chips — a done card says "finished the task", a waiting one only its
   status.
-- [ ] Floating panel: a working row's step line replaces its status line; a done row
-  shows the handoff block.
+- [ ] Floating list: a working card shows its step line; a done card shows the summary
+  and the chips, as in the island.
+
+## 0.5.0 — Settings, peek, floating cat, brand
+
+Captures (`scripts/capture-screenshots.sh`, `scripts/dev/island-shot.sh`) cover how
+these look; what they cannot prove needs a hand. Run them on the installed build.
+
+- [ ] ⌘, opens Settings from any CodeCat window; ⌘W closes it; closing it puts you back
+  in the app you were in, and typing goes there.
+- [ ] Open at login, from the installed app: on, log out and in — CodeCat starts; off —
+  it does not.
+- [ ] A real permission prompt: the island peeks with the command (`wants to run …`) for
+  3 s; hovering holds it and opens the list; Open lands in the terminal tab.
+- [ ] A turn finishing: the soft 1.5 s peek with the first line; its chip opens the link,
+  and drags into a browser.
+- [ ] A minute later "waiting for your input" arrives: the session stays done (blue
+  check), no orange, no sound.
+- [ ] Two agents asking within a second: one "2 agents need you" peek; Show opens the
+  list.
+- [ ] Lock the screen, let a turn finish, unlock: one "While you were away" peek.
+- [ ] A full-screen app on the notch screen (Settings › General › Hide in full screen
+  on): the island is gone; a waiting agent still peeks over it. If the island does not
+  hide, or hides on an ordinary window, note it — the switch then ships off.
+- [ ] Click inside the open island with Terminal in front, press Escape: it closes, and
+  typing goes to Terminal.
+- [ ] Clicking inside the open island activates CodeCat only once the mouse button is
+  released (on mouse-down it lost the keyboard 5 times in 8). Click, release, Escape:
+  it closes, and the app you were in is in front again.
+- [ ] Connect… clicked inside the island with Finder in front: after the dialog, the app
+  you were in is in front — not CodeCat with no window.
+- [ ] The floating cat: drag it anywhere, it stays where dropped after a restart; click
+  opens the list, a second click closes it; resting on it opens the list; in the
+  bottom-right corner the list opens above the cat, near the top below it; a peek
+  widens toward the screen's centre.
+- [ ] Floating cat: click the cat to open the list, then press Escape without clicking
+  inside the list — note whether Escape reaches CodeCat (today it goes to the app in
+  front until you click inside the list).
+- [ ] Floating cat, with a 0.3 s hover delay: hover until the list opens, then click the
+  cat at once — note whether its closing again feels wrong (a click on an open list
+  closes it).
+- [ ] Floating peek that turns into a list above the cat (bottom-right corner): the list
+  stays open while the cursor is in the band the peek left — confirm it feels right.
+- [ ] Floating cat in the bottom-right corner: the open list's bottom edge touches the
+  cat's ear tips — confirm, or ask for a gap.
+- [ ] Floating cat: click on the glow just around the cat, outside the cat and its
+  capsule — note whether it reaches the app underneath or opens the list.
+- [ ] Settings › General › Hide when nothing is running, with a floating list or peek
+  open when the last session ends: the panel fades as it shrinks while the cat goes.
+- [ ] The floating peek's line is the compact form — the command as plain words in a
+  smaller pill, not the island's code token — confirm.
+- [ ] The menu-bar symbol in a light and a dark menu bar; its orange dot while an agent
+  waits, red after a crash.
+- [ ] The menu-bar dot: Figma draws a thin dark ring around it, the build does
+  not — keep it, or add one.
+- [ ] The icon in Finder, the Dock's app switcher (⌘-Tab while Settings is open) and the
+  "About" of the alerts.

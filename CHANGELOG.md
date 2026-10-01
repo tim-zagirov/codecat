@@ -10,42 +10,108 @@ number carries breaking changes.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-10-01
+
+The living island: the state is drawn on the island itself, the island opens one
+list of cards, and it opens itself for a moment when an agent needs you — with
+the reason. Every switch moves to a Settings window, the floating cat speaks the
+island's language, and CodeCat has a mark of its own.
+
 ### Added
-- **The island says which session is in which state.** Up to four dots in the
-  right wing, one per session in its own colour, instead of one colour and a
-  count — "two working, one waiting for you" without opening the menu. Five or
-  more go back to the counter. A glow behind the cat carries the overall tone
-  (`IslandView`).
-- **Every working row shows the agent's current step.** Claude Code writes its
-  plan into the transcript (`TodoWrite`, `TaskCreate`, `TaskUpdate`); CodeCat
-  now reads it and the row says "Writing the parser · 3/5" with a thin bar,
-  under the task in your words (`TaskStep`, `StepLineView`).
-- **A finished row hands over what to look at.** The first line of the agent's
-  last message and chips for the links and files in it — `localhost:4321`,
-  `PR #12`, `Figma`, an artifact, a file it wrote. Click opens; drag carries the
-  link out of the island into a browser or Finder window (`HandoffExtractor`,
-  `HandoffChipView`). Measured on real transcripts, one turn in ten ends with
-  one.
-- **The island menu's head takes the tone** of a session waiting for you or
-  one that died — a faint orange or red wash, nothing for working or done.
-- **Motion with a rule.** Nothing new loops; every change animates once, under
-  300 ms, from the value on screen; Reduce Motion turns scale and stagger into
-  crossfades and the waiting pulse into a ring (`Motion`).
-- **Every row says what its session was asked for.** Under the project name, a
-  session now shows the prompt in the user's own words — "почини пагинацию в
-  ленте — при скролле дублируются карточки" — instead of only the tool it is
-  touching. The text comes from the transcript, with the hook's copy as the
-  instant path; a short follow-up ("продолжай", "газ" — 28 % of real prompts are
-  15 characters or less) does not overwrite it, `/clear` wipes it and compaction
-  keeps it. A session waiting on you puts what it needs first and the task below;
-  a session nobody has asked anything simply has no such line (`TaskText`).
-- **A switch for it.** "Show what you asked each session for", on by default. The
-  text is the user's own words, and a demo or a shared screen is reason enough to
-  hide it — nothing else changes when it is off.
+- **The state lights the island's rim.** A thin stroke along the island's walls
+  and bottom in the state's colour — green working, orange waiting, blue done,
+  red crashed — with a soft bloom under it, and nothing while every agent
+  sleeps. While an agent waits for you a white highlight runs along the rim, a
+  lap every 2.4 s; it is CodeCat's only loop and stops the moment nobody waits.
+- **The right wing shows live data.** One dot per session, a waiting one with a
+  halo drawn over its neighbours; one working session shows its step count and a
+  progress ring, or how long it has run; one finished session a check. Five or
+  more go back to one dot and the count.
+- **The island acknowledges the cursor.** Under the pointer it grows a little,
+  the rim brightens and a shadow lifts it; leave before the hover delay and it
+  settles back.
+- **One list, a card per session.** Hover opens it on one spring, width and
+  height together, and the cards blur in. A card shows the project, what you
+  asked for, and by state: the agent's current step with its count and bar
+  ("Fixing the pagination cursor · 2/5", read from the agent's own task list);
+  what it is waiting for with an **Open ↗** button; what a finished turn handed
+  back — its first line and chips for the links in it (`localhost:4321`,
+  `PR #12`, a file), click to open, drag into a browser; or that the session
+  ended unexpectedly, with a × to dismiss it. A session CodeCat cannot open is
+  dimmed and says why.
+- **Sessions with nothing to do fold** into one line at the end of the list,
+  "2 open without a task", which expands in place.
+- **The list says whether the Mac is awake.** A footer — "Mac stays awake — 2
+  agents working", "Mac can sleep in 1 min", "Closed lid: on" — shown only when
+  there is something to say.
+- **An empty list that tells you what to do.** "Agents are asleep" and how to
+  wake them; before the hooks are installed, one "Connect Claude Code" card with
+  **Connect…** and **Not now**.
+- **The island peeks when an agent needs you.** It opens itself for 3 s when a
+  session asks for permission or a question and when one crashes, and for 1.5 s
+  when a turn is done, with one line saying why — "wants to run `npm test`",
+  "wants to edit `api.ts`", "has a question for you", the first line of a
+  finished turn — and an **Open ↗** button or the turn's first link. A line along
+  the bottom counts down the time left; hovering holds the peek, and resting on
+  it opens the list. Two agents within a second become one "2 agents need you"
+  with **Show**. Each kind has its own switch.
+- **One summary after the screen was locked.** Nothing peeks while the Mac is
+  locked; on unlock, if anything happened, one "While you were away" peek —
+  "2 done · 1 waiting" — with **Show**.
+- **The island steps aside in full screen** (a setting, on by default), but a
+  waiting or crashed session still peeks over the full-screen app.
+- **A Settings window.** General (how to show CodeCat, open at login, hide when
+  nothing is running, the hover delay, hide in full screen, show what each
+  session is doing), Alerts (the three peeks and the sound), Power (whether the
+  Mac is being kept awake, keep it awake, closed-lid mode), Cat (the chosen skin
+  in all five states, every skin on its own tile, Codex pets, artists and
+  licences) and Claude Code (connected or not, the hooks it listens to, the last
+  event, Show settings.json, Remove hooks…, Open log). It opens from "•••" in
+  the island, from the menu-bar symbol and with ⌘, in any CodeCat window; ⌘W
+  closes it.
+- **"Show what each session is doing"** — on by default. Off hides the task in
+  your words, the step and what a turn handed back: they are your own words and
+  your project's links, and a demo or a shared screen is reason enough to hide
+  them.
+- **The floating cat stands on a capsule** with the island's rim and right wing.
+  It widens into the peek toward the screen's centre, and a click or a rest on
+  the cat opens the island's cards in a black panel — below the cat when they fit,
+  above it otherwise. Panels close back into the capsule they grew from.
+- **CodeCat's own mark.** The notch is the cat: a black island with two ears and
+  two orange pixel eyes, on a night-gradient squircle as the app icon, and with
+  the eyes knocked out as the menu-bar symbol — which gets an orange dot while an
+  agent waits and a red one after a crash.
+- **Motion with a rule.** Every change animates once, from the value on screen,
+  on the island's springs; Reduce Motion turns growth into cross-fades, the
+  waiting pulse into a still ring and stops the rim's highlight.
 
 ### Changed
-- **"Show what you asked each session for"** is now "Show what each session is
-  doing" and hides the step and the handoff together with the task.
+- **Poses that read right.** The cat walks while it works instead of standing
+  still, sits and looks at you while it waits instead of the meow people read as
+  the cat being sick, and crouches, startled, when a session dies — the same
+  frames for all six LuizMelo cats.
+- **"Waiting for your input" is a finished turn.** Claude Code's nudge a minute
+  after a turn ends no longer turns a session orange, plays no sound and does not
+  sort it first: a done session stays done, and a working one whose end was lost
+  becomes done.
+- **A click in the island lets Escape close it.** Clicking inside the open island
+  or the floating list makes CodeCat the active app, so Escape reaches it; when
+  it closes, the app you were in is in front again — unless you jumped to a
+  session, which brings that one forward. Hover never takes the keyboard.
+- **The hover delay is yours** — 0.15 to 1 s in Settings › General, 0.3 s by
+  default.
+- **The status-bar menu is short:** Show CodeCat as ▸, Settings… ⌘,, the version
+  and Quit.
+
+### Removed
+- **The glow behind the cat** — the rim carries the state now.
+- **The tinted head of the island's menu.**
+- **The two island menus** — the short one on hover and the long one on click,
+  with its skins and settings disclosures. There is one list.
+- **The switches in the status-bar menu**, now in Settings.
+- **The floating panel's material, title and the badge on the floating cat** —
+  the panel is the island's black list and the capsule carries the state.
+- **"While you were away" in the list** — it is the summary peek after an unlock.
 
 ### Fixed
 - **A long prompt no longer loses the "work started" event.** A unix datagram on
@@ -53,29 +119,25 @@ number carries breaking changes.
   `UserPromptSubmit` payload carrying a prompt over ~1.4 KB never arrived at all —
   measured on live data: of 1 760 delivered hook events not one exceeded 2 045 B,
   and the losses were logged as "app not running?" while the app was running. The
-  hook now trims the prompt to what the row can show before forwarding it.
+  hook now trims the prompt to what a card can show before forwarding it.
 - **A session survives its host app restarting.** The host's pid is remembered in
   `routes.json` and outlives the process it names, so after Claude (or CodeCat)
-  restarts, every restored row pointed at a pid that no longer existed. The row
-  went dead with it — no highlight, no cursor, a click that did nothing — and
-  said "can't open its terminal — that app has been closed" about an app that was
+  restarts, every restored row pointed at a pid that no longer existed and said
+  "can't open its terminal — that app has been closed" about an app that was
   running. A session of the desktop app is addressed by session id, not by
   process (the deep link `DesktopSessionIndex` builds), so it now routes through
   any live instance of the same app. A terminal tab and a plain application still
   die with their process: a new instance has neither that tab nor that window, and
   sending the user to the wrong one is worse than saying it is gone.
-- **Session rows in the island's menu react to the first click.** The menu opened
-  by hover belongs to a window that is deliberately not key, and the SwiftUI views
-  a click lands on there all refuse the first mouse — so the first click was spent
-  making the window key and the row needed clicking twice. The panel now takes key
-  status itself when a click arrives, before handing the event on, and the same
-  click is routed normally (`OverlayPanel.sendEvent`).
-- **The demo no longer writes to the real route cache, and its rows show their
-  real activity.** Demo sessions were being recorded in `routes.json` and read
-  back on the next run, so a screenshot meant to show "4 min" could say "25h 12m";
-  the demo's activity lines were also being dropped for sharing one timestamp with
-  the hooks that preceded them, which is why the shipped screenshots read "started
-  on the task".
+- **A card reacts to the first click.** The list opened by hover belongs to a
+  window that is deliberately not key, and the views a click lands on there
+  refused the first mouse — so the first click was spent making the window key.
+  The window now takes key status itself when a click arrives, and the same click
+  is routed normally (`OverlayPanel.sendEvent`).
+- **The demo leaves no trace.** Demo sessions were recorded in `routes.json` and
+  read back on the next run, so a screenshot meant to show "4 min" could say
+  "25h 12m"; the demo now writes no route cache, and its Connect… and Remove only
+  say what they would do instead of touching `~/.claude/settings.json`.
 
 ## [0.4.0] — 2026-09-14
 
@@ -273,6 +335,7 @@ The MVP. Everything the product promises, working end to end.
 - Safe merging of CodeCat's hooks into `~/.claude/settings.json`, preserving
   every other key and other people's hook entries.
 
+[0.5.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.5.0
 [0.4.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.4.0
 [0.3.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.3.0
 [0.2.0]: https://github.com/tim-zagirov/codecat/releases/tag/v0.2.0

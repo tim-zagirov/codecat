@@ -4,7 +4,7 @@ A menu-bar cat that watches your Claude Code sessions, keeps the Mac awake while
 agents are working, and waves a paw when one of them needs you.
 
 
-![The cat asleep, then working with two agents, then waving because one needs you, then stretching out when the work is done — in the notch island and as the floating cat](docs/media/demo.gif)
+![The island around the notch: the cat asleep, then walking while two agents work and the rim glows green, then sitting while the island opens itself with "codecat has a question for you" and an orange Open button, then stretching while it opens again with what the finished turns handed back](docs/media/demo.gif)
 
 ## How it works, in 30 seconds
 
@@ -27,11 +27,17 @@ Download the latest `CodeCat-<version>.dmg` from
 `CodeCat.app` to `/Applications`, and launch it. The build is signed and
 notarised, so it opens on a double-click — no right-click-and-Open dance.
 
-Then, from the cat's menu:
+Then:
 
-1. **Set up Claude Code…** — without them CodeCat still works, but it
-   learns about session changes late (from transcripts rather than events).
-2. Optionally **Closed-lid mode** — asks for an administrator password once.
+1. **Connect…** — the first time you open the island it offers to install
+   Claude Code's hooks; it is also in **Settings › Claude Code**. Without them
+   CodeCat still works, but it learns about session changes late (from
+   transcripts rather than events).
+2. Optionally **Settings › Power › Keep agents running with the lid closed** —
+   asks for an administrator password once.
+
+Settings open from "•••" in the open island, from the menu-bar symbol, and
+with ⌘, in any CodeCat window.
 
 A Homebrew cask is planned but does not exist yet.
 
@@ -41,28 +47,54 @@ Requires macOS 14 or later. Apple silicon and Intel.
 
 - **Tracks every local Claude Code session** — CLI and the desktop app — in real
   time.
-- **Shows a cat.** It sleeps when nothing is running, works while agents work,
-  waves a paw when one is waiting for you, and stretches out and settles down
-  when the work is done. Eight sprite skins to pick from.
-- **Two ways to show it:** a floating cat you drag where you like, or an
-  *island* — a black slab drawn around the notch of a built-in display, which
-  expands into a menu on hover.
-- **Jumps to a session.** Click a row and you land in the exact terminal tab
+- **Shows a cat.** It sleeps when nothing is running, walks while agents work,
+  sits and looks at you when one is waiting for you, crouches when a session
+  dies, and stretches out and settles down when the work is done. Eight sprite
+  skins to pick from, and any pet in the Codex pet format.
+- **Lives in the notch.** The *island* is a black slab drawn around the notch of
+  a built-in display. Its rim lights up in the state's colour — green working,
+  orange waiting, blue done, red crashed — and a highlight runs along it while an
+  agent waits. The right wing shows one dot per session, or the one session's
+  progress.
+- **Opens on hover** into one list: a card per session, sessions with nothing to
+  do folded into one line, and a footer saying whether the Mac is being kept
+  awake.
+- **Peeks when an agent needs you.** The island opens itself for a few seconds
+  and says why — "wants to run `npm test`", "has a question for you", the first
+  line of a finished turn — with an Open button. Two at once become one "2
+  agents need you"; after the screen was locked, one "While you were away"
+  summary.
+- **Jumps to a session.** Click a card and you land in the exact terminal tab
   that session is running in.
-- **Says where each session is.** The row shows the agent's current step and
-  progress from its own task list; the island shows one dot per session.
-- **Hands over the result.** When a turn ends, the row shows the agent's last
+- **Says where each session is.** The card shows the agent's current step and
+  progress from its own task list.
+- **Hands over the result.** When a turn ends, the card shows the agent's last
   line and chips for the links in it — the dev server, the PR, the file. Click
   opens, drag carries it into a browser window.
+- **Or floats.** On a Mac without a notch, or by choice, the cat stands on a
+  small capsule you drag where you like; it peeks and opens the same cards.
 - **Keeps the Mac awake** while agents work, and lets it sleep again once they
   stop.
 - **Closed-lid mode.** Shut the laptop and walk away; the agents keep going.
-- **"While you were away"** — a summary of what happened while the screen was
-  locked.
+- **A Settings window** for all of it — what to show, when to peek, power, the
+  cat, and the Claude Code hooks.
 
 <p>
-  <img src="docs/media/panel-sessions.png" alt="The panel: three sessions, the skin grid and the settings" width="300">
-  <img src="docs/media/cat-waiting.png" alt="The cat waving because an agent is waiting" width="120">
+  <img src="docs/media/island.png" alt="The closed island: the cat sitting on the left, one orange dot and two green ones on the right, an orange rim with a white highlight along the bottom" width="397">
+</p>
+<p>
+  <img src="docs/media/island-peek.png" alt="The island peeking: &quot;codecat wants to run npm test&quot; with an orange Open button and an orange line counting down the time left" width="501">
+</p>
+<p>
+  <img src="docs/media/island-list.png" alt="The open island: a card asking a question with an orange Open button, a working card, a card with its step &quot;Fixing the pagination cursor 2/5&quot; and a progress bar, a done card with chips for localhost:4321, PR #12 and Figma, two idle sessions folded into one line, and &quot;Mac stays awake — 2 agents working&quot;" width="501">
+</p>
+<p>
+  <img src="docs/media/floating.png" alt="The floating cat sitting on its black capsule, which shows an orange dot and two green ones" width="141">
+  <img src="docs/media/floating-list.png" alt="The floating cat's list opened above it: a card asking a question, two working cards and the power line" width="355">
+</p>
+<p>
+  <img src="docs/media/settings-general.png" alt="Settings, General: show CodeCat as Island, Floating cat or Menu bar only; open at login; hide when nothing is running; the hover delay; hide in full screen; show what each session is doing" width="416">
+  <img src="docs/media/settings-cat.png" alt="Settings, Cat: the chosen skin in its five states — asleep, working, waiting, done, crashed — and a grid of the eight skins" width="416">
 </p>
 
 ## Pets in the Codex pet format
@@ -71,7 +103,7 @@ CodeCat can wear any pet drawn for the Codex pet format — the pixel pets peopl
 hatch with the `hatch-pet` skill or download from community galleries. A pet is
 a folder with a `pet.json` and an 8-column × 9-row sprite sheet (1536×1872 is the
 canonical size, PNG or WebP). Drop the folder into either of these, and it appears
-in the skin picker the next time you open it:
+in **Settings › Cat** the next time you open it:
 
 - `~/.codex/pets/<pet>/` — where Codex keeps them (`$CODEX_HOME/pets` when that
   variable is set), so pets you already have just show up
@@ -86,7 +118,7 @@ a valid pet is skipped and named once in `codecat.log`.
 
 ## Hooks: what gets written, and how to take it back
 
-**Set up Claude Code…** merges one entry per event into
+**Connect…** merges one entry per event into
 `~/.claude/settings.json`:
 
 ```jsonc
@@ -110,7 +142,7 @@ and installing twice does not duplicate anything.
 Claude Code: if CodeCat is not running, the send fails, the hook writes one line
 to the log and exits 0.
 
-**To remove them:** cat's menu → **Remove Claude Code hooks…**. It deletes only
+**To remove them:** **Settings › Claude Code › Remove hooks…**. It deletes only
 entries whose command is CodeCat's own and leaves everything else alone. Do this
 *before* deleting the app — otherwise five entries pointing at a binary that no
 longer exists stay in your settings, and Claude Code will try to run them on
@@ -119,7 +151,7 @@ every event of every session.
 Full uninstall:
 
 ```bash
-# 1. Remove the hooks from the menu first, then:
+# 1. Remove the hooks in Settings › Claude Code first, then:
 sudo bash /Applications/CodeCat.app/Contents/Resources/uninstall-lid-mode.sh  # if you enabled lid mode
 rm -rf /Applications/CodeCat.app
 rm -rf ~/Library/Application\ Support/CodeCat
@@ -170,7 +202,7 @@ rewritten by root once a minute forever.
 ```bash
 git clone https://github.com/tim-zagirov/codecat.git
 cd codecat
-swift test        # 404 tests
+swift test        # 697 tests
 make app          # dist/CodeCat.app, ad-hoc signed — fine on your own machine
 ```
 
@@ -210,8 +242,8 @@ terms — the full list, with sources and licences, is in
 - **LuizMelo**, [Pet Cats Pack](https://luizmelo.itch.io/pet-cat-pack) — CC0 1.0.
   Six of the eight skins.
 - **Maze.Bit.Boutique (mxmaze)**, [16-Bit Kitty](https://mxmaze.itch.io/16-bit-kitty-free)
-  — **CC BY 4.0**. Attribution is required, and is shown in the app under *About
-  the assets* as well as here.
+  — **CC BY 4.0**. Attribution is required, and is shown in the app under *Settings ›
+  Cat › Artists and licences* as well as here.
 - **Elthen's Pixel Art Shop**,
   [2D Pixel Art Cat Sprites](https://elthen.itch.io/2d-pixel-art-cat-sprites) —
   author's own terms. Downloaded at build time, not redistributed here.
