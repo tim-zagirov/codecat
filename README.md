@@ -1,7 +1,10 @@
 # CodeCat 🐈
 
-A menu-bar cat that watches your Claude Code sessions, keeps the Mac awake while
-agents are working, and waves a paw when one of them needs you.
+A pixel cat in your MacBook's notch that watches your Claude Code sessions. It
+walks while agents work, the island around it glows in their colour, and it opens
+by itself when one of them needs you — with an Open button that takes you to that
+session's terminal. While anything is running, the Mac stays awake. No notch? The
+cat floats on a small capsule anywhere on screen instead.
 
 
 ![The island around the notch: the cat asleep, then walking while two agents work and the rim glows green, then sitting while the island opens itself with "codecat has a question for you" and an orange Open button, then stretching while it opens again with what the finished turns handed back](docs/media/demo.gif)
@@ -86,7 +89,7 @@ Requires macOS 14 or later. Apple silicon and Intel.
   <img src="docs/media/island-peek.png" alt="The island peeking: &quot;codecat wants to run npm test&quot; with an orange Open button and an orange line counting down the time left" width="501">
 </p>
 <p>
-  <img src="docs/media/island-list.png" alt="The open island: a card asking a question with an orange Open button, a working card, a card with its step &quot;Fixing the pagination cursor 2/5&quot; and a progress bar, a done card with chips for localhost:4321, PR #12 and Figma, two idle sessions folded into one line, and &quot;Mac stays awake — 2 agents working&quot;" width="501">
+  <img src="docs/media/island-list.png" alt="The open island: a card asking a question with an orange Open button, a working card, a card with its step &quot;Fixing the pagination cursor 2/5&quot; and a progress bar, a done card with chips for localhost:4321, PR #12 and Figma, &quot;2 open without a task&quot; folded into one line, and &quot;Mac stays awake — 2 agents working&quot;" width="501">
 </p>
 <p>
   <img src="docs/media/floating.png" alt="The floating cat sitting on its black capsule, which shows an orange dot and two green ones" width="141">
@@ -94,7 +97,7 @@ Requires macOS 14 or later. Apple silicon and Intel.
 </p>
 <p>
   <img src="docs/media/settings-general.png" alt="Settings, General: show CodeCat as Island, Floating cat or Menu bar only; open at login; hide when nothing is running; the hover delay; hide in full screen; show what each session is doing" width="416">
-  <img src="docs/media/settings-cat.png" alt="Settings, Cat: the chosen skin in its five states — asleep, working, waiting, done, crashed — and a grid of the eight skins" width="416">
+  <img src="docs/media/settings-cat.png" alt="Settings, Cat: the chosen skin in its five states — asleep, working, waiting, done, crashed — and a grid of the skins" width="416">
 </p>
 
 ## Pets in the Codex pet format
