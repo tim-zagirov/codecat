@@ -86,7 +86,7 @@ in the keychain of whoever builds the release.
 2. **Update `CHANGELOG.md`.**
 3. `swift test` — all of it, not a filter.
 4. `make release`.
-5. **Run [verification-checklist.md](verification-checklist.md)**, item 34 in
+5. **Run [verification-checklist.md](verification-checklist.md)**, item 33 in
    particular: it is the only real test of the Apple-events entitlement, and it
    needs a second Mac.
 6. Tag and push:

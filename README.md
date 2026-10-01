@@ -220,7 +220,7 @@ the skin simply does not appear. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICE
 ### What is and is not verified
 
 Automatically, on every `swift test`: all of `CodeCatCore` — hook and transcript
-parsing, aggregate session status, the power assertion, the away log, the
+parsing, aggregate session status, the power assertion, the peek scheduler, the
 `settings.json` rewrite, the process-tree walk that picks a jump route, the
 sprite registry against the real PNGs, and both string catalogs against the call
 sites. The build additionally checks that the assembled `.app` really contains
