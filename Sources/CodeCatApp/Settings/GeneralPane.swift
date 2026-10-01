@@ -13,7 +13,8 @@ struct GeneralPane: View {
                     SettingsLabel(title: L10n.t("settings.show.as", "Show CodeCat as"),
                                   help: NotchScreen.exists
                                       ? L10n.t("settings.show.as.help",
-                                               "The island needs a built-in display with a notch; elsewhere the floating cat takes over.")
+                                               "The island only appears on a built-in display with a notch. "
+                                               + "On other displays, choose the floating cat instead.")
                                       : L10n.t("settings.no.notch",
                                                "Island needs a display with a notch. This Mac doesn't have one, so the cat stays floating."))
                     Picker(L10n.t("settings.show.as", "Show CodeCat as"), selection: Binding(

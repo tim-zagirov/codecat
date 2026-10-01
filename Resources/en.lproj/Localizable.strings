@@ -48,7 +48,7 @@
 "settings.pane.cat" = "Cat";
 "settings.pane.claude" = "Claude Code";
 "settings.show.as" = "Show CodeCat as";
-"settings.show.as.help" = "The island needs a built-in display with a notch; elsewhere the floating cat takes over.";
+"settings.show.as.help" = "The island only appears on a built-in display with a notch. On other displays, choose the floating cat instead.";
 "settings.section.island" = "Island";
 "settings.hover.delay" = "Hover delay";
 "settings.hover.delay.help" = "How long the cursor rests before the island opens.";
