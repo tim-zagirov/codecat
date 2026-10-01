@@ -521,7 +521,7 @@ final class AppState: ObservableObject {
             "CodeCat will add itself to %1$@ as a handler for these events: %2$@. "
             + "Everything else in that file — your permissions, MCP servers and other "
             + "hooks — is left exactly as it is."
-            + "\n\nYou can undo this any time from the menu-bar cat: Remove Claude Code hooks.",
+            + "\n\nYou can undo this any time from Settings › Claude Code › Remove hooks….",
             CodeCatPaths.claudeSettings.path,
             HooksInstaller.events.joined(separator: ", "))
         confirm.addButton(withTitle: L10n.t("hooks.install.confirm.button", "Set up"))

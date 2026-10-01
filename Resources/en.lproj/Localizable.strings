@@ -209,7 +209,7 @@
 /* %1$@ is a path, %2$@ the system error. */
 "hooks.settings.write.error" = "Couldn't write to %@: %@";
 "hooks.install.confirm.title" = "Let CodeCat watch your Claude Code sessions?";
-"hooks.install.confirm.body" = "CodeCat will add itself to %1$@ as a handler for these events: %2$@. Everything else in that file — your permissions, MCP servers and other hooks — is left exactly as it is.\n\nYou can undo this any time from the menu-bar cat: Remove Claude Code hooks.";
+"hooks.install.confirm.body" = "CodeCat will add itself to %1$@ as a handler for these events: %2$@. Everything else in that file — your permissions, MCP servers and other hooks — is left exactly as it is.\n\nYou can undo this any time from Settings › Claude Code › Remove hooks….";
 "hooks.install.confirm.button" = "Set up";
 "hooks.install.done.title" = "CodeCat is watching";
 "hooks.install.done.body" = "New Claude Code sessions appear in the list. Sessions that are already open need to be restarted before CodeCat sees them.";
