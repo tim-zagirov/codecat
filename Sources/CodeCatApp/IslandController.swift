@@ -404,8 +404,13 @@ final class IslandController: NSObject, MascotPresenting {
     }
 
     private func openSettings() {
-        escape()
+        // Post first, then close: `escape()` runs `FocusReturn.handBack()`, whose
+        // still-open guard only keeps `previous` if a CodeCat window is already up.
+        // Posting the notification opens Settings before that guard is checked, so
+        // hand-back sees it and holds the app that was frontmost before the island
+        // opened instead of clearing it and reactivating CodeCat once Settings closes.
         NotificationCenter.default.post(name: .codecatShowSettings, object: nil)
+        escape()
     }
 
     /// The dialogs behind Connect… are modal, and while one is up the tracking area
