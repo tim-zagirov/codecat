@@ -83,7 +83,7 @@
 "settings.power.floor.value" = "%d %% battery";
 "settings.section.lid" = "Closed lid";
 "settings.power.lid.installed" = "Installed: a sudoers rule for two pmset commands and a watchdog that restores sleep if CodeCat ever quits.";
-"settings.power.lid.footer" = "To remove the helper, run scripts/uninstall-lid-mode.sh.";
+"settings.power.lid.footer" = "To remove the helper, run /Applications/CodeCat.app/Contents/Resources/uninstall-lid-mode.sh.";
 
 /* MARK: - Settings window: Cat pane */
 

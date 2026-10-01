@@ -30,6 +30,8 @@ struct PowerPane: View {
             Section {
                 SettingsToggle(title: L10n.t("setting.keep.awake", "Keep the Mac awake while agents work"),
                                isOn: $appState.keepAwakeEnabled)
+                    // A demo must not hold a real power assertion.
+                    .disabled(appState.isDemo)
                 LabeledContent {
                     Text(L10n.f("settings.power.floor.value", "%d %% battery",
                                 appState.powerManager.batteryFloorPercent))
@@ -51,12 +53,16 @@ struct PowerPane: View {
                                             + "One-time setup."),
                                isOn: Binding(get: { appState.lidModeEnabled },
                                              set: { appState.requestLidModeChange(to: $0) }))
+                    // A demo must not start the root-helper install.
+                    .disabled(appState.isDemo)
             } header: {
                 Text(L10n.t("settings.section.lid", "Closed lid"))
             } footer: {
                 // Not Figma's "turning it off … removes both": turning the mode off is
                 // instant and removes nothing (decision 7).
-                Text(L10n.t("settings.power.lid.footer", "To remove the helper, run scripts/uninstall-lid-mode.sh."))
+                Text(L10n.t("settings.power.lid.footer",
+                            "To remove the helper, run "
+                            + "/Applications/CodeCat.app/Contents/Resources/uninstall-lid-mode.sh."))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
