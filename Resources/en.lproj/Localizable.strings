@@ -28,7 +28,7 @@
 "display.mode.island" = "Island";
 "display.mode.menubar" = "Menu bar only";
 
-/* MARK: - Settings (shared by the menu bar and the panel) */
+/* MARK: - Settings (shared across the Settings window's panes) */
 
 "setting.keep.awake" = "Keep the Mac awake while agents work";
 "setting.lid.mode" = "Keep agents running with the lid closed";

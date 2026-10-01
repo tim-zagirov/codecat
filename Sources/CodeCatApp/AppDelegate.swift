@@ -3,7 +3,7 @@ import Combine
 import CodeCatCore
 
 extension Notification.Name {
-    /// "•••" on the island (and on the floating panel): opens the Settings window.
+    /// "•••" on the island, or Settings… in the status-bar menu: opens the Settings window.
     static let codecatShowSettings = Notification.Name("CodeCatShowSettings")
 }
 
@@ -84,11 +84,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///     `syncPresenter()` would read `appState.displayMode` still holding the old
     ///     value, `guard presentedMode != appState.displayMode` would always be true
     ///     for the not-yet-written value, and the mode would never switch at all.
-    ///  2. Destroying the old controller here can also destroy the menu panel the
-    ///     `Picker` was just clicked in — the mode can be switched from inside the
-    ///     island menu. `.receive(on:)` defers that to the next pass of the `RunLoop`,
-    ///     once the click's handling stack has unwound, instead of pulling the ground
-    ///     out from under a view that is still processing the event.
+    ///  2. Destroying the old controller here can run inside the very click that
+    ///     changed `displayMode` — the mode is switched from Settings › General's
+    ///     picker or from the status-bar menu's "Show CodeCat as" items.
+    ///     `.receive(on:)` defers that to the next pass of the `RunLoop`, once the
+    ///     click's handling stack has unwound, instead of pulling the ground out
+    ///     from under a view that is still processing the event.
     private func syncPresenter() {
         guard presentedMode != appState.displayMode else { return }
         presenter?.setVisible(false)
